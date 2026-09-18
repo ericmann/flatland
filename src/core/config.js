@@ -82,6 +82,11 @@ export const DEFAULTS = Object.freeze({
     energyMaxBase: 150,
     bodyMassPerSize: 40,
     turnRate: 0.5,
+    biteSize: 0.1,
+  }),
+  energy: Object.freeze({
+    etaHerb: 0.7,
+    etaCarn: 0.8,
   }),
   brain: Object.freeze({
     hidden: 8,
@@ -133,7 +138,10 @@ export const DEFAULTS = Object.freeze({
   // Only the two keys senses.js needs now; enabled/reach/killChance arrive
   // with predation itself in P1-07.
   predation: Object.freeze({
+    enabled: true,
+    reach: 1.0,
     minDiet: 0.5,
+    killChance: 0.5,
     maxPreySizeRatio: 1.5,
   }),
   movement: Object.freeze({
@@ -496,6 +504,54 @@ export const DOCS = new Map([
       units: 'hunger fraction [0,1]',
       assumption: false,
       doc: "Hunger threshold above which the permanent reflex layer forces eat=1 on a food tile (SPEC §4.7's bootstrap reflex).",
+    },
+  ],
+  [
+    'organisms.biteSize',
+    {
+      units: 'plant/carcass units per tick',
+      assumption: true,
+      doc: 'Maximum amount an organism can eat from a tile in one tick (SPEC §4.4).',
+    },
+  ],
+  [
+    'energy.etaHerb',
+    {
+      units: 'efficiency [0,1]',
+      assumption: true,
+      doc: 'Assimilation efficiency for plant matter, scaled by (1 - diet) (SPEC §4.4).',
+    },
+  ],
+  [
+    'energy.etaCarn',
+    {
+      units: 'efficiency [0,1]',
+      assumption: true,
+      doc: 'Assimilation efficiency for flesh (carcass and predation), scaled by diet (SPEC §4.4).',
+    },
+  ],
+  [
+    'predation.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for predation kills (SPEC §9.1).',
+    },
+  ],
+  [
+    'predation.reach',
+    {
+      units: 'tiles',
+      assumption: true,
+      doc: 'Contact radius within which an attacker can kill a target (SPEC §4.5).',
+    },
+  ],
+  [
+    'predation.killChance',
+    {
+      units: 'probability per tick',
+      assumption: true,
+      doc: 'Probability an attack within reach succeeds (SPEC §4.5).',
     },
   ],
 ]);

@@ -1,8 +1,21 @@
 /**
- * Tile-scalar energy stocks: plants, carcasses, soil (SPEC §4.4). Row-major
- * tile loops, `fmath` only, no allocation (SPEC §3.1, §6.3).
+ * Tile-scalar energy stocks (plants, carcasses, soil) and the trophic
+ * links between them and organisms — grazing, scavenging, predation
+ * (SPEC §4.4, §4.5). Row-major tile loops, slot-order organism loops,
+ * `fmath` only, no allocation (SPEC §3.1, §6.3).
  */
 import { TERRAIN } from './terrain.js';
+import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS } from './genome.js';
+import { DEATH, EV_HUNT, recordEvent } from './world.js';
+
+/**
+ * reflex.js's OUTPUT.eat index, duplicated here as a literal rather than
+ * imported: importing from reflex.js would create a three-way import
+ * cycle (ecology -> reflex -> world -> ecology) on top of the existing
+ * world <-> ecology cycle, since reflex.js already imports DEATH from
+ * world.js. reflex.js's OUTPUT enum is `{ turn:0, throttle:1, eat:2, ... }`.
+ */
+const OUTPUT_EAT = 2;
 
 /**
  * Fill every tile's plant level to `plants.initialFill` of its cap
@@ -127,5 +140,176 @@ export function decayCarcasses(world) {
 
     ledger.dissipated += delta - realisedS;
     ledger.flows.decay += delta;
+  }
+}
+
+/**
+ * Eat, when the organism's `eat` output gates on (SPEC §4.4): plants first
+ * (herbivore efficiency), then carcass (carnivore efficiency), each capped
+ * by `organisms.biteSize` and by remaining room under `energyMax`. The
+ * amount actually removed from the source and the amount actually gained
+ * are each accounted as realised Float32 deltas; digestive inefficiency
+ * (source removed minus energy gained) is dissipated — the general
+ * realised-vs-intended rule (see the P1-06 fix to `growPlants`), not the
+ * literal "want" quantity, which is an intended, not realised, amount.
+ * @param {import('./world.js').World} world
+ * @param {number} i
+ * @returns {void}
+ */
+export function eatMeal(world, i) {
+  if (world.outputs[i * BRAIN_OUTPUTS + OUTPUT_EAT] < 0.5) return;
+
+  const store = world.store;
+  const cfg = world.cfg;
+  const ledger = world.ledger;
+  const pOff = i * TRAIT_COUNT;
+  const d = store.pheno[pOff + TRAIT.diet];
+  const tile = Math.floor(store.y[i]) * world.width + Math.floor(store.x[i]);
+  const biteSize = cfg.organisms.biteSize;
+
+  const effH = cfg.energy.etaHerb * (1 - d);
+  if (effH > 1e-6) {
+    const room = store.energyMax[i] - store.energy[i];
+    let want = Math.min(world.plants[tile], biteSize);
+    if (want * effH > room) want = room / effH;
+    if (want > 0) {
+      const beforeP = world.plants[tile];
+      world.plants[tile] = Math.fround(beforeP - want);
+      const realisedTaken = beforeP - world.plants[tile];
+      const beforeE = store.energy[i];
+      store.energy[i] = Math.fround(beforeE + realisedTaken * effH);
+      const realisedGain = store.energy[i] - beforeE;
+      ledger.dissipated += realisedTaken - realisedGain;
+      ledger.flows.grazing += realisedTaken;
+    }
+  }
+
+  const effC = cfg.energy.etaCarn * d;
+  if (effC > 1e-6) {
+    const room = store.energyMax[i] - store.energy[i];
+    let want = Math.min(world.carcass[tile], biteSize);
+    if (want * effC > room) want = room / effC;
+    if (want > 0) {
+      const beforeC = world.carcass[tile];
+      world.carcass[tile] = Math.fround(beforeC - want);
+      const realisedTaken = beforeC - world.carcass[tile];
+      const beforeE = store.energy[i];
+      store.energy[i] = Math.fround(beforeE + realisedTaken * effC);
+      const realisedGain = store.energy[i] - beforeE;
+      ledger.dissipated += realisedTaken - realisedGain;
+      ledger.flows.scavenging += realisedTaken;
+    }
+  }
+}
+
+/**
+ * Find this organism's nearest killable target within `predation.reach`
+ * (SPEC §4.5): a different species, no larger than
+ * `size * predation.maxPreySizeRatio`, only if this organism's own diet
+ * clears `predation.minDiet`. Ties resolve to the lowest slot. Writes
+ * `world.attackTarget[i]` (-1 if none or ineligible).
+ * @param {import('./world.js').World} world
+ * @param {number} i
+ * @returns {void}
+ */
+export function huntTarget(world, i) {
+  const store = world.store;
+  const cfg = world.cfg;
+  const pOff = i * TRAIT_COUNT;
+  const d = store.pheno[pOff + TRAIT.diet];
+
+  world.attackTarget[i] = -1;
+  if (d < cfg.predation.minDiet) return;
+
+  const size = store.pheno[pOff + TRAIT.size];
+  const reach = cfg.predation.reach;
+  const maxRatio = cfg.predation.maxPreySizeRatio;
+  const x = store.x[i];
+  const y = store.y[i];
+  const mySpecies = store.species[i];
+
+  const n = world.grid.queryRange(x, y, reach, world.queryOut);
+  const queryOut = world.queryOut;
+  let bestSlot = -1;
+  let bestDist = Infinity;
+
+  for (let k = 0; k < n; k++) {
+    const j = queryOut[k];
+    if (j === i || store.species[j] === mySpecies) continue;
+    const jSize = store.pheno[j * TRAIT_COUNT + TRAIT.size];
+    if (jSize > size * maxRatio) continue;
+    const dx = store.x[j] - x;
+    const dy = store.y[j] - y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > reach * reach) continue;
+    const dist = Math.sqrt(d2);
+    if (dist < bestDist || (dist === bestDist && j < bestSlot)) {
+      bestDist = dist;
+      bestSlot = j;
+    }
+  }
+
+  world.attackTarget[i] = bestSlot;
+}
+
+/**
+ * Resolve every organism's predation attempt (SPEC §4.4, §6.3), in
+ * attacker slot order, before the death pass: a prey already dead or
+ * already dying this tick cannot be killed twice. On a successful kill
+ * (probability `predation.killChance`), the attacker's gain and the
+ * carcass remainder are each realised Float32 deltas; the residual
+ * (prey's total value minus both realised additions) is dissipated —
+ * this single combined term is exactly the sum of the digestive
+ * inefficiency and both sides' independent Float32 rounding, algebraically
+ * (see the P1-07 log entry for the derivation). The prey's energy and
+ * body are zeroed here so the generic death pass in `resolve()` (world.js)
+ * adds nothing more for it.
+ * @param {import('./world.js').World} world
+ * @returns {void}
+ */
+export function resolvePredationKills(world) {
+  const store = world.store;
+  const cfg = world.cfg;
+  const ledger = world.ledger;
+  const attackTarget = world.attackTarget;
+
+  for (let i = 0; i < store.highWater; i++) {
+    if (!store.alive[i]) continue;
+    const j = attackTarget[i];
+    if (j === -1 || j === i) continue;
+    if (!store.alive[j] || world.dying[j] !== 0) continue;
+    if (!world.rng.chance(cfg.predation.killChance)) continue;
+
+    const pOff = i * TRAIT_COUNT;
+    const d = store.pheno[pOff + TRAIT.diet];
+    const effC = cfg.energy.etaCarn * d;
+    const E = Math.max(0, store.energy[j]) + store.body[j];
+    const room = Math.max(0, store.energyMax[i] - store.energy[i]);
+
+    let taken = 0;
+    if (effC > 1e-6) {
+      taken = Math.min(E, room / effC);
+    }
+
+    const beforeI = store.energy[i];
+    store.energy[i] = Math.fround(beforeI + taken * effC);
+    const realisedGainI = store.energy[i] - beforeI;
+
+    const tileJ = Math.floor(store.y[j]) * world.width + Math.floor(store.x[j]);
+    const remainder = E - taken;
+    const beforeCarcass = world.carcass[tileJ];
+    world.carcass[tileJ] = Math.fround(beforeCarcass + remainder);
+    const realisedCarcass = world.carcass[tileJ] - beforeCarcass;
+
+    ledger.dissipated += E - realisedGainI - realisedCarcass;
+    ledger.flows.predation += E;
+
+    recordEvent(world, EV_HUNT, store.x[j], store.y[j], store.species[i], store.species[j]);
+
+    // Prey's value is fully consumed above; zero it so resolve()'s
+    // generic death handling adds nothing more for this slot.
+    store.energy[j] = 0;
+    store.body[j] = 0;
+    world.dying[j] = DEATH.HUNTED;
   }
 }

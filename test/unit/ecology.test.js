@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { TERRAIN } from '../../src/core/terrain.js';
-import { makeWorld, isolate } from '../helpers.js';
+import { eatMeal } from '../../src/core/ecology.js';
+import { BRAIN_OUTPUTS } from '../../src/core/genome.js';
+import { makeWorld, makeOrganism, isolate } from '../helpers.js';
+
+const OUTPUT_EAT = 2; // reflex.js OUTPUT.eat
 
 describe('plant growth', () => {
   it('is zero at L = 0', () => {
@@ -194,5 +198,79 @@ describe('rain intervention', () => {
     world.pending.push({ tick: 1, kind: 'rain' });
     world.step();
     expect(world.plants[0]).toBeLessThanOrEqual(cap);
+  });
+});
+
+describe('eatMeal — grazing and scavenging', () => {
+  it('grazing transfers energy at etaHerb*(1-d) and dissipates the rest', () => {
+    const world = makeWorld({ width: 3, height: 3, terrain: TERRAIN.GRASS, organisms: [] });
+    const slot = makeOrganism(world, { x: 1, y: 1, energy: 10, traits: { diet: 0.2 } });
+    world.plants[1 * world.width + 1] = 0.05; // less than biteSize, so fully eaten
+    world.outputs[slot * BRAIN_OUTPUTS + OUTPUT_EAT] = 1;
+    const beforeE = world.store.energy[slot];
+    const beforeP = world.plants[1 * world.width + 1];
+    const dissBefore = world.ledger.dissipated;
+
+    eatMeal(world, slot);
+
+    const eaten = beforeP - world.plants[1 * world.width + 1];
+    const gained = world.store.energy[slot] - beforeE;
+    const eff = world.cfg.energy.etaHerb * (1 - 0.2);
+    expect(eaten).toBeGreaterThan(0);
+    expect(gained).toBeCloseTo(eaten * eff, 5);
+    expect(world.ledger.dissipated - dissBefore).toBeCloseTo(eaten - gained, 5);
+    expect(world.ledger.flows.grazing).toBeCloseTo(eaten, 5);
+  });
+
+  it('a full organism does not graze', () => {
+    const world = makeWorld({ width: 3, height: 3, terrain: TERRAIN.GRASS, organisms: [] });
+    const slot = makeOrganism(world, { x: 1, y: 1, traits: { diet: 0 } }); // energy = energyMax
+    world.plants[1 * world.width + 1] = 0.5;
+    world.outputs[slot * BRAIN_OUTPUTS + OUTPUT_EAT] = 1;
+    const beforePlants = world.plants[1 * world.width + 1];
+    eatMeal(world, slot);
+    expect(world.plants[1 * world.width + 1]).toBe(beforePlants);
+    expect(world.store.energy[slot]).toBe(world.store.energyMax[slot]);
+  });
+
+  it('a pure carnivore (d=1) gains nothing from plants', () => {
+    const world = makeWorld({ width: 3, height: 3, terrain: TERRAIN.GRASS, organisms: [] });
+    const slot = makeOrganism(world, { x: 1, y: 1, energy: 10, traits: { diet: 1 } });
+    world.plants[1 * world.width + 1] = 0.5;
+    world.outputs[slot * BRAIN_OUTPUTS + OUTPUT_EAT] = 1;
+    const beforePlants = world.plants[1 * world.width + 1];
+    eatMeal(world, slot);
+    expect(world.plants[1 * world.width + 1]).toBe(beforePlants);
+  });
+
+  it('scavenging transfers energy at etaCarn*d from the carcass on the tile', () => {
+    const world = makeWorld({ width: 3, height: 3, terrain: TERRAIN.GRASS, organisms: [] });
+    const slot = makeOrganism(world, { x: 1, y: 1, energy: 10, traits: { diet: 0.9 } });
+    // Genesis seeds every grass tile with initial plants (plants.initialFill);
+    // zero this one so only the carcass branch of eatMeal has anything to do.
+    world.plants[1 * world.width + 1] = 0;
+    world.carcass[1 * world.width + 1] = 0.05;
+    world.outputs[slot * BRAIN_OUTPUTS + OUTPUT_EAT] = 1;
+    const beforeE = world.store.energy[slot];
+    const beforeC = world.carcass[1 * world.width + 1];
+
+    eatMeal(world, slot);
+
+    const eaten = beforeC - world.carcass[1 * world.width + 1];
+    const gained = world.store.energy[slot] - beforeE;
+    const eff = world.cfg.energy.etaCarn * 0.9;
+    expect(eaten).toBeGreaterThan(0);
+    expect(gained).toBeCloseTo(eaten * eff, 5);
+    expect(world.ledger.flows.scavenging).toBeCloseTo(eaten, 5);
+  });
+
+  it('does not eat when the eat output is below 0.5', () => {
+    const world = makeWorld({ width: 3, height: 3, terrain: TERRAIN.GRASS, organisms: [] });
+    const slot = makeOrganism(world, { x: 1, y: 1, energy: 10, traits: { diet: 0 } });
+    world.plants[1 * world.width + 1] = 0.5;
+    world.outputs[slot * BRAIN_OUTPUTS + OUTPUT_EAT] = 0.4;
+    const before = world.plants[1 * world.width + 1];
+    eatMeal(world, slot);
+    expect(world.plants[1 * world.width + 1]).toBe(before);
   });
 });

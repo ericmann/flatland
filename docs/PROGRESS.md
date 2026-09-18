@@ -18,7 +18,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-04 Plants, carcasses, soil, the energy ledger and the rain intervention
 - [x] P1-05 Spatial grid and senses
 - [x] P1-06 Reflex policy, movement, metabolism, aging and death
-- [ ] P1-07 Grazing, scavenging and predation
+- [x] P1-07 Grazing, scavenging and predation
 - [ ] P1-08 Density-dependent breeding (asexual, no mutation)
 - [ ] P1-09 Chronicle core, stats sampling and the no-allocation invariant
 - [ ] P1-10 Headless harness, ecology sweep columns and the throughput gate
@@ -556,7 +556,7 @@ down noticeably (~106s vs ~1-3s before); this is expected real work
 replacing a no-op, not a regression, and throughput tuning is P1-10/P1-11's
 job, not this task's.
 
-### P1-06 — pending sha (see commit)
+### P1-06 — c4ce315
 Tests: `test/unit/reflex.test.js` (7 cases: flee/food/wander policy
 branches, breed/emit defaults, reflex layer forces eat and stops
 throttle, does not force eat below the hunger gate or on a bare tile),
@@ -626,3 +626,80 @@ Interpretation:
   genesis's `plants.initialFill` (P1-04) had already seeded with plants
   (fixed by explicitly zeroing that tile). None of these reflect a defect
   in `reflex.js`.
+
+### P1-07 — pending sha (see commit)
+Tests: `test/unit/ecology.test.js` (extended, 5 new cases: grazing at
+etaHerb*(1-d) with the rest dissipated, a full organism does not graze, a
+pure carnivore gains nothing from plants, scavenging at etaCarn*d, no
+eating below the 0.5 gate) and `test/unit/predation.test.js` (9 cases:
+killChance 1 always kills / 0 never does, never same species, prey too
+large is safe, an ineligible (sub-minDiet) attacker never targets, a
+target outside reach is not selected, two attackers on one prey — lower
+slot eats — higher gets nothing, the ledger splits prey value exactly
+into attacker gain/dissipation/carcass to <1e-9 relative error, a hunt
+event records attacker and prey species, never kills across species).
+Confirmed both files' new cases failing before implementation; 5 of the 9
+predation cases and 1 ecology case needed test fixes before passing, all
+test-setup bugs (see Interpretation), no further implementation bugs
+found this task.
+Config keys introduced: `energy.etaHerb` (0.7, ⚠️), `energy.etaCarn` (0.8,
+⚠️), `organisms.biteSize` (0.1, ⚠️), `predation.enabled` (true),
+`predation.reach` (1.0, ⚠️), `predation.killChance` (0.5, ⚠️) —
+`predation.minDiet`/`maxPreySizeRatio` already existed from P1-05.
+Interpretation:
+- "Eating... (in act...)" and predation targeting "in the loop" describe
+  *where in the per-organism sequence* these happen, not literally that
+  the code lives inside `reflex.js`'s `act()` function — this task's Files
+  touched excludes `reflex.js`. Implemented `eatMeal` and `huntTarget` as
+  new `ecology.js` functions instead, called from `world.js`'s step loop
+  immediately after `act(this, i)` (eating) and before `metabolise`
+  (predation targeting), achieving the same stage order without touching
+  reflex.js. `resolvePredationKills` (also ecology.js) runs once before
+  the existing `resolve()` (unchanged from P1-06): it zeroes a killed
+  prey's energy/body and sets `dying=HUNTED`, so `resolve()`'s generic
+  death handling adds nothing extra for that slot — no changes to
+  `resolve()` were needed at all.
+- The literal formula "dissipated += want − (realised gain)" (for
+  grazing) and its predation analogue are not dimensionally/conservation
+  -correct as written (`want` is an *intended* source-removal amount, not
+  the *realised* Float32 delta) — the same class of bug fixed in P1-06's
+  `growPlants`. Implemented instead as `dissipated += realisedTaken −
+  realisedGain` for grazing/scavenging, and for predation, algebraically
+  derived `dissipated += E − realisedGainI − realisedCarcass` (E = prey's
+  total value; this single term is exactly the sum of digestive
+  inefficiency and both sides' independent Float32 rounding — worked out
+  on paper in the ecology.js docstring). Verified via the dedicated
+  <1e-9 ledger test, which passed cleanly with this formula.
+- `ecology.js` needs `OUTPUT.eat`'s index (2) from `reflex.js` and
+  `DEATH`/`EV_HUNT`/`recordEvent` from `world.js`; importing `OUTPUT` from
+  reflex.js would create a three-way cycle (ecology→reflex→world→ecology)
+  on top of the existing world↔ecology and world↔reflex cycles, so the
+  index is duplicated as a documented local constant instead. Verified
+  after implementation that `node -e "import('./src/core/world.js')"`
+  (this task's own extra verification command) succeeds cleanly, and that
+  the existing world↔reflex cycle (already established in P1-06) still
+  resolves correctly with the new world↔ecology edge added.
+- `world.events` (a 64-entry ring: kind/tick/x/y/a/b columns + head/count)
+  and `EV_HUNT`/`EV_BIRTH`/`EV_DEATH`/`recordEvent` are added to world.js
+  now (P1-07 is the first task needing them); `resolve()` was extended to
+  emit `EV_DEATH` for STARVED/OLD_AGE causes only, since predation deaths
+  already emit `EV_HUNT` from `resolvePredationKills` before `resolve()`
+  runs, avoiding a duplicate event for the same death.
+- Five of my own predation.test.js drafts and one ecology.test.js draft
+  needed fixes unrelated to the implementation: four predation cases
+  called `huntTarget` directly without first calling
+  `world.grid.rebuild(world.store)` (normally done automatically inside
+  `world.step()`, but bypassed when calling `huntTarget` standalone), so
+  the grid was empty/stale and nothing was ever found; the "two attackers"
+  case placed the two attacker organisms closer to each other than to the
+  intended prey and gave them different species, making them mutually
+  valid prey for each other under the size-ratio rule, so the lower-slot
+  attacker targeted the other attacker instead of the prey (fixed by
+  giving both attackers the same species, different from the prey's); the
+  ledger-splitting predation case called `initGenesisLedger` *before*
+  creating the attacker/prey organisms, so their starting energy was never
+  part of the "genesis" baseline (fixed by reordering); the ecology
+  scavenging case didn't account for genesis's `plants.initialFill`
+  seeding the same grass tile with plants, so the herbivore branch of
+  `eatMeal` also fired unexpectedly (fixed by explicitly zeroing plants
+  on that tile).
