@@ -6,6 +6,8 @@
 import { sin, cos, TAU } from './fmath.js';
 import { TERRAIN } from './terrain.js';
 import { TRAIT, TRAIT_COUNT, applyPhenotype } from './genome.js';
+import { regionName } from './names.js';
+import { KIND } from './chronicle.js';
 
 /** @type {Set<number>} */
 const LAND_TYPES = new Set([TERRAIN.GRASS, TERRAIN.SCRUB]);
@@ -101,9 +103,14 @@ export function runGenesis(world) {
   for (let i = 0; i < g.carnivoreLineages; i++) lineages.push({ carn: true });
 
   const founderTraits = new Float32Array(TRAIT_COUNT);
+  /** @type {{ x: number, y: number } | null} */
+  let firstCentre = null;
+  let created = 0;
 
-  lineages.forEach((lineage, speciesIndex) => {
+  for (let speciesIndex = 0; speciesIndex < lineages.length; speciesIndex++) {
+    const lineage = lineages[speciesIndex];
     const centre = findLineageCentre(world);
+    if (firstCentre === null) firstCentre = centre;
 
     for (let t = 0; t < TRAIT_COUNT; t++) {
       founderTraits[t] = rng.float();
@@ -147,6 +154,22 @@ export function runGenesis(world) {
       store.parent[slot] = 0;
       store.sick[slot] = 0;
       store.flags[slot] = 0;
+      created++;
     }
-  });
+  }
+
+  // The genesis chronicle entry (SPEC §4.11). P2-04 rewrites this with
+  // lineage names once the real species table exists; for now it just
+  // reports counts and the first lineage's region.
+  const place =
+    firstCentre !== null
+      ? regionName(firstCentre.x, firstCentre.y, world.terrain, world.width, world.height)
+      : regionName(0, 0, world.terrain, world.width, world.height);
+  world.chronicle.add(
+    world.tick,
+    KIND.GENESIS,
+    `Genesis. ${created} organisms in ${lineages.length} lineages.`,
+    place,
+    [],
+  );
 }

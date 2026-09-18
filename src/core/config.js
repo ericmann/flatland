@@ -165,6 +165,10 @@ export const DEFAULTS = Object.freeze({
     baseRate: 0.01,
     childEnergyFraction: 0.35,
   }),
+  stats: Object.freeze({
+    sampleEvery: 30,
+    historyLength: 1024,
+  }),
 });
 
 /** @type {Map<string, ConfigDoc>} */
@@ -599,6 +603,22 @@ export const DOCS = new Map([
       units: 'fraction of parent energy',
       assumption: true,
       doc: "Energy given to a newborn, as a fraction of the parent's energy at the moment of birth (SPEC §4.5).",
+    },
+  ],
+  [
+    'stats.sampleEvery',
+    {
+      units: 'ticks',
+      assumption: false,
+      doc: 'How often stats.sample() runs (SPEC §6.3).',
+    },
+  ],
+  [
+    'stats.historyLength',
+    {
+      units: 'samples',
+      assumption: false,
+      doc: "Capacity of the stats ring buffer (SPEC §5.2's charts window).",
     },
   ],
 ]);

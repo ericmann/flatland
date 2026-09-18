@@ -28,6 +28,8 @@ import { applyDue } from './interventions.js';
 import { Grid } from './grid.js';
 import { gather } from './senses.js';
 import { policy, reflexLayer, act, metabolise, ageOrganism } from './reflex.js';
+import { Chronicle } from './chronicle.js';
+import { Stats } from './stats.js';
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
@@ -284,6 +286,11 @@ export class World {
 
     /** Per-organism predation target, set by `ecology.huntTarget` (-1 = none). */
     this.attackTarget.fill(-1);
+
+    /** The append-only chronicle (SPEC §4.11). */
+    this.chronicle = new Chronicle();
+    /** Periodic ecological samples (SPEC §9.3), a ring buffer over `cfg.stats.historyLength`. */
+    this.stats = new Stats(this);
   }
 
   /**
@@ -325,6 +332,10 @@ export class World {
     // parent that died this tick (already freed by resolve() above) does
     // not breed.
     resolveBirths(this);
+
+    if (this.tick % this.cfg.stats.sampleEvery === 0) {
+      this.stats.sample(this);
+    }
   }
 
   /**
