@@ -29,6 +29,50 @@ export const KIND = Object.freeze({
  * @property {number[]} subjects
  */
 
+/**
+ * Death-cause verb, indexed by `world.js`'s `DEATH` codes (duplicated
+ * locally, 1-6, matching `null` at 0 — importing `DEATH` from `world.js`
+ * would cycle back here, since `world.js` already imports `Chronicle`;
+ * same reason `ecology.js` duplicates `OUTPUT.eat`, P1-07's log entry).
+ */
+const DEATH_VERB = Object.freeze([
+  null,
+  'starved',
+  'died of old age',
+  'was taken',
+  'burned',
+  'was crushed by the meteor',
+  'died of the plague',
+]);
+
+/**
+ * The death-cause verb phrase for an `extinct` sentence's "The last one
+ * ${verb} in ${place}." (SPEC §4.10-11).
+ * @param {number} cause a `world.js` `DEATH` code
+ * @returns {string}
+ */
+export function deathVerb(cause) {
+  return DEATH_VERB[cause] ?? 'died';
+}
+
+/**
+ * Render a chronicle sentence for a `kind` from its context (SPEC §4.11).
+ * Pure: the same `(kind, ctx)` always produces the same text.
+ * @param {string} kind a KIND value
+ * @param {*} ctx kind-dependent fields (see each case)
+ * @returns {string}
+ */
+export function sentence(kind, ctx) {
+  switch (kind) {
+    case KIND.SPLIT:
+      return `A new lineage, ${ctx.name}, splits from ${ctx.parent} in ${ctx.place}.`;
+    case KIND.EXTINCT:
+      return `${ctx.name} are extinct. The last one ${ctx.verb} in ${ctx.place}.`;
+    default:
+      throw new Error(`sentence: unsupported kind "${kind}"`);
+  }
+}
+
 export class Chronicle {
   constructor() {
     /** @type {ChronicleEntry[]} */
