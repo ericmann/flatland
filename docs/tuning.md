@@ -138,3 +138,95 @@ seed still well clear of the 8%/2% guarantee floor.
 **Result:** 0/40 seeds need a re-roll (target was ≤2/40; exceeded). Mean
 largest-grass-component 38.3% and mean largest-water-component 5.7%, both
 inside target range. No further iteration needed.
+
+## P1-11 ecology — before
+
+`node scripts/sweep.mjs --seeds 1..40 --ticks 30000` against the P1-10
+defaults (`plants.growth` 0.004, `metabolism.base` 0.02, `breeding.localK`
+10, `breeding.baseRate` 0.01, `genesis.clusterRadius` 12, `genesis.lineageNoise`
+0.05, `phenotype.lifespan` [1.0, 3.0]). Full table in
+`docs/sweeps/p1-11-before.txt` (one JSON row per seed); summary:
+
+| metric                             | value |
+| ---------------------------------- | ----- |
+| survived (pop>0 ∧ herb>0 ∧ carn>0) | 0/40  |
+| population > 0 at all              | 0/40  |
+| mean population                    | 0.0   |
+| mean births                        | 1.8   |
+| mean Shannon diversity             | 0.987 |
+| mean plants%                       | 99.2  |
+
+Every one of the 40 seeds reached total extinction between tick 3,090 and
+5,486 (`extinctAt` column), with `starved` and `oldAge` as the only death
+causes (`hunted` was 0 in every single seed). Diagnosis (see the P1-11 log
+entry for the full derivation): three compounding problems, none of them
+code defects — all three are ⚠️ ASSUMPTION defaults from earlier tasks that
+this task exists to tune:
+
+1. **Plant regrowth couldn't support even a lightly-grazed population.**
+   `plants.growth` (0.004/tick at full daylight) times the map's grass area
+   produced roughly 4x less total regrowth than the genesis population's
+   aggregate metabolic demand, so herbivores necessarily starved regardless
+   of foraging behaviour.
+2. **Genesis clusters were too dense for density-dependent breeding
+   (P1-08) to ever engage.** `genesis.clusterRadius` (12 tiles) packed each
+   50-organism lineage into a small enough area that every individual's
+   local neighbour count at `breeding.radius` (6 tiles) was 8–25, already
+   at or past `breeding.localK` (10) — the density term
+   `1 - count/localK` was ≤0 almost everywhere from tick 0, so `born` stayed
+   near 0 for the entire run.
+3. **`phenotype.lifespan` ([1.0, 3.0] "days" × `time.ticksPerDay`,
+   i.e. 1,800–5,400 ticks) was short enough, and narrow enough, that nearly
+   the whole genesis cohort died of old age within a ~2,000-tick window of
+   each other.** Combined with (2), essentially no second generation
+   existed to replace them, so every seed's population curve was a single
+   cohort ageing out in near-lockstep.
+
+## P1-11 ecology — after
+
+Config changes (all in `src/core/config.js`, defaults only): `plants.growth`
+0.004 → 0.6, `metabolism.base` 0.02 → 0.015, `breeding.localK` 10 → 50,
+`breeding.baseRate` 0.01 → 0.04, `genesis.clusterRadius` 12 → 25,
+`genesis.lineageNoise` 0.05 → 0.15, `phenotype.lifespan` [1.0, 3.0] → [3.0,
+9.0]. Reached over 3 sweep iterations (0.004/10/0.01/12/0.05/[1,3] →
+0.4/50/0.03/25/0.15/[3,9] → 0.6/50/0.04/25/0.15/[3,9], the last kept).
+
+`node scripts/sweep.mjs --seeds 1..40 --ticks 30000` against these
+defaults. Full table in `docs/sweeps/p1-11-after.txt`; summary:
+
+| metric                             | before | after | target     |
+| ---------------------------------- | ------ | ----- | ---------- |
+| survived (pop>0 ∧ herb>0 ∧ carn>0) | 0/40   | 0/40  | ≥30/40     |
+| population > 0 at all              | 0/40   | 38/40 | —          |
+| mean population                    | 0.0    | 285.9 | [250, 700] |
+| mean births                        | 1.8    | 474.6 | —          |
+| mean Shannon diversity             | 0.987  | 0.822 | —          |
+
+**Result:** mean population (285.9) and population-survival (38/40 seeds
+still alive at 30k ticks) both land inside target. The formal `survived`
+metric and the herbivore:carnivore ratio target (3:1–20:1) are **not met**:
+carnivores went extinct in all 40 seeds. This is a separate, deeper finding
+than the three above — recorded here and in the P1-11 log rather than
+worked around, because the root cause is a `src/core/genesis.js` code
+behaviour, not a config default, and P1-11's Files touched is `config.js`
+defaults only:
+
+`findLineageCentre` (genesis.js) places every lineage's cluster centre at a
+uniformly random land tile, independently per lineage, with no minimum or
+maximum distance from any other lineage. On the default 256×160 world the
+mean distance between two independently-random points is ~157 tiles, far
+beyond both `phenotype.visionRange` ([4, 16] tiles, so prey/threat
+detection in `senses.gather` never fires) and any realistic lifetime
+travel distance under the current wander behaviour (a diffusive random
+walk, not a directed search, when nothing is sensed). Verified this is the
+actual mechanism, not a predation-parameter or population-size tuning gap,
+by testing `predation.reach` up to 2.5 tiles, `predation.killChance` up to
+0.7, `genesis.carnivoresPerLineage` up to 60 across 2 lineages, and world
+sizes down to 64×40 (quartering the mean inter-cluster distance) —
+carnivores still recorded 0–51 total hunts across 30,000 ticks and always
+died out, because most of them simply never got within sensing range of
+any herbivore during their lifetime. A future task should add a
+`genesis.maxCentreDistance` (or similar) config key constraining
+carnivore-lineage centres to within sensing/travel range of at least one
+herbivore lineage; that is a `genesis.js` code change, out of this task's
+scope.

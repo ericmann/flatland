@@ -47,7 +47,7 @@ describe('checkBreeding: eligibility', () => {
   });
 
   it('an isolated eligible organism breeds at baseRate over many single-tick trials (+/-20%)', () => {
-    const baseRate = 0.01; // default config
+    const baseRate = bareWorld().cfg.breeding.baseRate;
     const trials = 10000;
     let queued = 0;
     for (let t = 0; t < trials; t++) {
@@ -62,8 +62,10 @@ describe('checkBreeding: eligibility', () => {
   });
 
   it('with K neighbours within radius it never breeds; with K/2 it breeds at about half rate', () => {
-    const K = 10; // default localK
-    const radius = 6; // default breeding.radius
+    const probe = bareWorld();
+    const K = probe.cfg.breeding.localK;
+    const radius = probe.cfg.breeding.radius;
+    const baseRate = probe.cfg.breeding.baseRate;
 
     function trialRate(neighbourCount, trials) {
       let queued = 0;
@@ -83,8 +85,9 @@ describe('checkBreeding: eligibility', () => {
     expect(rateAtK).toBe(0);
 
     const rateAtHalfK = trialRate(K / 2, 8000);
-    expect(rateAtHalfK).toBeGreaterThan(0.005 * 0.6);
-    expect(rateAtHalfK).toBeLessThan(0.005 * 1.6);
+    const expectedHalfRate = baseRate * 0.5;
+    expect(rateAtHalfK).toBeGreaterThan(expectedHalfRate * 0.6);
+    expect(rateAtHalfK).toBeLessThan(expectedHalfRate * 1.6);
   });
 });
 
@@ -94,7 +97,16 @@ describe('checkBreeding + resolvePredationKills-style resolution (birth mechanic
   // predation are also only reachable through step() plus their own
   // directly-callable helper functions.
   it("the child receives childEnergyFraction of the parent's energy plus its body, all deducted from the parent, ledger exact", () => {
-    const world = bareWorld({ config: { breeding: { baseRate: 1 } } }); // force a birth
+    // Metabolism disabled and plants zeroed: checkBreeding reads the
+    // parent's energy *after* eatMeal/metabolise already ran this tick
+    // (they run earlier in world.step()'s per-organism loop), so without
+    // this the parent could gain (grazing) or lose (metabolism) energy
+    // between parentEnergyBefore and the breeding deduction, which this
+    // test isn't trying to measure.
+    const world = bareWorld({
+      config: { breeding: { baseRate: 1 }, metabolism: { enabled: false } },
+    }); // force a birth
+    world.plants.fill(0);
     const parent = eligible(world, { energy: 200 });
     initGenesisLedger(world);
     const parentEnergyBefore = world.store.energy[parent];
@@ -110,13 +122,8 @@ describe('checkBreeding + resolvePredationKills-style resolution (birth mechanic
     const expectedCost = expectedChildEnergy + world.store.body[child];
 
     expect(world.store.energy[child]).toBeCloseTo(expectedChildEnergy, 3);
-    // The parent also pays this tick's metabolism (metabolise() runs
-    // before checkBreeding in the per-organism loop), so its total loss
-    // is the breeding cost plus a small metabolic cost, not exactly the
-    // breeding cost alone.
     const parentLoss = parentEnergyBefore - world.store.energy[parent];
-    expect(parentLoss).toBeGreaterThanOrEqual(expectedCost);
-    expect(parentLoss).toBeLessThan(expectedCost + 1); // metabolism cost is tiny
+    expect(parentLoss).toBeCloseTo(expectedCost, 3);
     expect(relativeError(world)).toBeLessThan(1e-9);
   });
 
