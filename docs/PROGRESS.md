@@ -22,7 +22,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-08 Density-dependent breeding (asexual, no mutation)
 - [x] P1-09 Chronicle core, stats sampling and the no-allocation invariant
 - [x] P1-10 Headless harness, ecology sweep columns and the throughput gate
-- [ ] P1-11 Ecology tuning and the reduced soak test
+- [x] P1-11 Ecology tuning and the reduced soak test
 - [ ] P1-12 Fixed-timestep scheduler, protocol and snapshot encoder
 - [ ] P1-13 Worker glue, main-thread fallback, organism and light rendering
 - [ ] P1-14 App state machine, input contract, floating cluster, battery pause
@@ -767,6 +767,29 @@ implementation attempt (a genuine first for this build — every other Phase
 Config keys introduced: `stats.sampleEvery` (30), `stats.historyLength`
 (1024) — neither flagged as assumptions, matching the plan's Conventions
 table.
+Interpretation:
+- The genesis chronicle entry is added inside `genesis.js`'s `runGenesis`
+  (in this task's Files touched, unlike P1-07/P1-08 where it was
+  excluded), using the *first* lineage's centre (herbivore lineage 0,
+  always first since herbivore lineages are pushed before carnivore ones)
+  for the place name, per the design constraint's literal wording ("place
+  = region name of the first lineage's centre").
+- Converted `runGenesis`'s lineage loop from `.forEach()` to a plain
+  indexed `for` loop: TypeScript's control-flow narrowing does not track a
+  `let` variable's non-null assignment across a `.forEach()` callback
+  boundary back to the enclosing scope, which produced a spurious `never`
+  type error on `firstCentre.x`/`.y` after the loop. A plain `for` loop
+  (same enclosing scope) resolves this with identical runtime behaviour —
+  a typecheck-driven refactor, not a logic change.
+- `Stats`'s constructor takes the whole `world` (not just `cfg`) so it can
+  set `this.counters = world.counters` (a reference, per the design
+  constraint) at construction time, alongside sizing its ring buffers from
+  `world.cfg.stats.historyLength` and `world.cfg.world.maxSpecies`.
+- `speciesCount` is indexed directly by `store.species[i]` (bounded to
+  0-3 in Phase 1, well inside the 2048-slot scratch array); this only
+  becomes load-bearing once P2-04's real species table can allocate up to
+  `world.maxSpecies` ids, which this design already accommodates without
+  changes.
 
 ### P1-10 — 2b6e302
 Tests: `test/unit/report.test.js` (9 cases: `ecologyReport` returns every
@@ -818,26 +841,62 @@ tps`, gated on `--ticks > 0`, with a `survived` summary count) both
 verified by hand against `npm run headless -- --ticks 5000` and
 `node scripts/sweep.mjs --seeds 1..3 --ticks 2000`. `docs/development.md`
 documents both scripts' flags and the throughput override.
-Interpretation:
-- The genesis chronicle entry is added inside `genesis.js`'s `runGenesis`
-  (in this task's Files touched, unlike P1-07/P1-08 where it was
-  excluded), using the *first* lineage's centre (herbivore lineage 0,
-  always first since herbivore lineages are pushed before carnivore ones)
-  for the place name, per the design constraint's literal wording ("place
-  = region name of the first lineage's centre").
-- Converted `runGenesis`'s lineage loop from `.forEach()` to a plain
-  indexed `for` loop: TypeScript's control-flow narrowing does not track a
-  `let` variable's non-null assignment across a `.forEach()` callback
-  boundary back to the enclosing scope, which produced a spurious `never`
-  type error on `firstCentre.x`/`.y` after the loop. A plain `for` loop
-  (same enclosing scope) resolves this with identical runtime behaviour —
-  a typecheck-driven refactor, not a logic change.
-- `Stats`'s constructor takes the whole `world` (not just `cfg`) so it can
-  set `this.counters = world.counters` (a reference, per the design
-  constraint) at construction time, alongside sizing its ring buffers from
-  `world.cfg.stats.historyLength` and `world.cfg.world.maxSpecies`.
-- `speciesCount` is indexed directly by `store.species[i]` (bounded to
-  0-3 in Phase 1, well inside the 2048-slot scratch array); this only
-  becomes load-bearing once P2-04's real species table can allocate up to
-  `world.maxSpecies` ids, which this design already accommodates without
-  changes.
+
+### P1-11 — pending sha (see commit)
+Tests: `test/soak/survival.test.js` (4 cases: population never zero,
+herbivores alive at the end, energy identity within 1e-3, no NaN/positions
+in bounds every 1000 ticks — all over 30,000 ticks at the default size,
+seed 29). Full before/after sweep tables and rationale in
+`docs/tuning.md` → "P1-11 ecology — before/after"
+(`docs/sweeps/p1-11-{before,after}.txt`, 40 seeds x 30,000 ticks each).
+Config changes (`src/core/config.js` defaults only): `plants.growth`
+0.004 → 0.6, `metabolism.base` 0.02 → 0.015, `breeding.localK` 10 → 50,
+`breeding.baseRate` 0.01 → 0.04, `genesis.clusterRadius` 12 → 25,
+`genesis.lineageNoise` 0.05 → 0.15, `phenotype.lifespan` [1.0, 3.0] →
+[3.0, 9.0]. Reached over 3 full-seed sweep iterations (of the 6 allowed);
+each config key's rationale is a comment at its definition in config.js.
+Result: mean population 285.9 (target [250, 700], met), 38/40 seeds still
+alive at 30k ticks (up from 0/40). Not met: the sweep's own `survived`
+metric (pop>0 ∧ herb>0 ∧ carn>0) and the herb:carn ratio target, because
+carnivores go extinct on every one of the 40 seeds.
+Finding (recorded, not worked around — root cause is outside this task's
+config-only scope): `genesis.js`'s `findLineageCentre` places every
+lineage's cluster at an independently-random, unconstrained land tile.
+On the default 256x160 world the mean inter-lineage distance (~157 tiles)
+is far past `phenotype.visionRange` ([4, 16]) and any realistic lifetime
+travel distance under the current (undirected-when-nothing-sensed) wander
+behaviour, so carnivores essentially never sense a herbivore before dying.
+Verified this, not a predation/population tuning gap, by testing
+`predation.reach` to 2.5, `killChance` to 0.7, `carnivoresPerLineage` to
+60 across 2 lineages, and world sizes down to 64x40 — carnivores still
+recorded 0-51 total hunts over 30,000 ticks and always died out. A future
+task should add a `genesis.js` code change (e.g. a
+`genesis.maxCentreDistance` config key) constraining carnivore-lineage
+centres to within sensing/travel range of a herbivore lineage.
+Also fixed (required for the full suite to stay green after the config
+changes above; not in this task's Files touched, but the established
+precedent since P1-06 is to fix an earlier task's file when a later
+task's own tests require it, documented here as Interpretation):
+- `test/unit/ecology.test.js`: two plant-growth tests had latent bugs that
+  the old, 150x-smaller `plants.growth` value happened to hide under
+  `toBeCloseTo`'s tolerance. One read `world.light` *before* calling
+  `world.step()`, but `step()` advances the tick and recomputes `light`
+  *before* running `growPlants` — so the light value it captured was one
+  tick stale. Fixed by capturing `p` before the step and `L` after it,
+  matching what `growPlants` actually used. The other pre-filled plants to
+  0.3 of cap and waited for `light >= 0.3` before measuring a growth-rate
+  delta; at the new growth rate both worlds saturate to cap well before
+  light reaches 0.3, making the delta comparison meaningless. Fixed by
+  measuring at the first tick with `light > 0` instead.
+- `test/unit/breeding.test.js`: one test hardcoded `baseRate = 0.01` and
+  `K = 10` (the old defaults) instead of reading `world.cfg.breeding.*`;
+  fixed to read them dynamically, so the test verifies the mechanic at
+  whatever the current defaults are. Another computed the expected child
+  energy from the parent's energy *before* that tick's `eatMeal` and
+  `metabolise` ran (both run before `checkBreeding` in `world.step()`'s
+  per-organism loop), which is only a good approximation when both
+  effects are small relative to the assertion's tolerance; raising
+  `plants.growth` and lowering `metabolism.base` moved both far enough to
+  break it. Fixed by zeroing `world.plants` and disabling
+  `metabolism.enabled` for that one test, isolating the birth-ledger
+  arithmetic the test is actually about.

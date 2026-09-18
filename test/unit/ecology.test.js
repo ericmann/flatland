@@ -39,11 +39,16 @@ describe('plant growth', () => {
     world.plants.fill(0.3 * cap);
     // Advance to a tick with light > 0.
     while (world.light === 0) world.step();
+    // world.step() sets world.light for the tick it just ran *before*
+    // calling growPlants, so the light that applies to the *next* step is
+    // only known once that next step has run — capture p now (still the
+    // pre-growth value for the upcoming step), then read L back out after
+    // stepping once more.
     const p = world.plants[0];
-    const L = world.light;
-    const expectedBase = world.cfg.plants.growth * L * (1 - p / cap);
     const before = world.plants[0];
     world.step();
+    const L = world.light;
+    const expectedBase = world.cfg.plants.growth * L * (1 - p / cap);
     const applied = world.plants[0] - before;
     // soil is 0 everywhere, so fromSoil = 0 and want = base; no capping
     // expected here since p is well below cap.
@@ -69,12 +74,11 @@ describe('plant growth', () => {
     noSoil.plants.fill(0.3 * cap);
     withSoil.plants.fill(0.3 * cap);
     withSoil.soil.fill(1.0);
-    // Advance well into daylight (not just past L = 0): near dawn, L is so
-    // small that the soil-uptake amount rounds away at float32 precision
-    // against a soil value of 1.0, making a comparison at the boundary
-    // flaky. Stop just short of a full step at L >= 0.3, then compare the
-    // next single step across both worlds.
-    while (noSoil.light < 0.3) {
+    // Advance to the first tick with light > 0 (not further: P1-11 raised
+    // plants.growth enough that waiting for L >= 0.3, as this test used
+    // to, saturates both worlds' plants[0] at cap well before that point,
+    // making the before/after growth-rate comparison meaningless).
+    while (noSoil.light === 0) {
       noSoil.step();
       withSoil.step();
     }

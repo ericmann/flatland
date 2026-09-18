@@ -61,7 +61,11 @@ export const DEFAULTS = Object.freeze({
   }),
   plants: Object.freeze({
     enabled: true,
-    growth: 0.004,
+    // Tuned in P1-11 (docs/tuning.md): 0.004 could not keep up with even a
+    // lightly grazed population (regrowth was ~8x under total metabolic
+    // demand at the default genesis population), so every seed starved out
+    // by ~5,000 ticks regardless of any other knob.
+    growth: 0.6,
     soilBoost: 2.0,
     initialFill: 0.6,
   }),
@@ -101,7 +105,12 @@ export const DEFAULTS = Object.freeze({
     visionWidth: Object.freeze([0.15, 0.6]),
     visionRange: Object.freeze([4, 16]),
     metabolism: Object.freeze([0.6, 1.4]),
-    lifespan: Object.freeze([1.0, 3.0]),
+    // Tuned in P1-11 (docs/tuning.md): [1.0, 3.0] days put maturity
+    // (maturityFrac * lifespan) and death within a few thousand ticks of
+    // each other for most of the genesis cohort, so nearly nobody lived
+    // long enough past maturity to breed before the whole cohort died of
+    // old age in one synchronized wave.
+    lifespan: Object.freeze([3.0, 9.0]),
     maturity: Object.freeze([0.15, 0.45]),
     breedThreshold: Object.freeze([0.5, 0.9]),
     boldness: Object.freeze([0, 1]),
@@ -124,8 +133,14 @@ export const DEFAULTS = Object.freeze({
     herbivoresPerLineage: 50,
     carnivoreLineages: 1,
     carnivoresPerLineage: 24,
-    lineageNoise: 0.05,
-    clusterRadius: 12,
+    // Tuned in P1-11 (docs/tuning.md): 0.05 packed each lineage's founders
+    // into a near-uniform cluster (local density well above
+    // breeding.localK), which suppressed density-dependent breeding almost
+    // everywhere from tick 0.
+    lineageNoise: 0.15,
+    // Tuned in P1-11 alongside lineageNoise, for the same reason: 12 tiles
+    // held ~50 organisms at a density far above breeding.localK.
+    clusterRadius: 25,
     energyFraction: 0.6,
     dietHerbivore: Object.freeze([0.02, 0.2]),
     dietCarnivore: Object.freeze([0.8, 0.98]),
@@ -149,7 +164,10 @@ export const DEFAULTS = Object.freeze({
   }),
   metabolism: Object.freeze({
     enabled: true,
-    base: 0.02,
+    // Tuned in P1-11 (docs/tuning.md), down from 0.02: eased the resting
+    // metabolic floor a little to widen the margin between grazing income
+    // and upkeep, alongside the plants.growth increase.
+    base: 0.015,
     moveCost: 3.0,
   }),
   aging: Object.freeze({
@@ -161,8 +179,15 @@ export const DEFAULTS = Object.freeze({
   breeding: Object.freeze({
     enabled: true,
     radius: 6,
-    localK: 10,
-    baseRate: 0.01,
+    // Tuned in P1-11 (docs/tuning.md), up from 10: genesis clusters (even
+    // widened by clusterRadius/lineageNoise) still start well above 10
+    // neighbours within this radius, which zeroed the density term
+    // (1 - count/localK) almost everywhere.
+    localK: 50,
+    // Tuned in P1-11 alongside localK, up from 0.01: with the density term
+    // now less punishing, this still needed raising to produce enough
+    // births to outpace the (widened, but still finite) old-age death rate.
+    baseRate: 0.04,
     childEnergyFraction: 0.35,
   }),
   stats: Object.freeze({
