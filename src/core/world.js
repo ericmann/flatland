@@ -18,6 +18,7 @@ import { fillInitialPlants, growPlants, decayCarcasses } from './ecology.js';
 import { applyDue } from './interventions.js';
 import { Grid } from './grid.js';
 import { gather } from './senses.js';
+import { policy, reflexLayer, act, metabolise, ageOrganism } from './reflex.js';
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
@@ -86,6 +87,62 @@ const COUNTER_KEYS = Object.freeze([
   'immigrations',
 ]);
 
+/** Death cause codes, written into `world.dying` and resolved into `counters` (SPEC §4.5). */
+export const DEATH = Object.freeze({
+  STARVED: 1,
+  OLD_AGE: 2,
+  HUNTED: 3,
+  FIRE: 4,
+  METEOR: 5,
+  DISEASE: 6,
+});
+
+/** DEATH code -> `world.counters` key, index-aligned (index 0 unused). */
+const DEATH_COUNTER_KEY = Object.freeze([
+  null,
+  'starved',
+  'oldAge',
+  'hunted',
+  'fire',
+  'meteor',
+  'disease',
+]);
+
+/**
+ * Free every slot marked `dying`, in slot order: its remaining energy plus
+ * body mass becomes carcass on its current tile, the cause is counted, and
+ * the slot is freed (SPEC §4.5, §6.3). Called once per tick, after every
+ * organism has acted.
+ * @param {World} world
+ * @returns {void}
+ */
+function resolve(world) {
+  const store = world.store;
+  const dying = world.dying;
+  const carcass = world.carcass;
+  const ledger = world.ledger;
+
+  for (let i = 0; i < store.highWater; i++) {
+    const cause = dying[i];
+    if (cause === 0) continue;
+    dying[i] = 0;
+    if (!store.alive[i]) continue;
+
+    const amount = Math.max(0, store.energy[i]) + store.body[i];
+    const tile = Math.floor(store.y[i]) * world.width + Math.floor(store.x[i]);
+    const before = carcass[tile];
+    carcass[tile] = Math.fround(before + amount);
+    const realised = carcass[tile] - before;
+    ledger.dissipated += amount - realised;
+    ledger.flows.deaths += amount;
+
+    const key = DEATH_COUNTER_KEY[cause];
+    if (key) world.counters[key]++;
+
+    store.free(i);
+  }
+}
+
 export class World {
   /**
    * @param {typeof import('./config.js').DEFAULTS} cfg a `makeConfig()` result
@@ -131,9 +188,15 @@ export class World {
     const gLen = genomeLength(cfg);
     this.store = new OrganismStore(cfg.world.maxOrganisms, gLen);
 
-    /** Applied interventions, in order (SPEC §3.6). */
+    /**
+     * Applied interventions, in order (SPEC §3.6).
+     * @type {import('./interventions.js').InterventionEvent[]}
+     */
     this.interventions = [];
-    /** Queued (not yet applied) interventions, used starting P1-04. */
+    /**
+     * Queued (not yet applied) interventions, sorted by (tick, insertion order).
+     * @type {import('./interventions.js').InterventionEvent[]}
+     */
     this.pending = [];
 
     /** @type {Record<string, number>} */
@@ -169,10 +232,15 @@ export class World {
 
     this.grid.rebuild(this.store);
     for (let i = 0; i < this.store.highWater; i++) {
-      if (this.store.alive[i]) {
-        gather(this, i);
-      }
+      if (!this.store.alive[i]) continue;
+      gather(this, i);
+      policy(this, i);
+      reflexLayer(this, i);
+      act(this, i);
+      metabolise(this, i);
+      ageOrganism(this, i);
     }
+    resolve(this);
   }
 
   /**

@@ -17,7 +17,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-03 World skeleton, genesis, hash, test helpers, determinism invariant
 - [x] P1-04 Plants, carcasses, soil, the energy ledger and the rain intervention
 - [x] P1-05 Spatial grid and senses
-- [ ] P1-06 Reflex policy, movement, metabolism, aging and death
+- [x] P1-06 Reflex policy, movement, metabolism, aging and death
 - [ ] P1-07 Grazing, scavenging and predation
 - [ ] P1-08 Density-dependent breeding (asexual, no mutation)
 - [ ] P1-09 Chronicle core, stats sampling and the no-allocation invariant
@@ -494,7 +494,7 @@ Interpretation:
   with any gap against the intended amount going to `dissipated`, per the
   general realised-vs-intended rule.
 
-### P1-05 — pending sha (see commit)
+### P1-05 — 4506299
 Tests: `test/unit/grid.test.js` (4 cases: rebuild places every slot in
 exactly one cell in slot order, dead slots excluded, queryRange has no
 false negatives, queryRange stays within a practical `r + cellSize*sqrt2`
@@ -555,3 +555,74 @@ sensing work every tick, which is expected to (and did) slow the suite
 down noticeably (~106s vs ~1-3s before); this is expected real work
 replacing a no-op, not a regression, and throughput tuning is P1-10/P1-11's
 job, not this task's.
+
+### P1-06 — pending sha (see commit)
+Tests: `test/unit/reflex.test.js` (7 cases: flee/food/wander policy
+branches, breed/emit defaults, reflex layer forces eat and stops
+throttle, does not force eat below the hunger gate or on a bare tile),
+`test/unit/movement.test.js` (5 cases: grass throttle-1 distance, mud
+1/1.6 and scrub 1/1.3 of grass speed, east-wall bounce, water block with
+a quarter-turn, movement.enabled=false freezes position and heading),
+`test/unit/metabolism.test.js` (8 cases: standing-still cost formula and
+exact ledger bookkeeping, full-throttle cost ratio, starvation death and
+carcass creation, metabolism/aging enabled=false no-ops, old-age death,
+and — critically — the ledger staying exact to <1e-9 relative error
+through 500 ticks of mass death), and `test/invariants/bounds.test.js`
+(seeds 1..3, 5000 ticks: no out-of-bounds positions, no NaN, energy in
+[0, energyMax]). Confirmed all four files failing before implementation;
+7 of 23 cases needed fixes before passing, one of which was a real,
+consequential bug in P1-04's code (see Interpretation — this is the most
+important finding in this task's log).
+Config keys introduced: `organisms.turnRate` (0.5), `predation` section
+already existed (P1-05) — extended nothing new there; `movement.enabled`
+(true), `metabolism.enabled` (true), `metabolism.base` (0.02, ⚠️),
+`metabolism.moveCost` (3.0, ⚠️), `aging.enabled` (true),
+`reflex.hungerGate` (0.15) — the last four keys with no ⚠️ marker in the
+design constraints text are treated as non-assumptions, consistent with
+`organisms.turnRate`.
+Interpretation:
+- **Found and fixed a real energy-ledger leak in P1-04's `growPlants`,
+  exposed by this task's much tighter 500-tick/1e-9 acceptance bound**
+  (P1-04's own bound was 1e-3 over 10,000 ticks, loose enough to hide
+  it). The bug: sunlight and soil-uptake flows were both derived as
+  fractions of the *realised* plant growth (`applied * base'/want'` and
+  `applied * fromSoil'/want'`), but the amount actually subtracted from
+  the soil array rounds independently (its own Float32 subtraction), so
+  the implicit "soil share of applied" never matched what actually left
+  the soil array — and that mismatch was never routed to `dissipated`.
+  Diagnosed by isolating `decayCarcasses` alone (closed exactly, gap 0
+  over 2000 ticks), then `growPlants` alone with nonzero soil (leaked
+  1.6e-4 over 2000 ticks on one tile), narrowing it to the soil-transfer
+  accounting specifically. Fixed by making `sunlight` exactly the intended
+  photosynthesis share (`baseAdj`, independent of what the plants array
+  actually did) and crediting the soil-uptake flow with the soil array's
+  own realised delta (`realisedS`), then routing the full residual
+  `baseAdj + realisedS - applied` to `dissipated` — closing to ~1.6e-11
+  over 2000 ticks (from 1.6e-4), i.e., to genuine double-precision
+  accumulation noise. This is a change to `src/core/ecology.js`, which
+  P1-06 does not list in Files touched, but the acceptance test this task
+  requires (`"the energy ledger stays exact through deaths" — relativeError
+  < 1e-9 after 500 ticks`) cannot pass without it, since the leak
+  originates in shared plant-growth code every world exercises. P1-04's
+  own test (1e-3 bound, 10,000 ticks) still passes.
+- `reflexLayer(world, i)` is unconditional ("permanent" per the design
+  text) rather than gated by a `brain.reflexLayer` config key — that key
+  is not in this task's Files touched, and P1-06 has no `brain.forward`
+  yet for it to coexist with; the toggle is deferred to P2-03, which is
+  where "reflex layer retained" alongside a real brain first becomes a
+  real choice.
+- `resolve()` lives in `world.js` (not `reflex.js`): it is the shared
+  tick-ending settlement pass that P1-07 (predation kills) and P1-08
+  (births) will also extend, so it belongs with the tick lifecycle
+  `world.js` already owns, not with the per-organism decision/action
+  functions in `reflex.js`.
+- Six of my own test drafts needed fixes for reasons unrelated to the
+  implementation: three used `toBe()` against double literals compared to
+  Float32Array-stored values (fixed with `Math.fround(...)` or exact
+  float32-arithmetic reconstructions); two placed an organism too far from
+  a wall/water boundary for one tick's bounded movement to reach it, so
+  nothing blocked as expected (fixed by starting within one tick's max
+  travel distance of the boundary); one assumed a "bare" tile that
+  genesis's `plants.initialFill` (P1-04) had already seeded with plants
+  (fixed by explicitly zeroing that tile). None of these reflect a defect
+  in `reflex.js`.
