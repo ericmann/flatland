@@ -194,6 +194,11 @@ export const DEFAULTS = Object.freeze({
     sampleEvery: 30,
     historyLength: 1024,
   }),
+  sim: Object.freeze({
+    tps: 30,
+    batchBudgetMs: 12,
+    fallbackBudgetMs: 6,
+  }),
 });
 
 /** @type {Map<string, ConfigDoc>} */
@@ -644,6 +649,30 @@ export const DOCS = new Map([
       units: 'samples',
       assumption: false,
       doc: "Capacity of the stats ring buffer (SPEC §5.2's charts window).",
+    },
+  ],
+  [
+    'sim.tps',
+    {
+      units: 'ticks/s',
+      assumption: false,
+      doc: 'Fixed simulation rate at speed = 1 (SPEC §6.4).',
+    },
+  ],
+  [
+    'sim.batchBudgetMs',
+    {
+      units: 'ms',
+      assumption: false,
+      doc: 'Wall-clock budget per pump() batch in a Worker before ticks are dropped from the wall-clock target, not the simulation (SPEC §6.4).',
+    },
+  ],
+  [
+    'sim.fallbackBudgetMs',
+    {
+      units: 'ms',
+      assumption: false,
+      doc: 'Wall-clock budget per pump() batch on the main-thread fallback (SPEC §6.4), smaller than sim.batchBudgetMs since it shares the thread with rendering.',
     },
   ],
 ]);

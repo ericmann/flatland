@@ -23,7 +23,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-09 Chronicle core, stats sampling and the no-allocation invariant
 - [x] P1-10 Headless harness, ecology sweep columns and the throughput gate
 - [x] P1-11 Ecology tuning and the reduced soak test
-- [ ] P1-12 Fixed-timestep scheduler, protocol and snapshot encoder
+- [x] P1-12 Fixed-timestep scheduler, protocol and snapshot encoder
 - [ ] P1-13 Worker glue, main-thread fallback, organism and light rendering
 - [ ] P1-14 App state machine, input contract, floating cluster, battery pause
 - [ ] P1-15 Idle mode — auto-camera, caption, ticker, clock, fonts
@@ -900,3 +900,52 @@ task's own tests require it, documented here as Interpretation):
   break it. Fixed by zeroing `world.plants` and disabling
   `metabolism.enabled` for that one test, isolating the birth-ledger
   arithmetic the test is actually about.
+
+### P1-12 — pending sha (see commit)
+Tests: `test/unit/protocol.test.js` ("every MSG name is unique"),
+`test/unit/snapshot.test.js` (5 cases: header/organisms/plants/carcass
+round-trip; terrain/pheromone gated correctly by their flags; the selected
+record for a living vs. a dead id; encoding into a reused buffer keeps
+identity; the pool refuses a third acquire until a release),
+`test/unit/scheduler.test.js` (7 cases: speed×tps ticks per simulated
+second; speed 0 and pause run nothing, resume continues; a 10s wall-clock
+jump caps ticks at `sim.tps` and reports `behind`; snapshot requests queue
+until a buffer frees up; `hash` replies with `world.hash()`; two
+schedulers loaded with the same seed hash equal after the same pumps;
+`intervene` clamps to `tick + 1` at the earliest). All three files' first
+implementation attempt passed every case.
+Config keys introduced: `sim.tps` (30), `sim.batchBudgetMs` (12),
+`sim.fallbackBudgetMs` (6) — none flagged `assumption`, matching the
+Conventions table.
+Interpretation:
+- `MSG` has one key per distinct message-type *string*, not one per
+  direction: `hash` is both a command (main asks for `world.hash()`) and
+  the event carrying the reply, so it appears once (17 keys total for 10
+  commands + 8 events, `hash` shared) — modelling it as two keys mapped to
+  the same string would make "every MSG name is unique" ambiguous (unique
+  keys vs. unique values) and doesn't match the Conventions list, which
+  gives `hash` in both the command and event lists as the identical word.
+- The events section's "events since the last snapshot" can't be exact
+  without touching `world.js` (out of this task's Files touched):
+  `world.events` is a fixed 64-slot ring with no persistent read cursor,
+  so `encodeSnapshot` encodes whatever is currently in the ring
+  (`world.events.count` entries, oldest to newest) every time it's called.
+  A snapshot requested more often than the ring wraps will resend an
+  event it already sent. Documented at the top of `encodeSnapshot`'s
+  JSDoc; a future task touching `world.js`'s events ring should add a
+  cursor so repeat snapshots don't resend already-seen events.
+- `flagsByte`'s bit layout (bit 0 sick, bits 1-2 dietClass, bits 3-4
+  visionClass) and the `stats`/`chronicle` event payload shapes aren't
+  specified verbatim in PLAN.md; picked the smallest natural shape (raw
+  ring-buffer fields for `stats`, `{entries}` from `chronicle.flush()`
+  as-is for `chronicle`) since P1-13+ can extend either without a
+  breaking change (adding fields, not renaming existing ones).
+- `Scheduler`'s constructor takes an optional `budgetMs` (overriding
+  `cfg.sim.batchBudgetMs` for every pump), per the design constraint's
+  "constructor option overrides for the fallback" — P1-13's
+  `main-thread.js` will pass `cfg.sim.fallbackBudgetMs` here.
+- While paused, `pump()` still advances `lastNow` (just doesn't convert
+  the elapsed time into ticks), so resuming after a long pause doesn't
+  trigger a large catch-up burst — this wasn't spelled out in the design
+  constraint but follows directly from "battery pause" (P1-14) needing to
+  not fast-forward through the paused interval.
