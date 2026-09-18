@@ -842,7 +842,7 @@ verified by hand against `npm run headless -- --ticks 5000` and
 `node scripts/sweep.mjs --seeds 1..3 --ticks 2000`. `docs/development.md`
 documents both scripts' flags and the throughput override.
 
-### P1-11 — pending sha (see commit)
+### P1-11 — 82fc12c
 Tests: `test/soak/survival.test.js` (4 cases: population never zero,
 herbivores alive at the end, energy identity within 1e-3, no NaN/positions
 in bounds every 1000 ticks — all over 30,000 ticks at the default size,
