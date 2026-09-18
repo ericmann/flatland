@@ -1185,7 +1185,7 @@ change to the committed default, same pattern as P1-10/P1-12); `npm run
 test:soak` (the P1-11-pinned seed) and `npm run headless -- --ticks
 30000` both still ran correctly, just slower.
 
-### P2-04 — pending sha (see commit)
+### P2-04 — 4bb3ad1
 Tests: `test/unit/species.test.js` (new file, 5 cases: within-θ join +
 centroid EMA, beyond-θ split with correct ancestor/born, extinction
 records died=tick without deleting the row, species counts sum to the
