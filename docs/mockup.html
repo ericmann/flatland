@@ -1,0 +1,616 @@
+<title>Flatland Field Station</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#0e1410; --panel:#151d18; --panel2:#1c2620; --line:#2b3a30; --line2:#3a4d40;
+  --text:#d9d4c0; --muted:#8e9788; --dim:#5f6a60;
+  --sun:#e3a83a; --sun-soft:rgba(227,168,58,.18);
+  --crit:#d8573f; --good:#7fbb6a; --warn:#d9a441;
+  --pherA:#48c2d8; --pherB:#d85cb5;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --pixel:"Silkscreen","IBM Plex Mono",monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;min-height:100%}
+body{margin:0;background:var(--ground);color:var(--text);font:14px/1.45 var(--sans);overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--sun);outline-offset:2px}
+canvas{display:block}
+*{box-sizing:border-box}
+
+/* ---------- app shell ---------- */
+#app{height:100%;display:grid;grid-template-columns:200px 1fr 300px;grid-template-rows:44px 1fr 190px;
+  grid-template-areas:"top top top" "rail world insp" "dock dock dock";transition:grid-template-rows .25s,grid-template-columns .25s}
+#app.idle{grid-template-columns:0 1fr 0;grid-template-rows:0 1fr 0}
+#app.idle .chrome{opacity:0;pointer-events:none;visibility:hidden}
+.chrome{background:var(--panel);transition:opacity .2s;position:relative;min-width:0;min-height:0}
+
+/* ---------- top bar ---------- */
+#top{grid-area:top;display:flex;align-items:center;gap:16px;padding:0 14px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden}
+#top .brand{font:700 13px var(--pixel);letter-spacing:.04em;color:var(--sun)}
+#top .seed{font:12px var(--mono);color:var(--muted)}
+.clock{display:flex;align-items:center;gap:10px;font:13px var(--mono);font-variant-numeric:tabular-nums}
+.clock .season{color:var(--muted)}
+.clock svg{width:40px;height:22px;display:block}
+.pop{display:flex;gap:12px;font:12px var(--mono);color:var(--muted);margin-left:auto}
+.pop b{color:var(--text);font-weight:500}
+.speed{display:flex;border:1px solid var(--line2);border-radius:4px;overflow:hidden}
+.speed button{padding:4px 9px;font:12px var(--mono);color:var(--muted)}
+.speed button.on{background:var(--panel2);color:var(--text)}
+.tbtn{padding:5px 10px;border:1px solid var(--line2);border-radius:4px;font:12px var(--mono);color:var(--muted)}
+.tbtn:hover,.tbtn.on{color:var(--text);border-color:var(--sun);background:var(--sun-soft)}
+
+/* ---------- left rail: lenses ---------- */
+#rail{grid-area:rail;border-right:1px solid var(--line);padding:12px 12px;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.sec h3{margin:0 0 8px;font:11px var(--pixel);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.chips{display:flex;flex-direction:column;gap:4px}
+.chip{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;font:12px var(--mono);color:var(--muted);text-align:left;width:100%}
+.chip:hover{background:var(--panel2);color:var(--text)}
+.chip.on{background:var(--panel2);color:var(--text)}
+.chip .sw{width:10px;height:10px;border-radius:2px;background:var(--line2);flex:none}
+.chip.on .sw{box-shadow:0 0 0 1px var(--text) inset}
+.chip .k{margin-left:auto;color:var(--dim);font-size:10px}
+.legend{font:11px var(--mono);color:var(--dim);line-height:1.6}
+.legend i{display:inline-block;width:9px;height:9px;margin-right:6px;vertical-align:-1px}
+
+/* ---------- world ---------- */
+#world{grid-area:world;position:relative;background:#050806;overflow:hidden;min-width:0;min-height:0}
+#view{width:100%;height:100%;cursor:crosshair;touch-action:none}
+#view.grab{cursor:grab}#view.god{cursor:cell}
+#tip{position:absolute;pointer-events:none;background:rgba(14,20,16,.92);border:1px solid var(--line2);padding:5px 8px;font:11px var(--mono);border-radius:3px;display:none;white-space:nowrap}
+#tip b{color:var(--sun);font-weight:500}
+.vig{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 120px rgba(0,0,0,.55)}
+
+/* floating map controls */
+#hud{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;z-index:3;opacity:.92;transition:opacity .3s}
+#app.idle #hud{opacity:.4}#app.idle #hud:hover,#app.idle #hud:focus-within{opacity:.9}
+.hgrp{display:flex;background:rgba(14,20,16,.88);border:1px solid var(--line2);border-radius:6px;overflow:hidden;backdrop-filter:blur(4px)}
+.hgrp button{min-width:40px;height:38px;padding:0 10px;font:13px var(--mono);color:var(--muted);border-right:1px solid var(--line)}
+.hgrp button:last-child{border-right:0}
+.hgrp button.on{background:var(--sun-soft);color:var(--sun)}
+.hgrp button:hover{color:var(--text)}
+.hgrp .lbl{font:9px var(--pixel);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:0 8px;display:flex;align-items:center;border-right:1px solid var(--line)}
+#zoomv{min-width:52px;font-variant-numeric:tabular-nums;color:var(--text)}
+@media (max-width:900px){#hud{right:10px;bottom:10px}}
+
+/* idle overlay */
+#idleui{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-end;padding:22px 200px 22px 22px;gap:10px;opacity:0;transition:opacity .4s}
+#app.idle #idleui{opacity:1}
+.cap{align-self:flex-start;background:rgba(14,20,16,.78);border-left:2px solid var(--sun);padding:8px 12px;max-width:min(420px,80vw)}
+.cap .eyebrow{font:10px var(--pixel);letter-spacing:.1em;text-transform:uppercase;color:var(--sun)}
+.cap .t{font:15px/1.3 var(--sans);font-weight:500;margin-top:2px}
+.ticker{display:flex;align-items:baseline;gap:12px;font:12px var(--mono);color:var(--muted);min-height:18px}
+.ticker .st{color:var(--dim);flex:none}
+.hint{font:10px var(--pixel);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);pointer-events:auto}
+.hint button{color:var(--muted);text-decoration:underline;text-underline-offset:3px}
+#idleclock{position:absolute;top:18px;right:22px;font:12px var(--mono);color:var(--muted);text-align:right;opacity:.85;font-variant-numeric:tabular-nums}
+#idleclock .big{font:20px var(--pixel);color:var(--text);display:block}
+
+/* ---------- inspector ---------- */
+#insp{grid-area:insp;border-left:1px solid var(--line);overflow:auto;padding:14px;display:flex;flex-direction:column;gap:14px}
+#insp .empty{color:var(--muted);font-size:13px}
+#insp .empty h3{margin:0 0 6px;font:11px var(--pixel);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.portrait{display:flex;gap:12px;align-items:center}
+.portrait canvas{width:72px;height:72px;background:var(--panel2);border:1px solid var(--line);image-rendering:pixelated;flex:none}
+.who .name{font:700 13px var(--pixel);letter-spacing:.02em}
+.who .name input{background:none;border:0;border-bottom:1px dashed var(--line2);color:var(--text);font:inherit;width:150px;padding:0}
+.who .sub{font:11px var(--mono);color:var(--muted);margin-top:4px;line-height:1.5}
+.who .diet{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line2)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font:12px var(--mono);align-items:center}
+.kv span{color:var(--muted)}
+.bar{height:6px;background:var(--panel2);border-radius:2px;overflow:hidden;position:relative}
+.bar i{position:absolute;inset:0;right:auto;background:var(--good)}
+.bar i.e{background:var(--sun)}.bar i.a{background:var(--muted)}
+.brain{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font:11px var(--mono);align-items:center}
+.brain span{color:var(--muted)}
+.brain .bar{height:5px}.brain .bar i{background:var(--pherA)}
+.glyph{display:flex;gap:12px;align-items:center}
+.glyph canvas{width:110px;height:110px;flex:none}
+.glyph ul{margin:0;padding:0;list-style:none;font:10px var(--mono);color:var(--dim);line-height:1.6}
+.tree{font:11px var(--mono);color:var(--muted);line-height:1.6}
+.tree b{color:var(--text);font-weight:500}
+.row{display:flex;gap:8px}
+.row .tbtn{flex:1;text-align:center}
+#insp.sheet{display:none}
+
+/* ---------- dock ---------- */
+#dock{grid-area:dock;border-top:1px solid var(--line);display:grid;grid-template-rows:32px 1fr;min-height:0}
+.tabs{display:flex;border-bottom:1px solid var(--line);padding:0 8px;gap:2px;align-items:stretch}
+.tabs button{padding:0 12px;font:11px var(--pixel);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom:2px solid transparent}
+.tabs button.on{color:var(--text);border-color:var(--sun)}
+.tabs .sp{flex:1}
+.tabs .notes{align-self:center;font:11px var(--mono);letter-spacing:0;text-transform:none;padding:3px 10px;border:1px solid var(--line2);border-radius:4px}
+.tabs .notes.on{border-color:var(--sun);color:var(--sun)}
+.pane{overflow:auto;min-height:0}
+#dock>.pane:not(.on){display:none}
+#chron{font:12px var(--mono);padding:8px 14px}
+#chron div{display:flex;gap:12px;padding:2px 0;border-bottom:1px dashed var(--line)}
+#chron .t{color:var(--dim);flex:none;width:118px;font-variant-numeric:tabular-nums}
+#chron .god{color:var(--sun)}#chron .ext{color:var(--crit)}#chron .spl{color:var(--good)}
+#phylo{padding:6px 10px;height:100%}
+#phylo svg{width:100%;height:100%;font:10px var(--mono)}
+#charts{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:10px 14px;height:100%}
+#charts .c{display:grid;grid-template-rows:auto 1fr;gap:4px;min-height:0}
+#charts h4{margin:0;font:11px var(--pixel);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:400}
+#charts canvas{width:100%;height:100%}
+#god{padding:10px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}
+.tool{width:118px;padding:8px 10px;border:1px solid var(--line2);border-radius:4px;text-align:left;font:12px var(--mono)}
+.tool b{display:block;font:700 11px var(--pixel);letter-spacing:.02em;margin-bottom:2px}
+.tool small{color:var(--muted);font-size:10px;line-height:1.3;display:block}
+.tool.on{border-color:var(--sun);background:var(--sun-soft)}
+#god .p{flex-basis:100%;font:11px var(--mono);color:var(--dim)}
+
+/* ---------- design notes overlay ---------- */
+.note{display:none;position:absolute;z-index:5;background:var(--sun);color:#1a1408;font:12px/1.35 var(--sans);padding:6px 9px;border-radius:3px;max-width:230px;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+.note::before{content:attr(data-n);font:700 10px var(--pixel);margin-right:6px;background:#1a1408;color:var(--sun);padding:1px 4px;border-radius:2px}
+body.notes .note{display:block}
+
+/* ---------- responsive ---------- */
+@media (max-width:900px){
+  #idleui{padding:16px 16px 110px 16px}
+  #app{grid-template-columns:1fr;grid-template-rows:44px auto 1fr 170px;grid-template-areas:"top" "rail" "world" "dock"}
+  #app.idle{grid-template-columns:1fr;grid-template-rows:0 0 1fr 0}
+  #rail{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;padding:8px 12px;gap:18px;overflow-x:auto}
+  .chips{flex-direction:row;gap:2px}.chip{width:auto;white-space:nowrap}.chip .k,.legend{display:none}
+  .pop,.seed,.clock .season{display:none}
+  #top{gap:10px;padding:0 10px}#toIdle{margin-left:auto}
+  .tabs{overflow-x:auto}.tabs button{white-space:nowrap;padding:0 8px}
+  #chron .t{width:88px}#chron div{gap:8px}
+  #insp{position:fixed;left:0;right:0;bottom:0;max-height:60%;border-left:0;border-top:1px solid var(--sun);z-index:4;display:none;background:var(--panel)}
+  #insp.open{display:flex}
+  #charts{grid-template-columns:1fr}
+  .note{max-width:180px;font-size:11px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div id="app">
+  <!-- TOP BAR -->
+  <header id="top" class="chrome">
+    <span class="brand">FLATLAND</span>
+    <span class="seed">world <span id="seed">#3A7F</span></span>
+    <div class="clock">
+      <svg viewBox="0 0 40 22" aria-hidden="true"><path d="M3 20 A17 17 0 0 1 37 20" fill="none" stroke="#3a4d40" stroke-width="1.5"/><circle id="sundot" cx="20" cy="3" r="3" fill="#e3a83a"/></svg>
+      <span id="clock">Year 1 · Day 1 · 06:00</span>
+      <span class="season" id="season">Spring · light 0%</span>
+    </div>
+    <div class="speed" role="group" aria-label="Simulation speed">
+      <button data-sp="0">⏸</button><button data-sp="1" class="on">1×</button><button data-sp="4">4×</button><button data-sp="16">16×</button>
+    </div>
+    <div class="pop"><span>plants <b id="pPlants">–</b></span><span>grazers <b id="pHerb">–</b></span><span>hunters <b id="pCarn">–</b></span><span>lineages <b id="pSpec">–</b></span></div>
+    <button class="tbtn" id="toIdle">Idle ⤢</button>
+    <div class="note" data-n="1" style="left:190px;top:46px">Clock is the world's own: year, day, hour. Light % is the single global scalar everything else derives from — the arc shows where the sun sits in the day window.</div>
+    <div class="note" data-n="2" style="right:16px;top:46px">Idle returns to the ant-farm view. The station is something you open, never the default.</div>
+  </header>
+
+  <!-- LENS RAIL -->
+  <aside id="rail" class="chrome">
+    <div class="sec"><h3>Lenses</h3>
+      <div class="chips" id="lensToggles">
+        <button class="chip on" data-lens="light"><i class="sw" style="background:#0a1630"></i>Night <span class="k">L</span></button>
+        <button class="chip" data-lens="trail"><i class="sw" style="background:var(--pherA)"></i>Trail scent <span class="k">T</span></button>
+        <button class="chip" data-lens="alarm"><i class="sw" style="background:var(--pherB)"></i>Alarm scent <span class="k">A</span></button>
+      </div>
+    </div>
+    <div class="sec"><h3>Color by</h3>
+      <div class="chips" id="colorModes">
+        <button class="chip on" data-mode="self"><i class="sw" style="background:linear-gradient(90deg,#e06c4a,#7fbb6a,#48c2d8)"></i>Individual</button>
+        <button class="chip" data-mode="species"><i class="sw" style="background:#c7b26a"></i>Lineage</button>
+        <button class="chip" data-mode="energy"><i class="sw" style="background:linear-gradient(90deg,#3a2a2a,#e3a83a)"></i>Energy</button>
+        <button class="chip" data-mode="age"><i class="sw" style="background:linear-gradient(90deg,#fff,#5f6a60)"></i>Age</button>
+      </div>
+    </div>
+    <div class="sec"><h3>Terrain</h3>
+      <div class="legend">
+        <div><i style="background:#22405a"></i>water</div><div><i style="background:#b7a778"></i>sand</div><div><i style="background:#4a3d2c"></i>mud</div>
+        <div><i style="background:#4f8a3a"></i>grass</div><div><i style="background:#6b7a3a"></i>scrub · hides</div><div><i style="background:#6a6a66"></i>rock</div><div><i style="background:#e8e2cc"></i>carcass</div>
+      </div>
+    </div>
+    <div class="note" data-n="3" style="left:12px;top:150px">Lenses are overlays on one map, not separate views. Turning Night off is the night-vision toggle. Scent lenses show the pheromone channels as heat — the ACO animation, driven by evolved behaviour.</div>
+  </aside>
+
+  <!-- WORLD -->
+  <main id="world">
+    <canvas id="view"></canvas>
+    <div class="vig"></div>
+    <div id="tip"></div>
+    <div id="hud">
+      <div class="hgrp" role="group" aria-label="Zoom">
+        <span class="lbl">zoom</span><button id="zOut" title="Zoom out (−)">−</button><button id="zoomv" title="Fit world (0)">2.0×</button><button id="zIn" title="Zoom in (+)">+</button>
+      </div>
+      <div class="hgrp" role="group" aria-label="Speed">
+        <span class="lbl">speed</span><button data-sp="0" title="Pause (space)">⏸</button><button data-sp="1" class="on" title="1× (1)">1×</button><button data-sp="4" title="4× (2)">4×</button><button data-sp="16" title="16× (3)">16×</button>
+      </div>
+    </div>
+    <div id="idleui">
+      <div id="idleclock"><span class="big" id="idleTime">06:00</span><span id="idleDay">Year 1 · Day 1 · Spring</span></div>
+      <div class="cap"><div class="eyebrow" id="capK">Watching</div><div class="t" id="capT">the world wake up</div></div>
+      <div class="ticker"><span class="st" id="tickT">—</span><span id="tickE">…</span></div>
+      <div class="hint">Tap the map, press any key, or <button id="openStation">open the field station</button></div>
+    </div>
+    <div class="note" data-n="4" style="left:50%;top:40%;transform:translateX(-50%)">The world. Drag to pan, pinch or wheel to zoom (or the corner controls), hover for a tooltip, click a creature to inspect it. Sprites are generated from the genome — size, hue, eye, spines — so evolution is visible without opening anything.</div>
+  </main>
+
+  <!-- INSPECTOR -->
+  <aside id="insp" class="chrome">
+    <div class="empty" id="inspEmpty"><h3>Inspector</h3>Click a creature on the map to open its record. Follow it until it dies, if you like.</div>
+    <div id="inspBody" hidden>
+      <div class="portrait">
+        <canvas id="portrait" width="24" height="24"></canvas>
+        <div class="who">
+          <div class="name"><input id="specName" aria-label="Lineage name" spellcheck="false"></div>
+          <div class="sub"><span class="diet" id="diet">grazer</span> · <span id="gen">gen 1</span><br><span id="where">near the western marsh</span></div>
+        </div>
+      </div>
+      <div class="kv">
+        <span>energy</span><div class="bar"><i class="e" id="bEnergy"></i></div>
+        <span>age</span><div class="bar"><i class="a" id="bAge"></i></div>
+        <span>sees best at</span><b id="visPeak" style="font-weight:500">–</b>
+        <span>vision now</span><b id="visNow" style="font-weight:500">–</b>
+      </div>
+      <div class="sec"><h3>Brain · inputs firing</h3>
+        <div class="brain" id="brain"></div></div>
+      <div class="sec"><h3>Genome</h3>
+        <div class="glyph"><canvas id="glyph" width="220" height="220"></canvas>
+          <ul><li>size</li><li>speed</li><li>vision peak</li><li>vision width</li><li>boldness</li><li>sociality</li><li>metabolism</li><li>lifespan</li></ul></div></div>
+      <div class="sec"><h3>Family</h3><div class="tree" id="family"></div></div>
+      <div class="row"><button class="tbtn" id="follow">Follow</button><button class="tbtn" id="unsel">Close</button></div>
+    </div>
+    <div class="note" data-n="5" style="right:16px;top:120px">Inspector = one creature's record. Genome as a radial glyph, live brain inputs, and a family line. The lineage name is editable — naming a herd is how people get attached.</div>
+  </aside>
+
+  <!-- DOCK -->
+  <footer id="dock" class="chrome">
+    <div class="tabs">
+      <button class="on" data-pane="chron">Chronicle</button><button data-pane="phylo">Phylogeny</button><button data-pane="charts">Charts</button><button data-pane="god">Hand of God</button>
+      <span class="sp"></span>
+      <button class="notes" id="notesBtn">Design notes</button>
+    </div>
+    <div class="pane on" id="chron"></div>
+    <div class="pane" id="phylo"><svg id="phyloSvg" viewBox="0 0 800 140" preserveAspectRatio="none"></svg></div>
+    <div class="pane" id="charts">
+      <div class="c"><h4>Population by lineage</h4><canvas id="chPop"></canvas></div>
+      <div class="c"><h4>Diversity (Shannon) · Light</h4><canvas id="chDiv"></canvas></div>
+    </div>
+    <div class="pane" id="god">
+      <button class="tool" data-tool="fire"><b>Fire</b><small>Burns plants and anything standing in them. Regrows.</small></button>
+      <button class="tool" data-tool="meteor"><b>Meteor</b><small>A crater of bare rock. Permanent.</small></button>
+      <button class="tool" data-tool="plague"><b>Plague</b><small>Seeds a disease that spreads by contact.</small></button>
+      <button class="tool" data-tool="water"><b>River</b><small>Paint water. Grazers won't cross it.</small></button>
+      <button class="tool" data-tool="grass"><b>Meadow</b><small>Paint grassland.</small></button>
+      <button class="tool" data-tool="rain"><b>Rain</b><small>Global: every plant tile gets a drink.</small></button>
+      <div class="p" id="godHint">Pick a tool, then click the map. Every intervention is written into the chronicle.</div>
+    </div>
+    <div class="note" data-n="6" style="left:14px;bottom:40px">Chronicle is the narrative layer — world events in plain language with a place name. Phylogeny grows live; hover a branch to light up its living members. Hand of God is deliberately small and always leaves a record.</div>
+  </footer>
+</div>
+
+<script>
+(() => {
+// ================= RNG & noise =================
+const SEED = 0x3A7F;
+let _s = SEED>>>0;
+const rnd = () => { _s |= 0; _s = _s + 0x6D2B79F5 | 0; let t = Math.imul(_s ^ _s >>> 15, 1 | _s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const W = 160, H = 100, PX = 4;
+const noiseGrid = (n) => { const g = new Float32Array(n*n); for (let i=0;i<n*n;i++) g[i]=rnd(); return g; };
+const smooth = t => t*t*(3-2*t);
+function valueNoise(x,y,g,n){ const xi=Math.floor(x)%n, yi=Math.floor(y)%n, xf=smooth(x-Math.floor(x)), yf=smooth(y-Math.floor(y));
+  const a=g[yi*n+xi], b=g[yi*n+(xi+1)%n], c=g[((yi+1)%n)*n+xi], d=g[((yi+1)%n)*n+(xi+1)%n];
+  return (a+(b-a)*xf)*(1-yf)+(c+(d-c)*xf)*yf; }
+
+// ================= World =================
+const TER = { WATER:0, SAND:1, MUD:2, GRASS:3, SCRUB:4, ROCK:5 };
+const terrain = new Uint8Array(W*H), plants = new Float32Array(W*H), carcass = new Float32Array(W*H);
+const pherA = new Float32Array(W*H), pherB = new Float32Array(W*H);
+{ const g1=noiseGrid(16), g2=noiseGrid(32), g3=noiseGrid(64);
+  for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+    let v = valueNoise(x/22,y/22,g1,16)*.6 + valueNoise(x/9,y/9,g2,32)*.3 + valueNoise(x/4,y/4,g3,64)*.1;
+    v += Math.sin(x/W*Math.PI)*.05; // wetter edges
+    const i=y*W+x;
+    terrain[i] = v<.34?TER.WATER : v<.38?TER.SAND : v<.44?TER.MUD : v<.62?TER.GRASS : v<.74?TER.SCRUB : TER.ROCK;
+    plants[i] = terrain[i]===TER.GRASS ? .5+rnd()*.5 : terrain[i]===TER.SCRUB ? .3+rnd()*.3 : terrain[i]===TER.MUD ? rnd()*.3 : 0;
+  } }
+const growCap = t => t===TER.GRASS?1 : t===TER.SCRUB?.6 : t===TER.MUD?.35 : 0;
+const moveCost = t => t===TER.WATER?3 : t===TER.MUD?1.6 : t===TER.SCRUB?1.3 : t===TER.ROCK?1.5 : 1;
+
+// ================= Time & light =================
+const DAY = 1800, YEAR = 24; // ticks per day, days per year
+let tick = 0, speed = 1, light = 0;
+function seasonOf(){ const f=((tick/DAY)%YEAR)/YEAR; return f<.25?'Spring':f<.5?'Summer':f<.75?'Autumn':'Winter'; }
+function dayFrac(){ const f=((tick/DAY)%YEAR)/YEAR; return .5+.22*Math.sin(2*Math.PI*(f-.125)); }
+function computeLight(){ const u=(tick%DAY)/DAY, f=dayFrac(); return u<f ? .5*(1-Math.cos(2*Math.PI*u/f)) : 0; }
+function clockStr(){ const u=(tick%DAY)/DAY; const h=(6+u*24)%24; const hh=Math.floor(h), mm=Math.floor((h-hh)*60);
+  return `Year ${Math.floor(tick/DAY/YEAR)+1} · Day ${Math.floor(tick/DAY)%YEAR+1} · ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; }
+
+// ================= Species & creatures =================
+const HERB_NOUNS=['Grazers','Browsers','Nibblers','Drifters','Herds'], CARN_NOUNS=['Stalkers','Hunters','Lurkers','Ambushers'];
+const species = []; // {id,name,hue,carn,parent,born,died,count}
+const creatures = [];
+let nextId = 1;
+function regionName(x,y){ const ns=y<H/3?'northern ':y>2*H/3?'southern ':''; const ew=x<W/3?'western':x>2*W/3?'eastern':'central';
+  const t=terrain[Math.floor(y)*W+Math.floor(x)]; const tw=['shallows','shore','marsh','meadow','scrub','rocks'][t]; return `the ${ns}${ew} ${tw}`; }
+function regionWord(x,y){ const t=terrain[Math.floor(y)*W+Math.floor(x)]; return ['Shallow','Shore','Marsh','Meadow','Scrub','Rock'][t]; }
+function newSpecies(carn,hue,parent,x,y){ const s={id:species.length+1,carn,hue,parent,born:tick,died:null,count:0,
+  name:`${regionWord(x,y)} ${(carn?CARN_NOUNS:HERB_NOUNS)[species.length%(carn?4:5)]}`}; species.push(s); return s; }
+function makeCreature(x,y,sp,genome,gen){ const g=genome||[rnd(),rnd(),rnd(),rnd(),rnd(),rnd(),rnd(),rnd()];
+  const c={id:nextId++,x,y,sp,g,gen:gen||1,hue:sp.hue+(g[0]-.5)*30,energy:60+rnd()*30,age:0,heading:rnd()*Math.PI*2,sick:0,
+    in:{light:0,hunger:0,threat:0,food:0,kin:0,trail:0},goal:'wander',parent:null,kids:0};
+  c.size = sp.carn ? 2.6+g[0]*1.6 : 1.8+g[0]*1.6; c.speed=(.05+g[1]*.06)*(sp.carn?1.3:1); c.visPeak=g[2]; c.visW=.3+g[3]*.4;
+  c.bold=g[4]; c.social=g[5]; c.metab=.02+g[6]*.02; c.maxAge=DAY*(1.2+g[7]*1.6)*(sp.carn?1.3:1);
+  creatures.push(c); sp.count++; return c; }
+function landTile(){ for(;;){ const x=rnd()*W,y=rnd()*H; const t=terrain[Math.floor(y)*W+Math.floor(x)]; if(t===TER.GRASS||t===TER.SCRUB) return [x,y]; } }
+// genesis
+{ const seeds=[[false,110],[false,40],[false,160],[true,330]];
+  for(const [carn,hue] of seeds){ const [sx,sy]=landTile(); const sp=newSpecies(carn,hue,null,sx,sy);
+    const n=carn?8:34; for(let i=0;i<n;i++){ const [x,y]=landTile(); makeCreature(x,y,sp); } } }
+
+// ================= Chronicle =================
+const chron=[]; const chronEl=document.getElementById('chron');
+function log(text,kind){ chron.push({tick,text,kind:kind||''}); if(chron.length>200) chron.shift(); renderChron(); }
+function renderChron(){ chronEl.innerHTML=chron.slice(-60).reverse().map(e=>`<div class="${e.kind}"><span class="t">${tagOf(e.tick)}</span><span>${e.text}</span></div>`).join(''); }
+function tagOf(t){ const u=(t%DAY)/DAY; const h=(6+u*24)%24; return `Y${Math.floor(t/DAY/YEAR)+1} D${Math.floor(t/DAY)%YEAR+1} ${String(Math.floor(h)).padStart(2,'0')}:${String(Math.floor((h%1)*60)).padStart(2,'0')}`; }
+log(`Genesis. ${species.length} lineages seeded: ${species.map(s=>s.name).join(', ')}.`);
+
+// ================= Simulation =================
+const idx=(x,y)=>Math.floor(y)*W+Math.floor(x);
+const inb=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
+let kills=0, births=0, lastHunt=null, lastBirth=null, immigrants=0;
+const CELL=8, GW=Math.ceil(W/CELL), GH=Math.ceil(H/CELL); let grid=[];
+function buildGrid(){ grid=new Array(GW*GH); for(let i=0;i<grid.length;i++) grid[i]=[]; for(const c of creatures){ grid[((c.y/CELL)|0)*GW+((c.x/CELL)|0)].push(c); } }
+function near(c,r,fn){ const x0=Math.max(0,((c.x-r)/CELL)|0), x1=Math.min(GW-1,((c.x+r)/CELL)|0), y0=Math.max(0,((c.y-r)/CELL)|0), y1=Math.min(GH-1,((c.y+r)/CELL)|0);
+  for(let gy=y0;gy<=y1;gy++) for(let gx=x0;gx<=x1;gx++){ const cell=grid[gy*GW+gx]; for(let k=0;k<cell.length;k++){ const o=cell[k]; if(o!==c&&!o.dead) fn(o); } } }
+const POPCAP=260;
+function acuity(c){ const d=(light-c.visPeak)/c.visW; return Math.exp(-d*d); }
+function step(){
+  tick++; light=computeLight();
+  // plants
+  const gr=.0014*(.25+light);
+  for(let k=0;k<2400;k++){ const i=(rnd()*W*H)|0; const cap=growCap(terrain[i]); if(cap>0&&plants[i]<cap) plants[i]=Math.min(cap,plants[i]+gr*(1+carcass[i]*4)); if(carcass[i]>0) carcass[i]*=.995; }
+  // pheromone decay (every 4 ticks, cheap)
+  if(tick%4===0) for(let i=0;i<W*H;i++){ pherA[i]*=.985; pherB[i]*=.96; }
+  // creatures
+  buildGrid();
+  const cold=1-light; const tempCost=1+ (seasonOf()==='Winter'?.5:0)*cold;
+  for(let n=creatures.length-1;n>=0;n--){
+    const c=creatures[n]; c.age++; const ac=acuity(c); const vis=(c.sp.carn?14:10)*(.25+.75*ac);
+    const ti=idx(c.x,c.y); const here=terrain[ti];
+    c.in.light=light; c.in.hunger=1-Math.min(1,c.energy/120); let threat=0, food=0, kin=0, trail=0;
+    let tx=0,ty=0,drive=0; c.goal='wander';
+    if(c.sp.carn){
+      let best=null,bd=1e9;
+      near(c,vis,o=>{ if(o.sp.carn) return; const dx=o.x-c.x,dy=o.y-c.y,d2=dx*dx+dy*dy; const hid=terrain[idx(o.x,o.y)]===TER.SCRUB?.45:1; if(d2<vis*vis*hid*hid&&d2<bd){bd=d2;best=o;} });
+      if(best&&c.energy<160){ const d=Math.sqrt(bd); tx=(best.x-c.x)/d; ty=(best.y-c.y)/d; drive=1; c.goal='hunt'; food=1-d/vis;
+        if(d<.9){ // kill
+          c.energy+=best.energy*.6+25; kill(best,'hunted'); kills++; lastHunt={x:c.x,y:c.y,t:tick,name:c.sp.name};
+          if(kills%40===1) log(`${c.sp.name} take down ${best.sp.name.toLowerCase()} in ${regionName(c.x,c.y)}.`); }
+      } else { // follow trail scent gradient
+        let gx=0,gy=0; for(let a=0;a<8;a++){ const ang=a*Math.PI/4, sx=c.x+Math.cos(ang)*3, sy=c.y+Math.sin(ang)*3; if(inb(sx,sy)){ const v=pherA[idx(sx,sy)]; gx+=Math.cos(ang)*v; gy+=Math.sin(ang)*v; trail=Math.max(trail,v);} }
+        if(trail>.05){ const m=Math.hypot(gx,gy)||1; tx=gx/m; ty=gy/m; drive=.5*c.bold+.3; c.goal='track scent'; }
+      }
+    } else {
+      let pred=null,pd=1e9;
+      near(c,vis,o=>{ if(!o.sp.carn) return; const dx=o.x-c.x,dy=o.y-c.y,d2=dx*dx+dy*dy; if(d2<vis*vis&&d2<pd){pd=d2;pred=o;} });
+      const alarm=pherB[ti]; kin=0;
+      if(pred){ const d=Math.sqrt(pd)||.1; threat=1-d/vis; tx=-(pred.x-c.x)/d; ty=-(pred.y-c.y)/d; drive=1; c.goal='flee'; pherB[ti]=Math.min(1,pherB[ti]+.6); }
+      else if(alarm>.2&&c.bold<.6){ // move away from alarm gradient
+        let gx=0,gy=0; for(let a=0;a<8;a++){ const ang=a*Math.PI/4, sx=c.x+Math.cos(ang)*2, sy=c.y+Math.sin(ang)*2; if(inb(sx,sy)){ const v=pherB[idx(sx,sy)]; gx-=Math.cos(ang)*v; gy-=Math.sin(ang)*v; } }
+        const m=Math.hypot(gx,gy)||1; tx=gx/m; ty=gy/m; drive=.7; c.goal='avoid alarm'; threat=alarm*.5;
+      } else if(plants[ti]>.08&&c.energy<150){ c.energy+=Math.min(plants[ti],.25)*2.4*(here===TER.GRASS?1:.7); plants[ti]=Math.max(0,plants[ti]-.03); c.goal='graze'; food=plants[ti]; drive=0; pherA[ti]=Math.min(1,pherA[ti]+.08); }
+      else { let bx=0,by=0,bv=-1; for(let a=0;a<8;a++){ const ang=c.heading+(a-4)*Math.PI/4, sx=c.x+Math.cos(ang)*4, sy=c.y+Math.sin(ang)*4; if(!inb(sx,sy)) continue; const t=terrain[idx(sx,sy)]; let v=plants[idx(sx,sy)]-(t===TER.WATER?2:0)+(a===4?.1:0)+pherA[idx(sx,sy)]*c.social*.5; if(v>bv){bv=v;bx=Math.cos(ang);by=Math.sin(ang);} }
+        tx=bx;ty=by;drive=.6; c.goal='forage'; food=Math.max(0,bv); }
+      // kin count (sociality input)
+      near(c,5,o=>{ if(o.sp===c.sp){ const dx=o.x-c.x,dy=o.y-c.y; if(dx*dx+dy*dy<25) kin++; } });
+      trail=pherA[ti];
+    }
+    c.in.threat=threat; c.in.food=Math.max(0,Math.min(1,food)); c.in.kin=Math.min(1,kin/6); c.in.trail=Math.min(1,trail);
+    // steer
+    if(drive>0){ const want=Math.atan2(ty,tx); let d=want-c.heading; d=Math.atan2(Math.sin(d),Math.cos(d)); c.heading+=d*.35*drive; }
+    else c.heading+=(rnd()-.5)*.5;
+    if(c.goal!=='graze'){ const sp=c.speed*(drive>0?.6+.6*drive:.5)/moveCost(here);
+      let nx=c.x+Math.cos(c.heading)*sp, ny=c.y+Math.sin(c.heading)*sp;
+      if(!inb(nx,ny)){ c.heading+=Math.PI; nx=c.x; ny=c.y; }
+      else if(!c.sp.carn&&terrain[idx(nx,ny)]===TER.WATER){ c.heading+=Math.PI/2+rnd(); nx=c.x; ny=c.y; }
+      c.x=nx; c.y=ny; c.energy-=c.metab*(1+c.size*.15)*(1+sp*4)*tempCost; }
+    else c.energy-=c.metab*.5*tempCost;
+    if(c.sick>0){ c.energy-=.06; c.sick--; near(c,1,o=>{ if(o.sick===0&&Math.abs(o.x-c.x)<1&&Math.abs(o.y-c.y)<1&&rnd()<.02) o.sick=DAY*.6; }); }
+    // breed
+    if(c.energy>(c.sp.carn?170:135)&&c.age>DAY*.3&&rnd()<.005*Math.max(0,1-creatures.length/POPCAP)){
+      const g=c.g.map(v=>Math.max(0,Math.min(1,v+(rnd()-.5)*.12))); c.energy*=.55; c.kids++; births++;
+      let sp=c.sp; if(c.sp.count>20&&rnd()<.003){ sp=newSpecies(c.sp.carn,(c.sp.hue+40+rnd()*80)%360,c.sp,c.x,c.y); log(`A new lineage, <b>${sp.name}</b>, splits from ${c.sp.name} in ${regionName(c.x,c.y)}.`,'spl'); }
+      const k=makeCreature(c.x+(rnd()-.5),c.y+(rnd()-.5),sp,g,c.gen+1); k.parent=c.id; k.energy=c.energy*.6; lastBirth={x:k.x,y:k.y,t:tick,name:sp.name};
+    }
+    if(c.energy<=0) kill(c,'starved'); else if(c.age>c.maxAge) kill(c,'old age');
+  }
+  // immigration guard so the mockup never goes silent
+  const nh=creatures.filter(c=>!c.sp.carn).length, nc=creatures.length-nh;
+  if(nh<14&&tick%300===0){ const sp=species.find(s=>!s.carn&&!s.died)||newSpecies(false,rnd()*360,null,2,H/2); for(let i=0;i<10;i++) makeCreature(1+rnd()*3,H*.3+rnd()*H*.4,sp); log(`A herd of ${sp.name.toLowerCase()} crosses in from the western edge.`); immigrants++; }
+  if(nc<3&&tick%600===0&&nh>30){ const sp=species.find(s=>s.carn&&!s.died)||newSpecies(true,330,null,W-2,H/2); for(let i=0;i<3;i++) makeCreature(W-3+rnd()*2,H*.3+rnd()*H*.4,sp); log(`${sp.name} arrive from the eastern edge, hungry.`); }
+  if(tick%30===0) sample();
+}
+function kill(c,why){ const n=creatures.indexOf(c); if(n<0) return; creatures.splice(n,1); c.dead=true; c.sp.count--; carcass[idx(c.x,c.y)]=Math.min(1,carcass[idx(c.x,c.y)]+c.size*.3);
+  if(c===selected){ selected=null; following=false; renderInspector(); }
+  if(c.sp.count===0&&!c.sp.died){ c.sp.died=tick; log(`<b>${c.sp.name}</b> are extinct. The last one ${why==='hunted'?'was taken':why==='starved'?'starved':'died of old age'} in ${regionName(c.x,c.y)}.`,'ext'); } }
+
+// ================= Charts data =================
+const hist=[]; // {t,light,pops:Map,div}
+function sample(){ const pops={}; for(const c of creatures) pops[c.sp.id]=(pops[c.sp.id]||0)+1; const N=creatures.length||1; let Hs=0; for(const k in pops){ const p=pops[k]/N; Hs-=p*Math.log(p); }
+  hist.push({t:tick,light,pops,div:Hs}); if(hist.length>240) hist.shift(); }
+
+// ================= Rendering =================
+const view=document.getElementById('view'), ctx=view.getContext('2d');
+const worldC=document.createElement('canvas'); worldC.width=W*PX; worldC.height=H*PX; const wctx=worldC.getContext('2d');
+const terC=document.createElement('canvas'); terC.width=W; terC.height=H; const tctx=terC.getContext('2d'); const terImg=tctx.createImageData(W,H);
+const pherC=document.createElement('canvas'); pherC.width=W; pherC.height=H; const pctx=pherC.getContext('2d'); const pherImg=pctx.createImageData(W,H);
+const TCOL=[[34,64,90],[183,167,120],[74,61,44],[58,72,40],[88,92,52],[106,106,102]];
+function renderTerrain(){ const d=terImg.data; for(let i=0;i<W*H;i++){ const t=terrain[i]; let [r,g,b]=TCOL[t]; const p=plants[i];
+  if(t===TER.GRASS){ r=62+(92-62)*p; g=78+(150-78)*p; b=42+(62-42)*p; } else if(t===TER.SCRUB){ r=88+(107-88)*p; g=92+(122-92)*p; b=52+(58-52)*p; } else if(t===TER.MUD){ g=61+30*p; }
+  if(t===TER.WATER){ const w=.5+.5*Math.sin(tick/40+i%W/6+ (i/W|0)/9); b=90+20*w; g=64+10*w; }
+  const cc=carcass[i]; if(cc>0){ r=r+(232-r)*cc; g=g+(226-g)*cc; b=b+(204-b)*cc; }
+  d[i*4]=r; d[i*4+1]=g; d[i*4+2]=b; d[i*4+3]=255; } tctx.putImageData(terImg,0,0); }
+function renderPher(){ const d=pherImg.data; for(let i=0;i<W*H;i++){ const a=lens.trail?pherA[i]:0, b=lens.alarm?pherB[i]:0;
+  if(a>b){ d[i*4]=72;d[i*4+1]=194;d[i*4+2]=216;d[i*4+3]=Math.min(255,a*420); } else { d[i*4]=216;d[i*4+1]=92;d[i*4+2]=181;d[i*4+3]=Math.min(255,b*420); } } pctx.putImageData(pherImg,0,0); }
+function creatureColor(c){ if(colorMode==='species') return `hsl(${c.sp.hue} 55% 62%)`; if(colorMode==='energy'){ const e=Math.min(1,c.energy/160); return `hsl(${35+e*10} ${40+e*60}% ${28+e*40}%)`; }
+  if(colorMode==='age'){ const a=c.age/c.maxAge; return `hsl(90 8% ${95-a*60}%)`; } return `hsl(${c.hue} ${c.sp.carn?65:50}% ${c.sp.carn?58:66}%)`; }
+function drawSprite(g,c,scale,ox,oy){ const s=Math.round(c.size)*scale; const x=Math.round(ox-s/2), y=Math.round(oy-s/2); g.fillStyle=creatureColor(c); g.fillRect(x,y,s,s);
+  if(c.sp.carn){ g.fillRect(x-scale,y+scale,scale,scale); g.fillRect(x+s,y+scale,scale,scale); if(s>=3*scale){ g.fillRect(x+scale,y-scale,scale,scale); g.fillRect(x+s-2*scale,y-scale,scale,scale);} }
+  else if(c.social>.6){ g.fillRect(x+s,y+s-scale,scale,scale); }
+  g.fillStyle=c.visPeak<.4?'#f3efe0':'#141a14'; const ex=x+(Math.cos(c.heading)>0?s-scale:0), ey=y+Math.round(s/4/scale)*scale; g.fillRect(ex,ey,scale,scale);
+  if(c.sick>0){ g.fillStyle='rgba(150,80,200,.6)'; g.fillRect(x,y,s,scale); } }
+function renderWorld(){
+  if(tick%6===0||tick<2) renderTerrain();
+  wctx.imageSmoothingEnabled=false; wctx.drawImage(terC,0,0,W*PX,H*PX);
+  if(lens.trail||lens.alarm){ renderPher(); wctx.drawImage(pherC,0,0,W*PX,H*PX); }
+  for(const c of creatures) drawSprite(wctx,c,1,c.x*PX,c.y*PX);
+  if(hlSpecies!=null){ wctx.strokeStyle='#fff'; wctx.lineWidth=1; for(const c of creatures) if(c.sp.id===hlSpecies){ wctx.strokeRect(c.x*PX-4,c.y*PX-4,8,8);} }
+  if(selected){ wctx.strokeStyle='#e3a83a'; wctx.lineWidth=1; wctx.strokeRect(selected.x*PX-5,selected.y*PX-5,10,10); }
+  if(lens.light){ const a=(1-light)*.72; wctx.fillStyle=`rgba(8,14,34,${a})`; wctx.fillRect(0,0,W*PX,H*PX);
+    // dawn/dusk warmth
+    const warm=Math.max(0,1-Math.abs(light-.18)/.18)*.18; if(warm>0){ wctx.fillStyle=`rgba(227,140,58,${warm})`; wctx.fillRect(0,0,W*PX,H*PX);} }
+}
+// camera
+const cam={x:W*PX/2,y:H*PX/2,z:2,tx:null,ty:null,tz:null};
+let dpr=1;
+function resize(){ dpr=Math.min(2,devicePixelRatio||1); const r=view.parentElement.getBoundingClientRect(); view.width=r.width*dpr; view.height=r.height*dpr; }
+addEventListener('resize',resize); resize();
+function present(){ ctx.imageSmoothingEnabled=false; ctx.fillStyle='#050806'; ctx.fillRect(0,0,view.width,view.height);
+  const z=cam.z*dpr; const w=W*PX*z, h=H*PX*z; const ox=view.width/2-cam.x*z, oy=view.height/2-cam.y*z; ctx.drawImage(worldC,ox,oy,w,h); }
+function clampCam(){ cam.z=Math.max(1,Math.min(8,cam.z)); const vw=view.width/dpr/cam.z, vh=view.height/dpr/cam.z;
+  cam.x=Math.max(Math.min(vw/2,W*PX/2),Math.min(W*PX-vw/2,cam.x)); cam.y=Math.max(Math.min(vh/2,H*PX/2),Math.min(H*PX-vh/2,cam.y)); }
+function screenToWorld(px,py){ const r=view.getBoundingClientRect(); const x=(px-r.left-r.width/2)/cam.z+cam.x, y=(py-r.top-r.height/2)/cam.z+cam.y; return [x/PX,y/PX]; }
+
+// ================= State =================
+const lens={light:true,trail:false,alarm:false}; let colorMode='self', selected=null, following=false, hlSpecies=null, tool=null;
+const app=document.getElementById('app'); let idle=true;
+
+// ================= Idle auto-camera =================
+let poiUntil=0, poiText='', poiKind='Watching', poiTarget=null;
+function pickPOI(){
+  const opts=[];
+  if(lastHunt&&tick-lastHunt.t<400) opts.push({k:'A hunt',t:`${lastHunt.name} closing in, ${regionName(lastHunt.x,lastHunt.y)}`,x:lastHunt.x,y:lastHunt.y,w:3});
+  if(lastBirth&&tick-lastBirth.t<300) opts.push({k:'A birth',t:`new ${lastBirth.name.toLowerCase()} in ${regionName(lastBirth.x,lastBirth.y)}`,x:lastBirth.x,y:lastBirth.y,w:2});
+  // densest cluster
+  let best=null,bc=0; for(let i=0;i<12;i++){ const c=creatures[(rnd()*creatures.length)|0]; if(!c) break; let n=0; for(const o of creatures){ if(Math.abs(o.x-c.x)<8&&Math.abs(o.y-c.y)<8) n++; } if(n>bc){bc=n;best=c;} }
+  if(best) opts.push({k:'A herd',t:`${bc} ${best.sp.name.toLowerCase()} gathered in ${regionName(best.x,best.y)}`,x:best.x,y:best.y,w:1,follow:best});
+  const carn=creatures.filter(c=>c.sp.carn); if(carn.length){ const c=carn[(rnd()*carn.length)|0]; opts.push({k:'Following',t:`a ${c.sp.name.toLowerCase().replace(/s$/,'')} ${c.goal==='track scent'?'tracking a scent':'on the prowl'} through ${regionName(c.x,c.y)}`,x:c.x,y:c.y,w:2,follow:c}); }
+  if(light<.08) opts.push({k:'Night',t:`the whole valley in the dark — ${creatures.filter(c=>c.visPeak<.35).length} night-eyed creatures are still moving`,x:W/2,y:H/2,z:1.4,w:1.5});
+  const tot=opts.reduce((a,o)=>a+o.w,0); let r=rnd()*tot; let p=opts[0]; for(const o of opts){ r-=o.w; if(r<=0){p=o;break;} }
+  poiKind=p.k; poiText=p.t; poiTarget=p.follow||null; cam.tx=p.x*PX; cam.ty=p.y*PX; cam.tz=p.z||3.2; poiUntil=tick+Math.max(240, 480/Math.max(1,speed)*1.5|0);
+  document.getElementById('capK').textContent=poiKind; document.getElementById('capT').textContent=poiText; }
+function idleCam(){ if(tick>=poiUntil||poiTarget&&!creatures.includes(poiTarget)) pickPOI();
+  if(poiTarget){ cam.tx=poiTarget.x*PX; cam.ty=poiTarget.y*PX; }
+  if(cam.tx!=null){ cam.x+=(cam.tx-cam.x)*.03; cam.y+=(cam.ty-cam.y)*.03; } if(cam.tz!=null) cam.z+=(cam.tz-cam.z)*.03; }
+
+// ================= UI wiring =================
+const $=id=>document.getElementById(id);
+function setIdle(v){ idle=v; app.classList.toggle('idle',v); setTimeout(resize,280); if(v){ poiUntil=0; } else { cam.tx=cam.ty=cam.tz=null; } }
+$('toIdle').onclick=()=>setIdle(true); $('hud').addEventListener('pointerdown',e=>e.stopPropagation()); $('openStation').onclick=e=>{e.stopPropagation();setIdle(false);};
+addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT'||e.metaKey||e.ctrlKey) return; const k=e.key;
+  if(k==='+'||k==='='){ zoomBy(1.4); return; } if(k==='-'||k==='_'){ zoomBy(1/1.4); return; } if(k==='0'){ fitWorld(); return; }
+  if(k==='1'){ setSpeed(1); return; } if(k==='2'){ setSpeed(4); return; } if(k==='3'){ setSpeed(16); return; } if(k===' '){ e.preventDefault(); setSpeed(speed?0:1); return; }
+  if(idle){ setIdle(false); return; }
+  const l=k.toLowerCase(); if(l==='l') toggleLens('light'); if(l==='t') toggleLens('trail'); if(l==='a') toggleLens('alarm'); if(l==='escape') setIdle(true); });
+function toggleLens(n){ lens[n]=!lens[n]; document.querySelectorAll('#lensToggles .chip').forEach(b=>b.classList.toggle('on',lens[b.dataset.lens])); }
+document.querySelectorAll('#lensToggles .chip').forEach(b=>b.onclick=()=>toggleLens(b.dataset.lens));
+document.querySelectorAll('#colorModes .chip').forEach(b=>b.onclick=()=>{ colorMode=b.dataset.mode; document.querySelectorAll('#colorModes .chip').forEach(x=>x.classList.toggle('on',x===b)); });
+function setSpeed(s){ speed=s; document.querySelectorAll('[data-sp]').forEach(b=>b.classList.toggle('on',+b.dataset.sp===s)); }
+document.querySelectorAll('[data-sp]').forEach(b=>b.onclick=()=>setSpeed(+b.dataset.sp));
+function zoomBy(f,ax,ay){ const z0=cam.z; cam.z=Math.max(1,Math.min(8,cam.z*f)); if(ax!=null){ cam.x=ax-(ax-cam.x)*z0/cam.z; cam.y=ay-(ay-cam.y)*z0/cam.z; } clampCam(); if(idle){ cam.tz=cam.z; } updateZoomLabel(); }
+function fitWorld(){ const vw=view.width/dpr, vh=view.height/dpr; cam.z=Math.max(1,Math.min(vw/(W*PX),vh/(H*PX))); cam.x=W*PX/2; cam.y=H*PX/2; cam.tx=cam.ty=null; following=false; if(idle){ cam.tz=cam.z; } clampCam(); updateZoomLabel(); }
+function updateZoomLabel(){ $('zoomv').textContent=cam.z.toFixed(1)+'×'; }
+$('zIn').onclick=()=>zoomBy(1.4); $('zOut').onclick=()=>zoomBy(1/1.4); $('zoomv').onclick=fitWorld;
+document.querySelectorAll('.tabs [data-pane]').forEach(b=>b.onclick=()=>{ document.querySelectorAll('.tabs [data-pane]').forEach(x=>x.classList.toggle('on',x===b)); document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id===b.dataset.pane)); if(b.dataset.pane!=='god'){ tool=null; syncTools(); } });
+$('notesBtn').onclick=()=>{ document.body.classList.toggle('notes'); $('notesBtn').classList.toggle('on'); };
+function syncTools(){ document.querySelectorAll('.tool').forEach(b=>b.classList.toggle('on',b.dataset.tool===tool)); view.classList.toggle('god',!!tool); }
+document.querySelectorAll('.tool').forEach(b=>b.onclick=()=>{ const t=b.dataset.tool; if(t==='rain'){ for(let i=0;i<W*H;i++){ const cap=growCap(terrain[i]); if(cap) plants[i]=Math.min(cap,plants[i]+.35); } log('⚡ Rain. Every green tile drinks.','god'); return; } tool=tool===t?null:t; syncTools(); });
+function applyTool(x,y){ const R=tool==='meteor'?5:tool==='fire'?6:4; const where=regionName(x,y);
+  for(let j=-R;j<=R;j++) for(let i=-R;i<=R;i++){ const tx=Math.floor(x)+i, ty=Math.floor(y)+j; if(!inb(tx,ty)||i*i+j*j>R*R) continue; const k=ty*W+tx;
+    if(tool==='fire'){ plants[k]=0; carcass[k]=Math.max(carcass[k],.2); } else if(tool==='meteor'){ terrain[k]=TER.ROCK; plants[k]=0; } else if(tool==='water'){ if(i*i+j*j<=4){ terrain[k]=TER.WATER; plants[k]=0; } } else if(tool==='grass'){ if(i*i+j*j<=6&&terrain[k]!==TER.WATER){ terrain[k]=TER.GRASS; plants[k]=Math.max(plants[k],.5);} } }
+  if(tool==='fire'||tool==='meteor'){ let n=0; for(const c of [...creatures]) if((c.x-x)**2+(c.y-y)**2<R*R){ kill(c,'burned'); n++; } log(`⚡ ${tool==='fire'?'Fire sweeps':'A meteor strikes'} ${where}. ${n} dead.`,'god'); }
+  if(tool==='plague'){ let n=0; for(const c of creatures) if((c.x-x)**2+(c.y-y)**2<R*R){ c.sick=DAY; n++; } log(`⚡ Plague seeded in ${where}; ${n} carriers.`,'god'); }
+  if(tool==='water') log(`⚡ Water opened in ${where}.`,'god'); if(tool==='grass') log(`⚡ Meadow laid down in ${where}.`,'god'); renderTerrain(); }
+
+// pointer: pan / click / hover
+let drag=null, moved=false; const ptrs=new Map(); let pinch=null;
+view.addEventListener('pointerdown',e=>{ ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); view.setPointerCapture(e.pointerId);
+  if(ptrs.size===2){ const [a,b]=[...ptrs.values()]; pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:cam.z}; drag=null; moved=true; return; }
+  drag={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y}; moved=false; });
+view.addEventListener('pointercancel',e=>{ ptrs.delete(e.pointerId); if(ptrs.size<2) pinch=null; });
+view.addEventListener('pointermove',e=>{ if(ptrs.has(e.pointerId)) ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch&&ptrs.size===2){ const [a,b]=[...ptrs.values()]; const d=Math.hypot(a.x-b.x,a.y-b.y); const mx=(a.x+b.x)/2,my=(a.y+b.y)/2; const [wx,wy]=screenToWorld(mx,my); const z0=cam.z; cam.z=Math.max(1,Math.min(8,pinch.z*d/pinch.d)); cam.x=wx*PX-(wx*PX-cam.x)*z0/cam.z; cam.y=wy*PX-(wy*PX-cam.y)*z0/cam.z; if(idle){ cam.tz=cam.z; cam.tx=cam.ty=null; poiTarget=null; } clampCam(); updateZoomLabel(); return; }
+  if(drag){ const dx=e.clientX-drag.x, dy=e.clientY-drag.y; if(Math.abs(dx)+Math.abs(dy)>4){ moved=true; view.classList.add('grab'); cam.tx=cam.ty=null; poiTarget=null; following=false; cam.x=drag.cx-dx/cam.z; cam.y=drag.cy-dy/cam.z; clampCam(); if(idle) poiUntil=tick+600; } }
+  const [wx,wy]=screenToWorld(e.clientX,e.clientY); const tip=$('tip'); if(idle||!inb(wx,wy)){ tip.style.display='none'; return; }
+  const c=nearest(wx,wy,1.5); const t=terrain[idx(wx,wy)];
+  tip.style.display='block'; const r=view.getBoundingClientRect(); tip.style.left=(e.clientX-r.left+14)+'px'; tip.style.top=(e.clientY-r.top+14)+'px';
+  tip.innerHTML=c?`<b>${c.sp.name}</b> · ${c.goal} · energy ${c.energy|0}`:`${['water','sand','mud','grass','scrub','rock'][t]} · plants ${(plants[idx(wx,wy)]*100)|0}% · scent ${(pherA[idx(wx,wy)]*100)|0}/${(pherB[idx(wx,wy)]*100)|0}`; });
+view.addEventListener('pointerup',e=>{ ptrs.delete(e.pointerId); if(ptrs.size<2) pinch=null; view.classList.remove('grab'); const wasDrag=moved; drag=null; if(wasDrag||ptrs.size) return;
+  const [wx,wy]=screenToWorld(e.clientX,e.clientY); if(!inb(wx,wy)) { if(idle) setIdle(false); return; }
+  if(idle){ setIdle(false); }
+  if(tool){ applyTool(wx,wy); return; }
+  const c=nearest(wx,wy,2.5); selected=c; following=false; renderInspector(); if(c) $('insp').classList.add('open'); });
+view.addEventListener('pointerleave',()=>{ $('tip').style.display='none'; });
+view.addEventListener('wheel',e=>{ e.preventDefault(); const [wx,wy]=screenToWorld(e.clientX,e.clientY); zoomBy(Math.exp(-e.deltaY*.0015),wx*PX,wy*PX); },{passive:false});
+function nearest(x,y,r){ let b=null,bd=r*r; for(const c of creatures){ const d=(c.x-x)**2+(c.y-y)**2; if(d<bd){bd=d;b=c;} } return b; }
+
+// ================= Inspector =================
+const brainEl=$('brain'); const INPUTS=['light','hunger','threat','food','kin','trail'];
+brainEl.innerHTML=INPUTS.map(k=>`<span>${k}</span><div class="bar"><i id="in_${k}"></i></div>`).join('');
+$('follow').onclick=()=>{ following=!following; $('follow').classList.toggle('on',following); if(following) cam.tz=4; };
+$('unsel').onclick=()=>{ selected=null; following=false; renderInspector(); };
+$('specName').addEventListener('change',e=>{ if(selected){ const old=selected.sp.name; selected.sp.name=e.target.value.trim()||old; log(`You named the ${old.toLowerCase()} <b>${selected.sp.name}</b>.`,'god'); } });
+function renderInspector(){ const has=!!selected; $('inspEmpty').hidden=has; $('inspBody').hidden=!has; if(!has){ $('insp').classList.remove('open'); $('follow').classList.remove('on'); return; }
+  const c=selected; if(document.activeElement!==$('specName')) $('specName').value=c.sp.name; $('diet').textContent=c.sp.carn?'hunter':'grazer'; $('diet').style.color=c.sp.carn?'var(--crit)':'var(--good)';
+  $('gen').textContent=`gen ${c.gen} · #${c.id}`; $('where').textContent=`${c.goal} in ${regionName(c.x,c.y)}`;
+  $('bEnergy').style.width=Math.min(100,c.energy/180*100)+'%'; $('bAge').style.width=Math.min(100,c.age/c.maxAge*100)+'%';
+  $('visPeak').textContent=`${(c.visPeak*100)|0}% light ${c.visPeak<.35?'· nocturnal':c.visPeak>.7?'· diurnal':'· crepuscular'}`; $('visNow').textContent=`${(acuity(c)*100)|0}% acuity`;
+  for(const k of INPUTS) $('in_'+k).style.width=(c.in[k]*100)+'%';
+  const g=$('glyph').getContext('2d'); g.clearRect(0,0,220,220); g.save(); g.translate(110,110);
+  for(let r=1;r<=3;r++){ g.beginPath(); g.arc(0,0,r*30,0,Math.PI*2); g.strokeStyle='#2b3a30'; g.stroke(); }
+  g.beginPath(); c.g.forEach((v,i)=>{ const a=i/8*Math.PI*2-Math.PI/2, rr=12+v*78; g[i?'lineTo':'moveTo'](Math.cos(a)*rr,Math.sin(a)*rr); }); g.closePath();
+  g.fillStyle=creatureColor(c).replace('hsl(','hsla(').replace(')',' / .35)'); g.fill(); g.strokeStyle=creatureColor(c); g.lineWidth=2; g.stroke();
+  c.g.forEach((v,i)=>{ const a=i/8*Math.PI*2-Math.PI/2; g.fillStyle='#d9d4c0'; g.beginPath(); g.arc(Math.cos(a)*(12+v*78),Math.sin(a)*(12+v*78),3,0,7); g.fill(); }); g.restore();
+  const p=$('portrait').getContext('2d'); p.clearRect(0,0,24,24); drawSprite(p,c,3,12,12);
+  const par=c.parent?`parent #${c.parent}`:'genesis stock'; const sib=creatures.filter(o=>o.parent===c.parent&&c.parent).length; const kin=creatures.filter(o=>o.sp===c.sp).length;
+  $('family').innerHTML=`<b>${c.sp.name}</b>${c.sp.parent?` ← ${c.sp.parent.name}`:''}<br>${par}${c.parent?` · ${sib-1} living siblings`:''}<br>${c.kids} offspring · ${kin} living kin · lineage born ${tagOf(c.sp.born)}`; }
+
+// ================= Phylogeny & charts =================
+const phy=$('phyloSvg');
+function renderPhylo(){ const t0=0, t1=Math.max(tick,DAY); const xs=t=>20+(t-t0)/(t1-t0)*740; let out='';
+  species.forEach((s,i)=>{ const y=16+i*(120/Math.max(1,species.length-1)||0); s._y=y; });
+  for(const s of species){ const x0=xs(s.born), x1=s.died?xs(s.died):760; const col=`hsl(${s.hue} 55% 62%)`;
+    if(s.parent) out+=`<path d="M${xs(s.born)} ${s.parent._y} V${s._y}" stroke="${col}" stroke-dasharray="2 3" fill="none"/>`;
+    out+=`<line x1="${x0}" y1="${s._y}" x2="${x1}" y2="${s._y}" stroke="${col}" stroke-width="${Math.max(1.5,Math.min(8,s.count/4))}" stroke-linecap="round" opacity="${s.died?.45:1}" style="cursor:pointer" data-s="${s.id}"/>`;
+    out+=`<circle cx="${x0}" cy="${s._y}" r="3" fill="${s.died?'none':col}" stroke="${col}"/>`;
+    out+=`<text x="${Math.min(x0+8,600)}" y="${s._y-5}" fill="${s.died?'#5f6a60':'#d9d4c0'}" data-s="${s.id}" style="cursor:pointer">${s.name}${s.died?' †':' · '+s.count}</text>`; }
+  phy.innerHTML=out; }
+phy.addEventListener('pointerover',e=>{ const s=e.target.dataset.s; hlSpecies=s?+s:null; }); phy.addEventListener('pointerleave',()=>hlSpecies=null);
+function chart(cv,draw){ const r=cv.getBoundingClientRect(); if(!r.width) return; cv.width=r.width*dpr; cv.height=r.height*dpr; const g=cv.getContext('2d'); g.scale(dpr,dpr); draw(g,r.width,r.height); }
+function renderCharts(){ if(!hist.length) return;
+  chart($('chPop'),(g,w,h)=>{ const max=Math.max(10,...hist.map(s=>Math.max(...Object.values(s.pops)))); g.strokeStyle='#2b3a30'; for(let i=0;i<4;i++){ g.beginPath(); g.moveTo(0,h*i/4); g.lineTo(w,h*i/4); g.stroke(); }
+    for(const s of species){ g.beginPath(); hist.forEach((pt,i)=>{ const v=pt.pops[s.id]||0; const x=i/(hist.length-1||1)*w, y=h-v/max*h; i?g.lineTo(x,y):g.moveTo(x,y); }); g.strokeStyle=`hsl(${s.hue} 55% 62%)`; g.lineWidth=s.died?1:1.6; g.stroke(); }
+    g.fillStyle='#8e9788'; g.font='10px IBM Plex Mono'; g.fillText(max,3,10); });
+  chart($('chDiv'),(g,w,h)=>{ g.strokeStyle='#2b3a30'; for(let i=0;i<4;i++){ g.beginPath(); g.moveTo(0,h*i/4); g.lineTo(w,h*i/4); g.stroke(); }
+    g.beginPath(); hist.forEach((pt,i)=>{ const x=i/(hist.length-1||1)*w, y=h-pt.light*h*.9; i?g.lineTo(x,y):g.moveTo(x,y); }); g.lineTo(w,h); g.lineTo(0,h); g.closePath(); g.fillStyle='rgba(227,168,58,.14)'; g.fill();
+    g.beginPath(); hist.forEach((pt,i)=>{ const x=i/(hist.length-1||1)*w, y=h-Math.min(1,pt.div/2)*h*.9; i?g.lineTo(x,y):g.moveTo(x,y); }); g.strokeStyle='#7fbb6a'; g.lineWidth=1.6; g.stroke();
+    const last=hist[hist.length-1]; g.fillStyle='#8e9788'; g.font='10px IBM Plex Mono'; g.fillText(`H = ${last.div.toFixed(2)}`,3,10); }); }
+
+// ================= HUD =================
+function renderHUD(){ $('clock').textContent=clockStr(); $('season').textContent=`${seasonOf()} · light ${(light*100)|0}% · day ${(dayFrac()*100)|0}%`;
+  const u=(tick%DAY)/DAY, f=dayFrac(); const a=u<f?Math.PI*(1-u/f):Math.PI; const dot=$('sundot'); dot.setAttribute('cx',20+17*Math.cos(a)); dot.setAttribute('cy',20-17*Math.sin(a)); dot.setAttribute('fill',u<f?'#e3a83a':'#3a4d40');
+  let nh=0,nc=0,pl=0; for(const c of creatures) c.sp.carn?nc++:nh++; for(let i=0;i<W*H;i+=7) pl+=plants[i]; $('pHerb').textContent=nh; $('pCarn').textContent=nc; $('pPlants').textContent=((pl*7/(W*H))*100|0)+'%'; $('pSpec').textContent=species.filter(s=>!s.died).length+'/'+species.length;
+  const idleT=clockStr().split(' · '); $('idleTime').textContent=idleT[2]; $('idleDay').textContent=`${idleT[0]} · ${idleT[1]} · ${seasonOf()}`;
+  const last=chron[chron.length-1]; if(last){ $('tickT').textContent=tagOf(last.tick); $('tickE').innerHTML=last.text; } }
+
+// ================= Main loop =================
+let frame=0;
+function loop(){ frame++;
+  for(let i=0;i<speed;i++) step();
+  if(idle) idleCam(); else if(following&&selected){ cam.x+=(selected.x*PX-cam.x)*.1; cam.y+=(selected.y*PX-cam.y)*.1; if(cam.tz){ cam.z+=(cam.tz-cam.z)*.05; } }
+  clampCam(); renderWorld(); present();
+  if(frame%10===0){ renderHUD(); updateZoomLabel(); if(!idle){ if(selected) renderInspector(); if($('phylo').classList.contains('on')) renderPhylo(); if($('charts').classList.contains('on')) renderCharts(); } }
+  requestAnimationFrame(loop); }
+// warm up so the first frame is alive, then start in idle
+tick=Math.floor(DAY*1.1); for(let i=0;i<220;i++) step(); sample(); pickPOI(); renderHUD(); renderInspector(); setIdle(true);
+loop();
+})();
+</script>
