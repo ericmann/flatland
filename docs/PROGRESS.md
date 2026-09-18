@@ -27,7 +27,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-13 Worker glue, main-thread fallback, organism and light rendering
 - [x] P1-14 App state machine, input contract, floating cluster, battery pause
 - [x] P1-15 Idle mode — auto-camera, caption, ticker, clock, fonts
-- [ ] P1-16 Phase 1 end — push, preview, phone checks
+- [x] P1-16 Phase 1 end — push, preview, phone checks
 - [ ] P2-01 Mutation and genetic distance
 - [ ] P2-02 Brain forward pass over the SoA
 - [ ] P2-03 Brains drive behaviour; seeded genesis prior; reflex layer retained
@@ -1077,3 +1077,37 @@ Interpretation:
   Vite's ambient module types, which nothing in the repo referenced until
   now. Not in this task's named Files touched, but required for
   `npm run typecheck` to pass on `main.js`'s font imports.
+
+### fix — 5fc5a9b
+Found while starting P1-16: `createSim()` (`src/ui/sim-client.js`, P1-13)
+was written to support forcing the main-thread fallback via `?worker=0`
+(P1-13's own Verification step named this explicitly), but never actually
+read the query param — it always picked a real `Worker` when available.
+Fixed to check `new URLSearchParams(location.search).get('worker') ===
+'0'` first. Verified in a real browser (built + `vite preview`): with
+`?worker=0`, `document.documentElement.dataset.tick` still advances via
+`createMainThreadSim()`. This is what P1-16's phone checklist item 6
+("`?worker=0` still runs") actually depends on, so it's fixed here rather
+than deferred.
+
+### P1-16 — pending sha (see commit)
+Goal: close Phase 1 with a green suite, a pushed branch and the owed
+phone checks recorded.
+Verification: `npm run typecheck && npm run lint && npm run test:all`
+(273/273, including `test/soak`) `&& npm run build && npm run test:ui`
+(15/16, 1 correctly skipped) `&& npm run headless -- --ticks 30000`
+(population 777, hash `9cd91b5f`, no errors). `grep -r
+"fonts.googleapis"` still empty.
+Preview: `https://build-2026-09-18.flatland.pages.dev` (per Conventions'
+branch-name-to-preview-URL rule; recorded whether or not the Cloudflare
+Pages dashboard has been connected yet — SPEC §7.1).
+Phone: NOT VERIFIED (human). Checklist for the human to run through on
+the preview URL above:
+1. Idle mode plays full-bleed with the day/night tint visible.
+2. Pinch zoom and one-finger pan work and the auto-camera resumes after
+   ~10 s.
+3. The floating cluster is thumb-tappable and sits above the gesture bar.
+4. 16× keeps the UI responsive.
+5. Backgrounding the tab pauses the clock and foregrounding resumes it.
+6. `?worker=0` still runs (fixed above; verified in a desktop browser,
+   not yet on a phone).
