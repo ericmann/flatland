@@ -3,7 +3,7 @@ Branch: build/2026-09-18
 Started: 2026-09-18T15:20:35Z
 
 ## Tasks
-- [ ] P0-01 Repository scaffold and toolchain
+- [x] P0-01 Repository scaffold and toolchain
 - [ ] P0-02 Seeded RNG, deterministic math, config module
 - [ ] P0-03 Light, seasons and the world clock
 - [ ] P0-04 Value noise
@@ -72,3 +72,34 @@ Started: 2026-09-18T15:20:35Z
 
 ## Log
 (one entry per task, appended by /implement)
+
+### P0-01 — pending sha (see commit)
+Tests: `test/unit/smoke.test.js` — "1 + 1 === 2" and one case per required
+script name in `package.json`. Confirmed failing (no package.json) before
+implementation.
+Interpretation:
+- `index.html` at repo root, not `public/index.html` — matches the Spec
+  issues resolution already in PLAN.md (Vite requires root index.html).
+- Dependency majors are the actual current majors at install time (vite 8,
+  vitest 5, eslint 10, @eslint/js 10, eslint-config-prettier 10, typescript 7,
+  jsdom 30, @playwright/test 1.63), not the plan's guessed ^7/^4/^9/^5 —
+  checked via `npm view <pkg> version`. Added `globals` (17.x) for eslint
+  flat-config environment globals, not listed in the plan but required to
+  implement the per-directory globals rule.
+- Vitest 5 removed the `poolOptions.forks.execArgv` nesting (deprecated in
+  v4); `pool` and `execArgv` are top-level `test` options now. Confirmed
+  `global.gc` is defined under this config.
+- `src/core` "no globals at all" implemented as: base ES builtins
+  (`globals.builtin`) plus an explicit denylist (`Date`, `window`, `document`,
+  `fetch`, `performance`, `setTimeout` set to `'off'`) so Math/JSON/Array etc.
+  still lint, but the five named globals are undefined identifiers.
+- Added `docs/SPEC.md`, `docs/PLAN.md`, `docs/PROGRESS.md`, `docs/mockup.html`,
+  `.claude/commands/*.md` to `.prettierignore`: pre-existing content outside
+  this task's Files touched, and PLAN.md's exact `### <ID>: <title>` headings
+  are grepped by the implement/review commands.
+Verified: `npm install` (generated package-lock.json, committed), `npm run
+typecheck`, `npm run lint`, `npm test` (14/14), `npm run build`, `npm run dev`
+served "Flatland" at `/`. Could not run a from-scratch `npm ci` locally (the
+sandbox denies `rm -rf node_modules`); CI's first run will exercise `npm ci`
+against the committed lockfile.
+No config keys introduced (none needed yet).
