@@ -20,12 +20,14 @@ const ZOOM_KEY_FACTOR = 1.4;
  *   doc?: Document,
  *   win?: Window & typeof globalThis,
  * }} opts
- * @returns {{ setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, detach: () => void }}
+ * @returns {{ root: HTMLElement, setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, mode: () => 'idle'|'station', setCamera: (next: import('../render/camera.js').Camera) => void, getLastInteractionAt: () => number, detach: () => void }}
  */
 export function createApp({ root, sim, renderer, camera, doc = document, win = window }) {
   let mode = /** @type {'idle'|'station'} */ ('idle');
   let speed = 1;
   let cam = { ...camera };
+  /** Wall-clock ms of the last *user* pan/pinch/wheel gesture (SPEC §5.1: suspends the idle auto-camera for 10s). */
+  let lastInteractionAt = -Infinity;
 
   const hud = createHud(doc);
   root.appendChild(hud.el);
@@ -94,11 +96,15 @@ export function createApp({ root, sim, renderer, camera, doc = document, win = w
   const detachInput = attachInput(renderer.view, {
     getCamera: () => cam,
     onPan: (dx, dy) => {
+      lastInteractionAt = performance.now();
       cam = { x: cam.x + dx, y: cam.y + dy, z: cam.z };
       const { w, h } = worldSize();
       cam = clamp(cam, renderer.view.width, renderer.view.height, w, h);
     },
-    onZoom: (f, ax, ay) => zoomBy(f, { x: ax, y: ay }),
+    onZoom: (f, ax, ay) => {
+      lastInteractionAt = performance.now();
+      zoomBy(f, { x: ax, y: ay });
+    },
     onTap: () => {
       // Selecting an organism arrives with the inspector (P2-10); for now
       // a tap on the map, like any other input, opens the station.
@@ -177,11 +183,25 @@ export function createApp({ root, sim, renderer, camera, doc = document, win = w
   };
 
   return {
+    root,
     setMode,
     setSpeed,
     zoomBy,
     fitWorld,
     camera: () => cam,
+    mode: () => mode,
+    /**
+     * Set the camera directly (idle.js's auto-camera glide), clamped to
+     * the world. Does not count as a user interaction.
+     * @param {import('../render/camera.js').Camera} next
+     * @returns {void}
+     */
+    setCamera(next) {
+      const { w, h } = worldSize();
+      cam = clamp(next, renderer.view.width, renderer.view.height, w, h);
+      setZoomLabel(hud, cam.z);
+    },
+    getLastInteractionAt: () => lastInteractionAt,
     detach() {
       detachInput();
       doc.removeEventListener('keydown', onKeyDown);

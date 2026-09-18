@@ -26,7 +26,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-12 Fixed-timestep scheduler, protocol and snapshot encoder
 - [x] P1-13 Worker glue, main-thread fallback, organism and light rendering
 - [x] P1-14 App state machine, input contract, floating cluster, battery pause
-- [ ] P1-15 Idle mode — auto-camera, caption, ticker, clock, fonts
+- [x] P1-15 Idle mode — auto-camera, caption, ticker, clock, fonts
 - [ ] P1-16 Phase 1 end — push, preview, phone checks
 - [ ] P2-01 Mutation and genetic distance
 - [ ] P2-02 Brain forward pass over the SoA
@@ -1034,3 +1034,46 @@ Interpretation:
   `KeyboardEvent`/`PointerEvent` all fail `no-undef`. Not in this task's
   named Files touched, but required infrastructure for its own named
   acceptance tests to lint clean.
+
+### P1-15 — pending sha (see commit)
+Tests: `test/unit/format.test.js` (2 cases), `test/ui/idle.test.js`
+(6 cases, jsdom). Both files' first implementation attempt passed every
+case.
+Verification beyond the unit suite: `npm run build` (fonts bundle as
+local `woff`/`woff2` assets, no CDN), `grep -r "fonts.googleapis" src
+index.html dist` (no matches), `npx playwright test` (15/16, 1 correctly
+skipped), and a `vite preview` screenshot confirming the auto-camera
+following a carnivore, the caption with a region name, the chronicle
+ticker, the world clock and the hint all render in the bundled fonts.
+Interpretation:
+- `idle.js`'s POI/caption text uses `lineage ${speciesId}` per the design
+  constraint's explicit Phase 1 fallback ("P2-04 supplies names via the
+  species table in the snapshot").
+- `createIdle`'s exact return shape isn't pinned down in PLAN.md beyond
+  needing a per-frame update and a chronicle feed; chosen: `tick(snapshot,
+  now)`, `onChronicle(entries)`, `caption()` (for testing), and `ui` (the
+  DOM handles). `isSnapshotFrame(frameCount)` is exported standalone
+  (pure, stateless) so `main.js`'s rAF loop and the acceptance test can
+  both use it without instantiating `createIdle`.
+- Detecting "the user panned/pinched/wheeled" for the 10s override window
+  needed a way for `idle.js` to observe `app.js`'s input handling without
+  a new callback-registration mechanism; added `app.getLastInteractionAt()`
+  (updated only inside the `onPan`/`onZoom` handlers wired to
+  `attachInput`, never by `idle.js`'s own `setCamera` calls or by
+  keyboard/HUD-triggered zoom) and `app.setCamera(next)`/`app.mode()` —
+  all in `src/ui/app.js`, in this task's Files touched.
+- `idle.js` needs `cfg` (world size, time constants) but the `loaded`
+  protocol event only carries `{seed, tick, width, height, hash}`, not the
+  full config, and `protocol.js`/`scheduler.js` are outside this task's
+  Files touched. Since `main.js` sends `load` with no config override, the
+  sim always runs against exactly `makeConfig({})` — `main.js` computes
+  the identical object locally (`import { makeConfig } from
+  './core/config.js'`, allowed for UI per CLAUDE.md's Sim/UI boundaries).
+  This breaks if a future task lets the UI pass a config override without
+  also updating this: flagged in `main.js`'s own comment at the call site.
+- Added `src/vite-env.d.ts` (`/// <reference types="vite/client" />`) and
+  extended `tsconfig.json`'s `include` to `src/**/*.d.ts`: the first
+  direct `import '*.css'` side-effect import (for the bundled fonts) needs
+  Vite's ambient module types, which nothing in the repo referenced until
+  now. Not in this task's named Files touched, but required for
+  `npm run typecheck` to pass on `main.js`'s font imports.
