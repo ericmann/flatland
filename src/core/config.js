@@ -56,6 +56,27 @@ export const DEFAULTS = Object.freeze({
     // Indexed by TERRAIN (water, sand, mud, grass, scrub, rock).
     moveCost: Object.freeze([3, 1, 1.6, 1, 1.3, 1.5]),
     visibility: Object.freeze([1, 1.3, 1, 1, 0.45, 1]),
+    // Plant carrying capacity by TERRAIN enum order (SPEC §4.2).
+    plantCap: Object.freeze([0, 0, 0.35, 1, 0.6, 0]),
+  }),
+  plants: Object.freeze({
+    enabled: true,
+    growth: 0.004,
+    soilBoost: 2.0,
+    initialFill: 0.6,
+  }),
+  carcass: Object.freeze({
+    enabled: true,
+    decay: 0.002,
+    decayMud: 0.0007,
+  }),
+  soil: Object.freeze({
+    uptake: 0.001,
+  }),
+  interventions: Object.freeze({
+    rain: Object.freeze({
+      amount: 0.3,
+    }),
   }),
   organisms: Object.freeze({
     energyMaxBase: 150,
@@ -249,6 +270,86 @@ export const DOCS = new Map([
       units: 'multiplier, by TERRAIN enum order',
       assumption: false,
       doc: 'Detection-range multiplier by terrain type (SPEC §4.2: sand exposed, scrub hides).',
+    },
+  ],
+  [
+    'terrain.plantCap',
+    {
+      units: 'plant units [0,1], by TERRAIN enum order',
+      assumption: true,
+      doc: 'Plant carrying capacity by terrain type (SPEC §4.2).',
+    },
+  ],
+  [
+    'plants.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for plant growth (SPEC §9.1: mechanics are tested in isolation).',
+    },
+  ],
+  [
+    'plants.growth',
+    {
+      units: 'plant units/tick at L=1, soil=0',
+      assumption: true,
+      doc: 'Base plant growth rate g in g*L*(1 - p/cap) (SPEC §4.4).',
+    },
+  ],
+  [
+    'plants.soilBoost',
+    {
+      units: 'multiplier per soil unit',
+      assumption: true,
+      doc: 'k_soil in the growth formula g*L*(1 + k_soil*soil)*(1 - p/cap) (SPEC §4.4).',
+    },
+  ],
+  [
+    'plants.initialFill',
+    {
+      units: 'fraction of cap',
+      assumption: false,
+      doc: 'Initial plant level at genesis, as a fraction of each tile’s cap.',
+    },
+  ],
+  [
+    'carcass.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for carcass decay (SPEC §9.1).',
+    },
+  ],
+  [
+    'carcass.decay',
+    {
+      units: 'fraction/tick',
+      assumption: true,
+      doc: 'Carcass decay rate on non-mud terrain (SPEC §4.4).',
+    },
+  ],
+  [
+    'carcass.decayMud',
+    {
+      units: 'fraction/tick',
+      assumption: true,
+      doc: 'Carcass decay rate on mud, slower than open ground (SPEC §4.4: "carcasses persist longer" on mud).',
+    },
+  ],
+  [
+    'soil.uptake',
+    {
+      units: 'fraction/tick',
+      assumption: true,
+      doc: 'Fraction of soil nutrient tapped per tick as an input to plant growth (SPEC §4.4).',
+    },
+  ],
+  [
+    'interventions.rain.amount',
+    {
+      units: 'plant units',
+      assumption: false,
+      doc: 'Plant boost per tile from the rain intervention (SPEC §5.3).',
     },
   ],
   [
