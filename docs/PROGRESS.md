@@ -13,7 +13,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P0-08 Playwright smoke test and CI e2e step
 - [x] P0-09 Phase 0 end — deployment docs, headers, push, preview
 - [x] P1-01 Organism SoA store
-- [ ] P1-02 Genome layout and phenotype mapping
+- [x] P1-02 Genome layout and phenotype mapping
 - [ ] P1-03 World skeleton, genesis, hash, test helpers, determinism invariant
 - [ ] P1-04 Plants, carcasses, soil, the energy ledger and the rain intervention
 - [ ] P1-05 Spatial grid and senses
@@ -339,7 +339,7 @@ Phone checklist for Phase 0, to check on the preview URL above: "(1) map
 renders full-bleed with no white flash; (2) one-finger drag pans; (3) page
 does not scroll or bounce; (4) no console errors in remote devtools".
 
-### P1-01 — pending sha (see commit)
+### P1-01 — 04326e6
 Tests: `test/unit/organisms.test.js` (11 cases: lowest-free-slot alloc,
 -1 and unchanged count at capacity, monotonic never-reused ids, free
 reuses the slot before higher ones, genomeOf is a live view, highWater
@@ -369,3 +369,33 @@ Interpretation:
 No config keys introduced (capacity and genome length are constructor
 arguments, not config; `world.maxOrganisms` from P0-02 will be threaded in
 by the caller in P1-03).
+
+### P1-02 — pending sha (see commit)
+Tests: `test/unit/genome.test.js` (13 cases: TRAIT_COUNT/BRAIN_INPUTS/
+BRAIN_OUTPUTS layout constants, genomeLength formula and its dependence on
+brain.hidden, traitValue at gene 0/1/0.5 for every trait, dietClass and
+visionClass boundaries, applyPhenotype fills pheno and all four derived
+arrays consistently and does not touch other slots, phenotype/organisms/
+brain.hidden keys documented as assumptions, a DEFAULTS-completeness
+regression guard). Confirmed failing with "Cannot find module" before
+implementation.
+Config keys introduced: `organisms.energyMaxBase` (150, ⚠️),
+`organisms.bodyMassPerSize` (40, ⚠️), `brain.hidden` (8, ⚠️),
+`phenotype.<24 traits>` (one `[lo,hi]` pair each, all ⚠️, generated into
+DOCS programmatically from a units table rather than 24 hand-written
+entries).
+Interpretation:
+- Float32 storage precision: my first test draft compared
+  `store.pheno`/`store.energyMax`/etc (Float32Array reads) against
+  full-double-precision recomputations with `toBeCloseTo(x, 4-9)`, which
+  failed intermittently on values where float32 rounding lands just past
+  the assertion's tolerance. Fixed by reading back the actual
+  float32-stored intermediate values (not the original double literals)
+  and comparing with `Math.fround(...)` for exact equality — this is a
+  test-precision fix, not a change to `applyPhenotype`'s logic, which was
+  correct throughout.
+- `traitValue`'s TypeScript signature needed a `Record<string,
+  readonly number[]>` cast on `cfg.phenotype` (the frozen literal object
+  type doesn't have a string index signature); a plain array cast, not
+  a 2-tuple, since JSDoc tuple types didn't structurally match the frozen
+  readonly array type `makeConfig` produces.
