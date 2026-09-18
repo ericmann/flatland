@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { makeConfig } from '../../src/core/config.js';
 import { genomeLength, BRAIN_INPUTS, BRAIN_OUTPUTS } from '../../src/core/genome.js';
-import { forward, getW1, setW1, getW2, setW2 } from '../../src/core/brain.js';
+import { forward, getW1, setW1, getW2, setW2, writePrior } from '../../src/core/brain.js';
+import { INPUT } from '../../src/core/senses.js';
+import { OUTPUT } from '../../src/core/reflex.js';
 
 const cfg = makeConfig({ brain: { hidden: 4 } });
 
@@ -95,5 +97,36 @@ describe('brain.forward', () => {
     global.gc();
     const after = process.memoryUsage().heapUsed;
     expect(after - before).toBeLessThan(1024 * 1024);
+  });
+});
+
+describe('writePrior', () => {
+  it('a prior brain turns toward food, away from a threat ahead, and eats when hungry on food', () => {
+    const c = makeConfig({ brain: { hidden: 6 } });
+    const genome = new Float32Array(genomeLength(c));
+    writePrior(genome, 0, c);
+    const hidden = new Float32Array(c.brain.hidden);
+    const outputs = new Float32Array(BRAIN_OUTPUTS);
+
+    // Food sensed, no threat, not hungry: turns toward it (turn > 0).
+    let inputs = new Float32Array(BRAIN_INPUTS);
+    inputs[INPUT.foodSin] = 1;
+    forward(c, genome, 0, inputs, 0, outputs, 0, hidden);
+    expect(outputs[OUTPUT.turn]).toBeGreaterThan(0);
+
+    // A threat sensed close and ahead: turns away (turn < 0), opposite
+    // sign from the food-only case above.
+    inputs = new Float32Array(BRAIN_INPUTS);
+    inputs[INPUT.threatSin] = 1;
+    inputs[INPUT.threatProx] = 1;
+    forward(c, genome, 0, inputs, 0, outputs, 0, hidden);
+    expect(outputs[OUTPUT.turn]).toBeLessThan(0);
+
+    // Hungry, on food: eats (eat > 0.5).
+    inputs = new Float32Array(BRAIN_INPUTS);
+    inputs[INPUT.hunger] = 1;
+    inputs[INPUT.foodMag] = 1;
+    forward(c, genome, 0, inputs, 0, outputs, 0, hidden);
+    expect(outputs[OUTPUT.eat]).toBeGreaterThan(0.5);
   });
 });

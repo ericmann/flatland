@@ -9,9 +9,22 @@
  */
 import { tanh, exp } from './fmath.js';
 import { TRAIT_COUNT, BRAIN_INPUTS, BRAIN_OUTPUTS } from './genome.js';
+import { INPUT } from './senses.js';
 
-/** `reflex.js`'s `OUTPUT.turn` index, duplicated locally (same reason `ecology.js` duplicates `OUTPUT.eat`: avoids an import cycle through reflex.js). */
+/**
+ * `reflex.js`'s `OUTPUT` indices, duplicated locally (same reason
+ * `ecology.js` duplicates `OUTPUT.eat`: avoids an import cycle through
+ * reflex.js, which will import `brain.js` once P2-03 wires the forward
+ * pass into the policy switch).
+ */
 const OUTPUT_TURN = 0;
+const OUTPUT_THROTTLE = 1;
+const OUTPUT_EAT = 2;
+const OUTPUT_EMIT0 = 3;
+const OUTPUT_EMIT1 = 4;
+const OUTPUT_EMIT2 = 5;
+const OUTPUT_EMIT3 = 6;
+const OUTPUT_BREED = 7;
 
 /**
  * @param {number} z
@@ -146,4 +159,72 @@ export function forward(cfg, genome, gOff, inputs, inOff, outputs, outOff, hidde
     }
     outputs[outOff + j] = j === OUTPUT_TURN ? tanh(sum) : sigmoid(sum);
   }
+}
+
+/** Hidden units 0-5's input mapping and weight for the seeded prior (SPEC §4.7). */
+const PRIOR_INPUT_FOR_HIDDEN = [
+  INPUT.foodSin,
+  INPUT.threatSin,
+  INPUT.threatProx,
+  INPUT.hunger,
+  INPUT.threatCos,
+  INPUT.foodMag,
+];
+const PRIOR_WEIGHT_FOR_HIDDEN = [2, 3, 3, 2, 2, 2];
+
+/**
+ * Write the seeded reflex prior into a genome's weight block (SPEC §4.7,
+ * §1.1: "no hand-authored behaviour beyond bootstrap reflexes" — this is
+ * that bootstrap, expressed as weights). Every weight gene is written
+ * (zeroed first, so the result is fully determined regardless of the
+ * genome's prior contents). If `cfg.brain.hidden < 6`, only the hidden
+ * units that exist get an input mapping / contribute to the outputs
+ * below.
+ * @param {Float32Array} genome
+ * @param {number} off
+ * @param {typeof import('./config.js').DEFAULTS} cfg
+ * @returns {void}
+ */
+export function writePrior(genome, off, cfg) {
+  const hidden = cfg.brain.hidden;
+
+  for (let i = 0; i < BRAIN_INPUTS; i++) {
+    for (let k = 0; k < hidden; k++) setW1(genome, off, cfg, i, k, 0);
+  }
+  for (let k = 0; k <= hidden; k++) {
+    for (let j = 0; j < BRAIN_OUTPUTS; j++) setW2(genome, off, cfg, k, j, 0);
+  }
+
+  const nMapped = Math.min(hidden, PRIOR_INPUT_FOR_HIDDEN.length);
+  for (let h = 0; h < nMapped; h++) {
+    setW1(genome, off, cfg, PRIOR_INPUT_FOR_HIDDEN[h], h, PRIOR_WEIGHT_FOR_HIDDEN[h]);
+  }
+
+  /**
+   * @param {number} h
+   * @param {number} j
+   * @param {number} w
+   */
+  const w2 = (h, j, w) => {
+    if (h < nMapped) setW2(genome, off, cfg, h, j, w);
+  };
+
+  w2(0, OUTPUT_TURN, 1.5);
+  w2(1, OUTPUT_TURN, -2.0);
+  w2(4, OUTPUT_TURN, -1.0);
+
+  w2(2, OUTPUT_THROTTLE, 2.0);
+  w2(3, OUTPUT_THROTTLE, 1.0);
+  w2(5, OUTPUT_THROTTLE, -0.5);
+  setW2(genome, off, cfg, hidden, OUTPUT_THROTTLE, -0.5);
+
+  w2(3, OUTPUT_EAT, 2.0);
+  w2(5, OUTPUT_EAT, 1.5);
+  setW2(genome, off, cfg, hidden, OUTPUT_EAT, -0.5);
+
+  setW2(genome, off, cfg, hidden, OUTPUT_BREED, 2.0);
+  setW2(genome, off, cfg, hidden, OUTPUT_EMIT0, -2.0);
+  setW2(genome, off, cfg, hidden, OUTPUT_EMIT1, -2.0);
+  setW2(genome, off, cfg, hidden, OUTPUT_EMIT2, -2.0);
+  setW2(genome, off, cfg, hidden, OUTPUT_EMIT3, -2.0);
 }
