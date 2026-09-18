@@ -14,7 +14,14 @@ import { generateTerrain } from './terrain.js';
 import { OrganismStore, HASH_ORDER } from './organisms.js';
 import { genomeLength, BRAIN_INPUTS, BRAIN_OUTPUTS } from './genome.js';
 import { Ledger } from './ledger.js';
-import { fillInitialPlants, growPlants, decayCarcasses } from './ecology.js';
+import {
+  fillInitialPlants,
+  growPlants,
+  decayCarcasses,
+  eatMeal,
+  huntTarget,
+  resolvePredationKills,
+} from './ecology.js';
 import { applyDue } from './interventions.js';
 import { Grid } from './grid.js';
 import { gather } from './senses.js';
@@ -97,6 +104,37 @@ export const DEATH = Object.freeze({
   DISEASE: 6,
 });
 
+/** `world.events` ring buffer kinds (SPEC §4.11, consumed by P1-12/P1-15/P3-07). */
+export const EV_HUNT = 1;
+export const EV_BIRTH = 2;
+export const EV_DEATH = 3;
+
+const EVENTS_CAPACITY = 64;
+
+/**
+ * Append an event to `world.events`, overwriting the oldest entry once the
+ * ring is full.
+ * @param {World} world
+ * @param {number} kind EV_HUNT | EV_BIRTH | EV_DEATH
+ * @param {number} x world x (tile units; floored)
+ * @param {number} y world y (tile units; floored)
+ * @param {number} a species id (kind-dependent meaning; see call sites)
+ * @param {number} b species id (kind-dependent meaning; see call sites)
+ * @returns {void}
+ */
+export function recordEvent(world, kind, x, y, a, b) {
+  const ev = world.events;
+  const idx = ev.head;
+  ev.kind[idx] = kind;
+  ev.tick[idx] = world.tick;
+  ev.x[idx] = Math.floor(x);
+  ev.y[idx] = Math.floor(y);
+  ev.a[idx] = a;
+  ev.b[idx] = b;
+  ev.head = (idx + 1) % ev.capacity;
+  if (ev.count < ev.capacity) ev.count++;
+}
+
 /** DEATH code -> `world.counters` key, index-aligned (index 0 unused). */
 const DEATH_COUNTER_KEY = Object.freeze([
   null,
@@ -138,6 +176,12 @@ function resolve(world) {
 
     const key = DEATH_COUNTER_KEY[cause];
     if (key) world.counters[key]++;
+
+    // Predation deaths already recorded EV_HUNT in resolvePredationKills
+    // (ecology.js); only record EV_DEATH for the other causes.
+    if (cause === DEATH.STARVED || cause === DEATH.OLD_AGE) {
+      recordEvent(world, EV_DEATH, store.x[i], store.y[i], store.species[i], cause);
+    }
 
     store.free(i);
   }
@@ -216,6 +260,26 @@ export class World {
 
     /** The per-tick spatial hash (SPEC §6.3), rebuilt in step(). */
     this.grid = new Grid(this.width, this.height, cfg.world.cellSize, cap);
+
+    /**
+     * A fixed ring of recent notable events (SPEC §4.11), consumed by the
+     * snapshot encoder (P1-12), idle POIs (P1-15) and the chronicle
+     * aggregator (P3-07).
+     */
+    this.events = {
+      capacity: EVENTS_CAPACITY,
+      kind: new Int32Array(EVENTS_CAPACITY),
+      tick: new Int32Array(EVENTS_CAPACITY),
+      x: new Int32Array(EVENTS_CAPACITY),
+      y: new Int32Array(EVENTS_CAPACITY),
+      a: new Int32Array(EVENTS_CAPACITY),
+      b: new Int32Array(EVENTS_CAPACITY),
+      head: 0,
+      count: 0,
+    };
+
+    /** Per-organism predation target, set by `ecology.huntTarget` (-1 = none). */
+    this.attackTarget.fill(-1);
   }
 
   /**
@@ -237,8 +301,19 @@ export class World {
       policy(this, i);
       reflexLayer(this, i);
       act(this, i);
+      // Eating and predation-target-finding slot in here (SPEC §6.3,
+      // "Eating and predation slot into act in P1-07"); implemented in
+      // ecology.js (not reflex.js's act()) since only ecology.js is in
+      // this task's Files touched — see the P1-07 log entry.
+      eatMeal(this, i);
+      if (this.cfg.predation.enabled) {
+        huntTarget(this, i);
+      }
       metabolise(this, i);
       ageOrganism(this, i);
+    }
+    if (this.cfg.predation.enabled) {
+      resolvePredationKills(this);
     }
     resolve(this);
   }
