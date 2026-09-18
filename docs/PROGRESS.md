@@ -14,7 +14,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P0-09 Phase 0 end — deployment docs, headers, push, preview
 - [x] P1-01 Organism SoA store
 - [x] P1-02 Genome layout and phenotype mapping
-- [ ] P1-03 World skeleton, genesis, hash, test helpers, determinism invariant
+- [x] P1-03 World skeleton, genesis, hash, test helpers, determinism invariant
 - [ ] P1-04 Plants, carcasses, soil, the energy ledger and the rain intervention
 - [ ] P1-05 Spatial grid and senses
 - [ ] P1-06 Reflex policy, movement, metabolism, aging and death
@@ -370,7 +370,7 @@ No config keys introduced (capacity and genome length are constructor
 arguments, not config; `world.maxOrganisms` from P0-02 will be threaded in
 by the caller in P1-03).
 
-### P1-02 — pending sha (see commit)
+### P1-02 — 1033b1f
 Tests: `test/unit/genome.test.js` (13 cases: TRAIT_COUNT/BRAIN_INPUTS/
 BRAIN_OUTPUTS layout constants, genomeLength formula and its dependence on
 brain.hidden, traitValue at gene 0/1/0.5 for every trait, dietClass and
@@ -399,3 +399,47 @@ Interpretation:
   type doesn't have a string index signature); a plain array cast, not
   a 2-tuple, since JSDoc tuple types didn't structurally match the frozen
   readonly array type `makeConfig` produces.
+
+### P1-03 — pending sha (see commit)
+Tests: `test/unit/world.test.js` (11 cases: genesis lands every organism on
+non-water inside the map, genesis counts match config, genesis is skipped
+when `organisms` is given even empty, step increments tick and light
+matches `lightAt` independently, hash is stable/changes on step, hash
+covers rng state, hash is a hex string, all four pheromone grids allocate
+zeroed and sized, plants/carcass/soil sized, a prebuilt terrain bypasses
+generation, a real `makeConfig()` result works directly) and
+`test/invariants/determinism.test.js` (seeds 1..10, two independently
+constructed worlds stepped 5000 ticks each produce identical hashes — the
+determinism invariant SPEC §9.2 calls for). Confirmed failing with
+"Cannot find module" before implementation; the determinism invariant
+passed on the very first run once genesis/world/hash existed.
+Config keys introduced: `world.maxSpecies` (2048, not an assumption — a
+memory ceiling like `maxOrganisms`), `genesis.herbivoreLineages` (3),
+`genesis.herbivoresPerLineage` (50), `genesis.carnivoreLineages` (1),
+`genesis.carnivoresPerLineage` (24), `genesis.lineageNoise` (0.05),
+`genesis.clusterRadius` (12), `genesis.energyFraction` (0.6),
+`genesis.dietHerbivore` ([0.02,0.2]), `genesis.dietCarnivore` ([0.8,0.98])
+— all nine genesis keys marked assumption: true.
+Interpretation:
+- Two of my own draft world.test.js cases (`allocates all four pheromone
+  grids`, `allocates plants, carcass and soil grids`) used tiny worlds
+  (20x15 and 10x8) with real seeded terrain generation and no override;
+  terrain generation legitimately cannot satisfy the 8%/2% contiguity
+  guarantee at those sizes and threw "no valid map after 16 rerolls". Both
+  tests only check array sizing, not real terrain, so I gave them a
+  `terrain: TERRAIN.GRASS` override to bypass generation — a test fix, not
+  an implementation bug (verified separately that terrain generation
+  itself succeeds cleanly for every seed the *other* genesis tests use, at
+  the real 64x40 test size).
+- `World.hash()`'s `HASH_ORDER` loop needed a `/** @type {*} */` escape
+  hatch to index `this.store` by a dynamic string name (TypeScript's
+  structural typing has no index signature for a class with named
+  properties); same pattern used for `cfg.phenotype` in P1-02.
+- `hashUpdate(h, bytes)` is exported (not just internal) per the design
+  constraint naming it as "a helper in world.js" without specifying
+  visibility; exporting it costs nothing and makes it independently
+  testable later if needed.
+- `World`'s constructor does not call `runGenesis` itself; genesis is a
+  separate explicit step (`runGenesis(world)`), so `test/helpers.js`'s
+  `makeWorld` can skip it when an `organisms` list is given, and so a
+  `World` can be constructed and inspected before any population exists.
