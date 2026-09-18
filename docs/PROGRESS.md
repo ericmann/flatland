@@ -901,7 +901,7 @@ task's own tests require it, documented here as Interpretation):
   `metabolism.enabled` for that one test, isolating the birth-ledger
   arithmetic the test is actually about.
 
-### P1-12 — pending sha (see commit)
+### P1-12 — c881693
 Tests: `test/unit/protocol.test.js` ("every MSG name is unique"),
 `test/unit/snapshot.test.js` (5 cases: header/organisms/plants/carcass
 round-trip; terrain/pheromone gated correctly by their flags; the selected
