@@ -1090,7 +1090,7 @@ Fixed to check `new URLSearchParams(location.search).get('worker') ===
 ("`?worker=0` still runs") actually depends on, so it's fixed here rather
 than deferred.
 
-### P1-16 — pending sha (see commit)
+### P1-16 — 43daa04
 Goal: close Phase 1 with a green suite, a pushed branch and the owed
 phone checks recorded.
 Verification: `npm run typecheck && npm run lint && npm run test:all`
