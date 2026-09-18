@@ -10,7 +10,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P0-05 Terrain generation and region names
 - [x] P0-06 Terrain tuning sweep
 - [x] P0-07 A seeded terrain renders in the browser
-- [ ] P0-08 Playwright smoke test and CI e2e step
+- [x] P0-08 Playwright smoke test and CI e2e step
 - [ ] P0-09 Phase 0 end — deployment docs, headers, push, preview
 - [ ] P1-01 Organism SoA store
 - [ ] P1-02 Genome layout and phenotype mapping
@@ -258,7 +258,7 @@ Interpretation:
   task's stated Files touched, but was unavoidable to make `npm run
   typecheck` pass on the required `scripts/sweep.mjs`.
 
-### P0-07 — pending sha (see commit)
+### P0-07 — 425c50e
 Tests: `test/unit/camera.test.js` (10 cases: clamp keeps the view inside
 the world / centres a smaller world / clamps z to [1,8], zoomAt keeps the
 anchor fixed and snaps/clamps zoom, fit for a smaller-than-view world and
@@ -298,3 +298,25 @@ Interpretation:
   implied by the stated file list.
 No config keys introduced (this task reads `cfg.world.width/height`,
 already defined in P0-02).
+
+### P0-08 — pending sha (see commit)
+Tests: `test/e2e/smoke.spec.js` — "page loads with no console errors and
+paints a canvas" and "first frame is painted within 1500 ms". Both green
+on `chromium-desktop` and `pixel-7` (4/4) against the built preview server
+(`npm run build && npm run preview -- --port 4173 --strictPort`), not
+`vite dev`, so this exercises the real bundle.
+Interpretation:
+- eslint didn't yet know `playwright.config.js` needed node globals
+  (`process`) or that `test/e2e/**/*.js` needed browser globals (`document`,
+  referenced inside a `page.waitForFunction` callback that runs in-page,
+  even though the file itself executes under Node) — added
+  `playwright.config.js` to the existing node-globals file set and a new
+  block giving `test/e2e/**/*.js` both node and browser globals. This
+  touches `eslint.config.js`, not in this task's stated Files touched, but
+  required to make `npm run lint` (part of Verification) pass on the two
+  new files.
+- `.gitignore` already ignored `test-results/` and `playwright-report/`
+  per the task's own parenthetical; no change needed there.
+Verified: `npx playwright install chromium` (browsers were already cached
+from tooling setup); `npm run test:ui` 4/4 green on both projects; `npm run
+typecheck && npm run lint && npm test` (88/88) all green.
