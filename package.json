@@ -1,0 +1,40 @@
+{
+  "name": "flatland",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A browser-native artificial-life ecosystem: organisms hunt, graze, breed, evolve and die on a tile-based world with no goal and no player character.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Eric Mann",
+  "homepage": "https://flatland.eamann.com",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run test/unit test/invariants test/ui",
+    "test:watch": "vitest",
+    "test:soak": "vitest run test/soak",
+    "test:all": "vitest run",
+    "test:ui": "echo \"no e2e yet\"",
+    "typecheck": "tsc --noEmit --checkJs",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "headless": "node scripts/headless.mjs",
+    "sweep": "node scripts/sweep.mjs --seeds 1..40 --ticks 100000"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.12.0",
+    "jsdom": "^30.1.0",
+    "prettier": "^3.9.8",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}
