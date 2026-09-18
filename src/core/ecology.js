@@ -72,19 +72,24 @@ export function growPlants(world) {
     const beforeP = p;
     plants[i] = Math.fround(beforeP + want);
     const applied = plants[i] - beforeP;
-    if (applied > 0) {
-      const sunFrac = baseAdj / want;
-      ledger.sunlight += applied * sunFrac;
-      ledger.flows.photosynthesis += applied * sunFrac;
-      ledger.flows.uptake += applied * (1 - sunFrac);
-    }
 
+    let realisedS = 0;
     if (fromSoilAdj > 0) {
       const beforeS = soil[i];
       soil[i] = Math.fround(beforeS - fromSoilAdj);
-      const realisedS = beforeS - soil[i];
-      ledger.dissipated += fromSoilAdj - realisedS;
+      realisedS = beforeS - soil[i];
     }
+
+    // sunlight is exactly the intended photosynthesis share (baseAdj); the
+    // soil transfer is exactly what was actually removed from the soil
+    // array (realisedS), not the intended fromSoilAdj. Their sum will not
+    // in general equal the realised plant growth `applied` (each array
+    // rounds independently to Float32) — that residual, in either
+    // direction, is dissipated, per the realised-vs-intended rule.
+    ledger.sunlight += baseAdj;
+    ledger.flows.photosynthesis += baseAdj;
+    ledger.flows.uptake += realisedS;
+    ledger.dissipated += baseAdj + realisedS - applied;
   }
 }
 

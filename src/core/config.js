@@ -81,6 +81,7 @@ export const DEFAULTS = Object.freeze({
   organisms: Object.freeze({
     energyMaxBase: 150,
     bodyMassPerSize: 40,
+    turnRate: 0.5,
   }),
   brain: Object.freeze({
     hidden: 8,
@@ -134,6 +135,20 @@ export const DEFAULTS = Object.freeze({
   predation: Object.freeze({
     minDiet: 0.5,
     maxPreySizeRatio: 1.5,
+  }),
+  movement: Object.freeze({
+    enabled: true,
+  }),
+  metabolism: Object.freeze({
+    enabled: true,
+    base: 0.02,
+    moveCost: 3.0,
+  }),
+  aging: Object.freeze({
+    enabled: true,
+  }),
+  reflex: Object.freeze({
+    hungerGate: 0.15,
   }),
 });
 
@@ -425,6 +440,62 @@ export const DOCS = new Map([
       units: 'ratio',
       assumption: true,
       doc: "Prey must be no larger than the predator's size times this ratio (SPEC §4.5).",
+    },
+  ],
+  [
+    'organisms.turnRate',
+    {
+      units: 'rad/tick at turn=1',
+      assumption: false,
+      doc: 'Heading change per tick at full turn output (SPEC §4.7).',
+    },
+  ],
+  [
+    'movement.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for movement (SPEC §9.1).',
+    },
+  ],
+  [
+    'metabolism.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for metabolic energy cost (SPEC §9.1).',
+    },
+  ],
+  [
+    'metabolism.base',
+    {
+      units: 'energy/tick at throttle=0',
+      assumption: true,
+      doc: 'Base metabolic rate (SPEC §4.5).',
+    },
+  ],
+  [
+    'metabolism.moveCost',
+    {
+      units: 'multiplier at full throttle and max speed',
+      assumption: true,
+      doc: 'Extra metabolic cost from movement, scaled by throttle and speed (SPEC §4.5).',
+    },
+  ],
+  [
+    'aging.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for aging and death by old age (SPEC §9.1).',
+    },
+  ],
+  [
+    'reflex.hungerGate',
+    {
+      units: 'hunger fraction [0,1]',
+      assumption: false,
+      doc: "Hunger threshold above which the permanent reflex layer forces eat=1 on a food tile (SPEC §4.7's bootstrap reflex).",
     },
   ],
 ]);
