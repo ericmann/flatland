@@ -94,6 +94,8 @@ export const DEFAULTS = Object.freeze({
   }),
   brain: Object.freeze({
     hidden: 8,
+    weightScale: 2.0,
+    enabled: true,
   }),
   genome: Object.freeze({
     sigmaMut: 0.05,
@@ -455,6 +457,22 @@ export const DOCS = new Map([
       units: 'units',
       assumption: true,
       doc: 'Hidden-layer width of the brain (SPEC §4.7); sizes the genome weight block.',
+    },
+  ],
+  [
+    'brain.weightScale',
+    {
+      units: 'multiplier',
+      assumption: true,
+      doc: 'Maps a weight gene in [0,1] to a weight in [-weightScale, weightScale] (SPEC §4.7).',
+    },
+  ],
+  [
+    'brain.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Selects the brain forward pass over the Phase 1 reflex policy (SPEC §9.1: mechanics are tested in isolation); wiring is P2-03.',
     },
   ],
   [

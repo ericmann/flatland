@@ -257,6 +257,8 @@ export class World {
     const cap = cfg.world.maxOrganisms;
     this.inputs = new Float32Array(cap * BRAIN_INPUTS);
     this.outputs = new Float32Array(cap * BRAIN_OUTPUTS);
+    /** Scratch hidden-layer activations for `brain.forward` (P2-02), reused across organisms/ticks. */
+    this.hidden = new Float32Array(cfg.brain.hidden);
     this.dying = new Uint8Array(cap);
     this.attackTarget = new Int32Array(cap);
     this.birthQueue = new Int32Array(cap);
