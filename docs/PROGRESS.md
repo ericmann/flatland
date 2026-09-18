@@ -7,7 +7,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P0-02 Seeded RNG, deterministic math, config module
 - [x] P0-03 Light, seasons and the world clock
 - [x] P0-04 Value noise
-- [ ] P0-05 Terrain generation and region names
+- [x] P0-05 Terrain generation and region names
 - [ ] P0-06 Terrain tuning sweep
 - [ ] P0-07 A seeded terrain renders in the browser
 - [ ] P0-08 Playwright smoke test and CI e2e step
@@ -151,7 +151,7 @@ Interpretation:
 No config keys introduced (light.js only reads `time.ticksPerDay` /
 `time.daysPerYear` from P0-02).
 
-### P0-04 — pending sha (see commit)
+### P0-04 — 2e5ecc9
 Tests: `test/unit/noise.test.js` (8 cases: same-seed determinism, different
 seeds differ, [0,1] bounds, neighbour smoothness at scale 22, edge wrapping
 in both directions, Float32-rounded output) and `fbm` (single-layer
@@ -171,3 +171,43 @@ Interpretation:
 No config keys introduced (noise.js takes lattice size and layer scale/
 weight as call arguments; `terrain.octaves` is introduced by P0-05, which
 owns the terrain-specific defaults).
+
+### P0-05 — pending sha (see commit)
+Tests: `test/unit/terrain.test.js` (6 cases: same-seed determinism,
+different seeds differ, six known types, contiguity guarantees for seeds
+1..10, reroll count reported, an impossible-threshold config rerolls then
+throws) and `test/unit/names.test.js` (9 cases: region thirds boundaries on
+both axes, terrain word at the sampled tile, "the " prefix, regionWord enum
+order, the three SPEC §4.10 noun lists). Confirmed both failing with
+"Cannot find module" before implementation; all 15 passed on the first
+implementation attempt after fixing one unrelated typecheck/lint issue
+(JSDoc `import().DEFAULTS` needed `typeof`, an unused test import).
+Config keys introduced: `terrain.octaves` (3-layer fbm config, ⚠️),
+`terrain.thresholds.{water,sand,mud,grass,scrub}` (⚠️ each), 
+`terrain.minGrassFraction` (0.08), `terrain.minWaterFraction` (0.02),
+`terrain.maxRerolls` (16), `terrain.moveCost` (array by TERRAIN order),
+`terrain.visibility` (array by TERRAIN order); the last four not flagged
+⚠️ per SPEC §4.2's ⚠️ marker sitting only on "thresholds", not on the 8%/2%
+guarantee numbers or the move-cost/visibility table.
+Interpretation:
+- "the world's rng, forked with salt 'terrain'; the fork's seed is
+  seed ^ 0x7e44a1" is implemented literally rather than via `Rng.fork()`
+  (P0-02's generic hash-based fork): `generateTerrain(seed, cfg)` takes a
+  raw seed number (per its stated signature) and builds
+  `new Rng((seed ^ 0x7e44a1) >>> 0)` internally, so the formula in the
+  design constraint is satisfied exactly and the function stays
+  self-contained and directly testable from a plain seed integer.
+- `terrain.octaves` entries are `{ scale, weight, lattice }` (matching
+  P0-04's `NoiseLayer` shape plus the lattice size needed to build each
+  `makeNoise` field), not the plan's shorthand `{scale, w}` — "weight" is
+  spelled out, and `lattice` is added since P0-04's `makeNoise(rng, size)`
+  needs a lattice size per octave (16/32/64, from the mockup, one per
+  scale) that the shorthand didn't carry a slot for.
+- `terrain.thresholds` stayed a plain object with five named keys (not
+  flattened into one array) so each threshold gets its own DOCS entry and
+  can be tuned independently by P0-06 without touching the others.
+- Sanity-checked reroll behavior manually outside the test suite: over
+  seeds 1-40 at the default size, 28 total rerolls occur (max 4 for any
+  one seed) before the mechanism succeeds every time — confirms the
+  mechanism works; bringing that reroll count down to the P0-06 target
+  (≤2/40) is P0-06's job, not this task's.
