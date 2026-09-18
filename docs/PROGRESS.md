@@ -12,7 +12,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P0-07 A seeded terrain renders in the browser
 - [x] P0-08 Playwright smoke test and CI e2e step
 - [x] P0-09 Phase 0 end — deployment docs, headers, push, preview
-- [ ] P1-01 Organism SoA store
+- [x] P1-01 Organism SoA store
 - [ ] P1-02 Genome layout and phenotype mapping
 - [ ] P1-03 World skeleton, genesis, hash, test helpers, determinism invariant
 - [ ] P1-04 Plants, carcasses, soil, the energy ledger and the rain intervention
@@ -338,3 +338,34 @@ Phone: NOT VERIFIED (human)
 Phone checklist for Phase 0, to check on the preview URL above: "(1) map
 renders full-bleed with no white flash; (2) one-finger drag pans; (3) page
 does not scroll or bounce; (4) no console errors in remote devtools".
+
+### P1-01 — pending sha (see commit)
+Tests: `test/unit/organisms.test.js` (11 cases: lowest-free-slot alloc,
+-1 and unchanged count at capacity, monotonic never-reused ids, free
+reuses the slot before higher ones, genomeOf is a live view, highWater
+never shrinks and bounds every living slot, slotOfId finds/loses an
+organism, HASH_ORDER's exact field list and that every named field is a
+real typed array, pheno/derived arrays sized by capacity). Confirmed
+failing with "Cannot find module" before implementation; all 11 passed on
+the first implementation attempt.
+Interpretation:
+- `TRAIT_COUNT` (24) is defined in `organisms.js`, not `genome.js`
+  (P1-02), even though genome.js is conceptually the "layout owner"
+  elsewhere in the plan. The constructor must size `pheno` and the four
+  derived per-slot arrays at construction time per the stated
+  `constructor(capacity, genomeLength)` signature (only two parameters, no
+  room for a `traitCount` argument), and P1-01 must not depend on P1-02
+  (the dependency graph runs the other way: P1-02 depends on P1-01).
+  genome.js will import `TRAIT_COUNT` from `organisms.js` when it needs
+  it, inverting the more "obvious" ownership direction. Flagging this for
+  the reviewer since it's a real ordering constraint the plan didn't spell
+  out explicitly.
+- `alloc()`/`free()` clear only `alive`/`id` (and the id->slot map);
+  every other field is left with whatever a previous occupant wrote,
+  matching the design constraint's explicit statement for `free` ("zeroes
+  nothing else") and extending the same rule symmetrically to `alloc`, so
+  callers (genesis, births) are documented as required to fully
+  initialize a newly allocated slot before use.
+No config keys introduced (capacity and genome length are constructor
+arguments, not config; `world.maxOrganisms` from P0-02 will be threaded in
+by the caller in P1-03).
