@@ -1035,7 +1035,7 @@ Interpretation:
   named Files touched, but required infrastructure for its own named
   acceptance tests to lint clean.
 
-### P1-15 — pending sha (see commit)
+### P1-15 — bd16694
 Tests: `test/unit/format.test.js` (2 cases), `test/ui/idle.test.js`
 (6 cases, jsdom). Both files' first implementation attempt passed every
 case.
