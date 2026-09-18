@@ -28,6 +28,29 @@ export const DEFAULTS = Object.freeze({
     ticksPerDay: 1800,
     daysPerYear: 24,
   }),
+  terrain: Object.freeze({
+    // Noise layers for fbm: each { scale, weight, lattice } samples a
+    // makeNoise(rng, lattice) field at (x/scale, y/scale). Weights sum to 1
+    // so the raw fbm value stays in [0,1] before the wetter-edges term.
+    octaves: Object.freeze([
+      Object.freeze({ scale: 22, weight: 0.6, lattice: 16 }),
+      Object.freeze({ scale: 9, weight: 0.3, lattice: 32 }),
+      Object.freeze({ scale: 4, weight: 0.1, lattice: 64 }),
+    ]),
+    thresholds: Object.freeze({
+      water: 0.34,
+      sand: 0.38,
+      mud: 0.44,
+      grass: 0.62,
+      scrub: 0.74,
+    }),
+    minGrassFraction: 0.08,
+    minWaterFraction: 0.02,
+    maxRerolls: 16,
+    // Indexed by TERRAIN (water, sand, mud, grass, scrub, rock).
+    moveCost: Object.freeze([3, 1, 1.6, 1, 1.3, 1.5]),
+    visibility: Object.freeze([1, 1.3, 1, 1, 0.45, 1]),
+  }),
 });
 
 /** @type {Map<string, ConfigDoc>} */
@@ -78,6 +101,94 @@ export const DOCS = new Map([
       units: 'days',
       assumption: true,
       doc: 'World days per year (SPEC §4.3, YEAR).',
+    },
+  ],
+  [
+    'terrain.octaves',
+    {
+      units: 'tiles (scale), weight [0,1], lattice size — array of layers',
+      assumption: true,
+      doc: 'fbm noise layers for terrain generation (SPEC §4.2).',
+    },
+  ],
+  [
+    'terrain.thresholds.water',
+    {
+      units: 'noise value [0,1]',
+      assumption: true,
+      doc: 'Below this, a tile is water (SPEC §4.2).',
+    },
+  ],
+  [
+    'terrain.thresholds.sand',
+    {
+      units: 'noise value [0,1]',
+      assumption: true,
+      doc: 'Below this (and at/above water), a tile is sand (SPEC §4.2).',
+    },
+  ],
+  [
+    'terrain.thresholds.mud',
+    {
+      units: 'noise value [0,1]',
+      assumption: true,
+      doc: 'Below this (and at/above sand), a tile is mud (SPEC §4.2).',
+    },
+  ],
+  [
+    'terrain.thresholds.grass',
+    {
+      units: 'noise value [0,1]',
+      assumption: true,
+      doc: 'Below this (and at/above mud), a tile is grass (SPEC §4.2).',
+    },
+  ],
+  [
+    'terrain.thresholds.scrub',
+    {
+      units: 'noise value [0,1]',
+      assumption: true,
+      doc: 'Below this (and at/above grass), a tile is scrub; at/above this, rock (SPEC §4.2).',
+    },
+  ],
+  [
+    'terrain.minGrassFraction',
+    {
+      units: 'fraction of all tiles',
+      assumption: false,
+      doc: 'Minimum size of the largest 4-connected grass component, or re-roll (SPEC §4.2).',
+    },
+  ],
+  [
+    'terrain.minWaterFraction',
+    {
+      units: 'fraction of all tiles',
+      assumption: false,
+      doc: 'Minimum size of the largest 4-connected water component, or re-roll (SPEC §4.2).',
+    },
+  ],
+  [
+    'terrain.maxRerolls',
+    {
+      units: 'count',
+      assumption: false,
+      doc: 'Maximum terrain re-rolls (seed+1, seed+2, …) before generation throws (SPEC §4.2).',
+    },
+  ],
+  [
+    'terrain.moveCost',
+    {
+      units: 'multiplier, by TERRAIN enum order',
+      assumption: false,
+      doc: 'Movement cost divisor by terrain type (SPEC §4.2).',
+    },
+  ],
+  [
+    'terrain.visibility',
+    {
+      units: 'multiplier, by TERRAIN enum order',
+      assumption: false,
+      doc: 'Detection-range multiplier by terrain type (SPEC §4.2: sand exposed, scrub hides).',
     },
   ],
 ]);
