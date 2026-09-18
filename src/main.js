@@ -1,10 +1,10 @@
-// Entry point (P1-13): the simulation runs in a Worker (or the
-// main-thread fallback), the main thread only requests snapshots, decodes
-// and renders them, and forwards input as intent messages. Terrain is no
-// longer generated here — it arrives in the first snapshot.
+// Entry point (P1-14): boots the sim, the renderer and the app state
+// machine (idle/station, speed, camera, the input contract and the
+// floating cluster). Terrain/organisms arrive via snapshots (P1-13).
 import { createSim, SimClient } from './ui/sim-client.js';
+import { createApp } from './ui/app.js';
 import { Renderer } from './render/renderer.js';
-import { clamp, zoomAt, fit, screenToWorld } from './render/camera.js';
+import { fit } from './render/camera.js';
 import { decodeSnapshot } from './sim/snapshot.js';
 import { FLAG_TERRAIN } from './sim/protocol.js';
 
@@ -12,35 +12,33 @@ const params = new URLSearchParams(window.location.search);
 const seedParam = Number(params.get('seed'));
 const seed = Number.isFinite(seedParam) && seedParam > 0 ? Math.floor(seedParam) : 1;
 
-const app = document.getElementById('app');
+const root = document.getElementById('app');
 const view = document.createElement('canvas');
 view.id = 'view';
-if (app) {
-  app.replaceChildren(view);
+if (root) {
+  root.replaceChildren(view);
 }
 
 const client = new SimClient(createSim());
 
 /** @type {import('./render/renderer.js').Renderer | null} */
 let renderer = null;
-/** @type {import('./render/camera.js').Camera} */
-let cam = { x: 0, y: 0, z: 1 };
-let worldW = 0;
-let worldH = 0;
-/** @type {*} the most recently decoded snapshot, redrawn on pan/zoom/resize without a round-trip to the sim. */
+/** @type {ReturnType<typeof createApp> | null} */
+let app = null;
+/** The most recently decoded snapshot, redrawn on pan/zoom/resize without a round-trip to the sim. */
+/** @type {*} */
 let lastSnapshot = null;
 let snapshotOutstanding = false;
 let needsTerrain = true; // the renderer has no cached terrain until the first FLAG_TERRAIN reply.
 let painted = false;
 
 /**
- * Redraw the last known snapshot at the current camera, if both exist.
+ * Redraw the last known snapshot at the app's current camera, if both exist.
  * @returns {void}
  */
 function redraw() {
-  if (!renderer || !lastSnapshot) return;
-  cam = clamp(cam, view.width, view.height, worldW, worldH);
-  renderer.draw(lastSnapshot, cam, { night: true });
+  if (!renderer || !app || !lastSnapshot) return;
+  renderer.draw(lastSnapshot, app.camera(), { night: true });
   if (!painted) {
     document.documentElement.dataset.painted = '1';
     painted = true;
@@ -49,10 +47,14 @@ function redraw() {
 
 client.on('loaded', (msg) => {
   renderer = new Renderer({ width: msg.width, height: msg.height, view });
-  worldW = msg.width * renderer.px;
-  worldH = msg.height * renderer.px;
+  const worldW = msg.width * renderer.px;
+  const worldH = msg.height * renderer.px;
   renderer.resize();
-  cam = fit({ x: 0, y: 0, z: 1 }, view.width, view.height, worldW, worldH);
+  const camera = fit({ x: 0, y: 0, z: 1 }, view.width, view.height, worldW, worldH);
+
+  app = root
+    ? createApp({ root, sim: client, renderer, camera, doc: document, win: window })
+    : null;
 });
 
 client.on('status', (msg) => {
@@ -70,12 +72,14 @@ client.on('snapshot', (msg) => {
 client.send('load', { seed });
 
 /**
- * Request the next snapshot, once per animation frame and only when the
- * previous one has already been released (SPEC §6.4).
+ * Request the next snapshot, once per animation frame, only when the
+ * previous one has already been released and the tab is visible (SPEC
+ * §8: the sim itself is paused while hidden, so there is nothing to
+ * request until `visibilitychange` fires again).
  * @returns {void}
  */
 function requestFrame() {
-  if (!snapshotOutstanding) {
+  if (!document.hidden && !snapshotOutstanding && renderer) {
     snapshotOutstanding = true;
     client.send('requestSnapshot', { flags: needsTerrain ? FLAG_TERRAIN : 0 });
   }
@@ -86,42 +90,4 @@ requestAnimationFrame(requestFrame);
 window.addEventListener('resize', () => {
   if (renderer) renderer.resize();
   redraw();
-});
-
-view.addEventListener(
-  'wheel',
-  (e) => {
-    if (!renderer) return;
-    e.preventDefault();
-    const rect = view.getBoundingClientRect();
-    const sx = (e.clientX - rect.left) * renderer.dpr;
-    const sy = (e.clientY - rect.top) * renderer.dpr;
-    const anchor = screenToWorld(cam, view.width, view.height, sx, sy);
-    cam = zoomAt(cam, Math.exp(-e.deltaY * 0.0015), anchor.x, anchor.y);
-    redraw();
-  },
-  { passive: false },
-);
-
-/** @type {{ x: number, y: number, cx: number, cy: number } | null} */
-let drag = null;
-
-view.addEventListener('pointerdown', (e) => {
-  drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
-  view.setPointerCapture(e.pointerId);
-});
-
-view.addEventListener('pointermove', (e) => {
-  if (!drag || !renderer) return;
-  const dx = (e.clientX - drag.x) * renderer.dpr;
-  const dy = (e.clientY - drag.y) * renderer.dpr;
-  cam = { x: drag.cx - dx / cam.z, y: drag.cy - dy / cam.z, z: cam.z };
-  redraw();
-});
-
-view.addEventListener('pointerup', () => {
-  drag = null;
-});
-view.addEventListener('pointercancel', () => {
-  drag = null;
 });

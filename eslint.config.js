@@ -92,6 +92,14 @@ export default [
       globals: { ...globals.node, ...globals.browser },
     },
   },
+  // test/ui/**: jsdom-environment vitest specs (P1-14+), so they use real
+  // browser globals (document, window, KeyboardEvent, ...) directly.
+  {
+    files: ['test/ui/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
   // src/core and src/sim: no Math.random, no Date.now, no wall-clock.
   {
     files: ['src/core/**/*.js', 'src/sim/**/*.js'],

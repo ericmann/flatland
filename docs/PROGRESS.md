@@ -25,7 +25,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-11 Ecology tuning and the reduced soak test
 - [x] P1-12 Fixed-timestep scheduler, protocol and snapshot encoder
 - [x] P1-13 Worker glue, main-thread fallback, organism and light rendering
-- [ ] P1-14 App state machine, input contract, floating cluster, battery pause
+- [x] P1-14 App state machine, input contract, floating cluster, battery pause
 - [ ] P1-15 Idle mode — auto-camera, caption, ticker, clock, fonts
 - [ ] P1-16 Phase 1 end — push, preview, phone checks
 - [ ] P2-01 Mutation and genetic distance
@@ -995,3 +995,42 @@ Interpretation:
   without also restarting on `resume`, a paused-then-resumed sim would
   never pump again, since the self-perpetuating `MessageChannel` chain
   had already ended when it stopped for the pause.
+
+### P1-14 — pending sha (see commit)
+Tests: `test/ui/app.test.js` (6 cases, jsdom), `test/ui/input.test.js`
+(4 cases, jsdom), `test/e2e/input.spec.js` (4 cases: drag, pinch — skipped
+on chromium-desktop, touch-only — tap-opens-station, and the speed-key
+cluster highlight). All new files' first implementation attempt passed
+every case except the e2e drag test (see Interpretation).
+Verification beyond the unit/e2e suites: `npm run build`, `npx playwright
+test` (15/16, 1 correctly skipped), and screenshots of `vite preview`
+confirming the HUD renders and dims/undims correctly between idle and
+station.
+Interpretation:
+- PLAN.md describes `attachInput`'s gestures but not its exact handler
+  names/signatures. Chosen: `onPan(dx, dy)` (already zoom-divided and
+  sign-flipped, so a caller adds it straight to the camera centre),
+  `onTap(worldX, worldY)`, and one `onZoom(factor, worldX, worldY)` for
+  *both* wheel and pinch (pinch's absolute target zoom is converted to a
+  factor relative to the current zoom first), matching `app.js`'s single
+  `zoomBy(f, anchor)` entry point.
+- The e2e "drag pans" test initially failed on `chromium-desktop` only:
+  at that project's 1280x800 viewport, the default `fit()` zoom already
+  shows the *entire* 1024x640 world, so `camera.js`'s `clamp()` correctly
+  pins the camera to the world centre — there is nowhere to pan to. Not a
+  bug; the test now zooms in (`+` x3) before dragging, which is valid on
+  every project size.
+- A tap always opens the station (idle -> station), matching "any
+  input opens the station"; organism selection itself is out of scope
+  until the inspector exists (P2-10), so `onTap` currently does nothing
+  else.
+- `main.js` also gates its own snapshot-request rAF loop on
+  `!document.hidden`, separately from `app.js` sending `pause`/`resume` to
+  the sim — SPEC §8 says "stop the rAF loop" as part of battery pause,
+  and that loop belongs to `main.js`, not `app.js`.
+- Added a `test/ui/**` eslint override (browser + node globals), matching
+  the existing `test/e2e/**` pattern: this is the first task with
+  jsdom-environment vitest specs, and without it `document`/`window`/
+  `KeyboardEvent`/`PointerEvent` all fail `no-undef`. Not in this task's
+  named Files touched, but required infrastructure for its own named
+  acceptance tests to lint clean.

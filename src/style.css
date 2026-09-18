@@ -22,3 +22,81 @@ canvas {
   width: 100%;
   height: 100%;
 }
+
+/* Floating zoom/speed cluster (SPEC §5.4, §10). Full chrome (rail, dock,
+   inspector) arrives in P2-08; for now idle vs. station only changes the
+   cluster's own opacity, matching docs/mockup.html's #hud rules. */
+:root {
+  --line: #2b3a30;
+  --line2: #3a4d40;
+  --muted: #8e9788;
+  --text: #d9d4c0;
+  --sun: #e3a83a;
+  --sun-soft: rgba(227, 168, 58, 0.18);
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --pixel: 'Silkscreen', 'IBM Plex Mono', monospace;
+}
+
+#hud {
+  position: absolute;
+  right: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 3;
+  opacity: 0.92;
+  transition: opacity 0.3s;
+}
+#app.idle #hud {
+  opacity: 0.4;
+}
+#app.idle #hud:hover,
+#app.idle #hud:focus-within {
+  opacity: 0.9;
+}
+
+.hgrp {
+  display: flex;
+  background: rgba(14, 20, 16, 0.88);
+  border: 1px solid var(--line2);
+  border-radius: 6px;
+  overflow: hidden;
+  backdrop-filter: blur(4px);
+}
+.hgrp button {
+  min-width: 40px;
+  height: 38px;
+  padding: 0 10px;
+  font: 13px var(--mono);
+  color: var(--muted);
+  border-right: 1px solid var(--line);
+}
+.hgrp button:last-child {
+  border-right: 0;
+}
+.hgrp button.on {
+  background: var(--sun-soft);
+  color: var(--sun);
+}
+.hgrp button:hover {
+  color: var(--text);
+}
+.hgrp .lbl {
+  font: 9px var(--pixel);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--line);
+}
+
+@media (max-width: 900px) {
+  #hud {
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+}
