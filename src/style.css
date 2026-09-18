@@ -1,11 +1,13 @@
-/* SPEC §6.5, §3 rule 9: full-bleed dark canvas, no scroll, no network
-   fonts (none loaded here yet — bundled fonts arrive in P1-15). */
+/* SPEC §6.5, §3 rule 9: full-bleed dark canvas, no scroll. Fonts are
+   bundled (@fontsource, imported in main.js) — no Google Fonts URL. */
 html,
 body {
   margin: 0;
   height: 100%;
   background: #0e1410;
   overflow: hidden;
+  font-family: var(--sans);
+  color: var(--text);
 }
 
 #app {
@@ -33,7 +35,9 @@ canvas {
   --text: #d9d4c0;
   --sun: #e3a83a;
   --sun-soft: rgba(227, 168, 58, 0.18);
+  --dim: #5f6a60;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --pixel: 'Silkscreen', 'IBM Plex Mono', monospace;
 }
 
@@ -98,5 +102,99 @@ canvas {
   #hud {
     right: 10px;
     bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Idle mode overlay (SPEC §5.1): caption, chronicle ticker, world clock,
+   hint and vignette. Markup and formulas from docs/mockup.html. */
+.vig {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.55);
+  z-index: 2;
+}
+
+#idleui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 22px 200px 22px 22px;
+  gap: 10px;
+  opacity: 0;
+  transition: opacity 0.4s;
+  z-index: 3;
+}
+#app.idle #idleui {
+  opacity: 1;
+}
+
+.cap {
+  align-self: flex-start;
+  background: rgba(14, 20, 16, 0.78);
+  border-left: 2px solid var(--sun);
+  padding: 8px 12px;
+  max-width: min(420px, 80vw);
+}
+.cap .eyebrow {
+  font: 10px var(--pixel);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sun);
+}
+.cap .t {
+  font: 15px/1.3 var(--sans);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.ticker {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font: 12px var(--mono);
+  color: var(--muted);
+  min-height: 18px;
+}
+.ticker .st {
+  color: var(--dim);
+  flex: none;
+}
+
+.hint {
+  font: 10px var(--pixel);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  pointer-events: auto;
+}
+.hint button {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+#idleclock {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  font: 12px var(--mono);
+  color: var(--muted);
+  text-align: right;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+#idleclock .big {
+  font: 20px var(--pixel);
+  color: var(--text);
+  display: block;
+}
+
+@media (max-width: 900px) {
+  #idleui {
+    padding: 16px 16px 110px 16px;
   }
 }
