@@ -103,6 +103,17 @@ These are enforced by `eslint.config.js` (`no-restricted-properties`,
 `no-restricted-syntax`, and a denylisted global set for `src/core`), not just
 documented — a violation fails `npm run lint`.
 
+## Forcing the main-thread sim fallback
+
+The sim normally runs in a Web Worker (`src/sim/worker.js`). Append
+`?worker=0` to the URL (e.g. `http://localhost:5173/?worker=0` in `npm run
+dev`, or against a built/previewed app) to force
+`createMainThreadSim()` instead — the same `Scheduler`, pumped via
+`setTimeout(0)` on the main thread, at `sim.fallbackBudgetMs` (6 ms) per
+batch rather than `sim.batchBudgetMs` (12 ms). Useful for verifying the
+fallback path some embedded WebViews need (SPEC §6.4, §10), and part of
+the phone checklist (`docs/PROGRESS.md`'s Phase 1 end log entry).
+
 ## Module layout
 
 See CLAUDE.md → Module map. `docs/PLAN.md` is the task-by-task build plan;
