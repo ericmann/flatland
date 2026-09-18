@@ -587,110 +587,43 @@ Tracked here so the planning pass can turn them into explicit decisions or spike
 
 ---
 
-## Appendix A — Prompts
+## Appendix A — Workflow and prompts
 
-Three prompts, for three roles. Each assumes this document is at `docs/SPEC.md` in the repository and that `docs/mockup.html` is present.
+Three roles, three project slash commands. The canonical prompt text lives in `.claude/commands/` so it is versioned with the repo and never drifts from this appendix; this section describes the chain and the artifacts each step hands to the next.
 
-### A.1 Planning (Fable)
+| Step | Model | Command | Reads | Writes |
+|---|---|---|---|---|
+| Plan | Fable | `/plan-build` | `docs/SPEC.md`, `docs/mockup.html` | `docs/PLAN.md`, `docs/PROGRESS.md`, `CLAUDE.md` |
+| Implement | Sonnet | `/implement` | `CLAUDE.md`, `docs/PLAN.md`, `docs/PROGRESS.md` | one commit per task on `build/<date>`, `docs/HANDOFF.md` |
+| Review | Fable | `/review-build` | `docs/HANDOFF.md`, the branch diff, `docs/SPEC.md` | `docs/REVIEW.md`; on changes requested, `R`-tasks appended to `PLAN.md` and `PROGRESS.md` |
 
-```
-You are planning the build of Flatland, an artificial-life ecosystem sim. Read
-docs/SPEC.md in full before doing anything else; it is the source of truth.
-Open docs/mockup.html to understand the GUI.
-
-Produce docs/PLAN.md: an ordered list of implementation tasks that a capable
-but literal engineer (Claude Sonnet, working one task at a time with no memory
-of previous tasks) can execute from the task text alone.
-
-Rules for the plan:
-- Follow the phases in SPEC §11 in order. Do not merge phases. Each phase ends
-  with a task that deploys a preview and records what was verified on a phone.
-- Every task is a single PR of ≤ ~400 lines of non-test code. Split anything
-  larger.
-- Every task states, in this order: Goal (one sentence), Files touched, Design
-  constraints (cite SPEC sections by number), Acceptance tests (the exact test
-  files and assertions that must exist and pass — write the test names), Out of
-  scope (what the implementer must NOT do in this PR), Verification (commands to
-  run, and for UI tasks, what to check in the browser and on a phone preview).
-- Tests are written in the same PR as the code they cover, and invariant/soak
-  tests are introduced as early as the mechanics they check exist — never
-  deferred to a "testing phase".
-- Where SPEC marks ⚠️ ASSUMPTION, the task must name the config key and its
-  default and must NOT hard-code the number anywhere else.
-- Every ⚠️ ASSUMPTION in SPEC gets, at the point it first matters, a tuning task
-  that runs scripts/sweep.mjs before and after and pastes the table in the PR.
-- Determinism (SPEC §3.1, §6.3) is a constraint on every task that touches
-  core/. Say so in each such task's Design constraints.
-- Resolve SPEC §12 open questions with a decision and one-line rationale at the
-  top of PLAN.md, or turn one into a bounded spike task with a stated question
-  and a time box.
-- Also write CLAUDE.md for the repo: the engineering principles from SPEC §3
-  condensed to a checklist, the commands, the module map, the determinism rule,
-  the "no DOM in core" rule, the PR template (Goal / Tests / Sweep table if
-  tuning / Phone verified), and a note that SPEC.md wins over PLAN.md wins over
-  code comments when they disagree.
-
-Do not write implementation code. Do write the test names. When you finish,
-list anything in SPEC you found ambiguous or contradictory, with your proposed
-resolution, at the end of PLAN.md under "Spec issues".
-```
-
-### A.2 Implementation (Sonnet, per task)
+### A.0 Runbook
 
 ```
-You are implementing one task from docs/PLAN.md for the Flatland project.
-Read CLAUDE.md, then the task "<TASK ID AND TITLE>" in docs/PLAN.md, then the
-SPEC sections it cites. Do not read ahead to later tasks.
-
-Work in this order:
-1. Write the acceptance tests named in the task first, and run them to confirm
-   they fail for the right reason.
-2. Implement the smallest change that makes them pass, within the Files touched.
-3. Run: npm run typecheck && npm run lint && npm test. All green.
-4. If the task touches core/: run npm run headless and confirm the report is
-   sane; if the task is a tuning task, run the sweep before and after and put
-   the table in the PR description.
-5. If the task touches ui/ or render/: run npm run build && npm run preview and
-   describe what you verified in the browser. Mark "Phone: not verified" — a
-   human checks the Pages preview on a device.
-
-Constraints you may not relax: no DOM or timers in src/core; no Math.random or
-Date.now anywhere in src/core or src/sim; iteration in slot order with ties
-resolved by lowest id; no per-tick allocation in the step; every tunable is a
-config key; every intervention is an event in the log.
-
-If the task is under-specified, do not guess silently: implement the
-interpretation that is most consistent with SPEC, and record the choice in
-the PR description under "Interpretation". If the task is impossible as
-written, stop and say why rather than working around it.
-
-Open a PR titled "<TASK ID>: <title>" using the template in CLAUDE.md.
+/model fable      →  /plan-build         (once)
+/model sonnet     →  /implement          (unattended; ends with "READY FOR REVIEW")
+/model fable      →  /review-build       (ends with "APPROVED" or "CHANGES REQUESTED")
+/model sonnet     →  /implement          (only if changes requested; picks up the R-tasks)
+… repeat review/implement until APPROVED, then merge the branch by hand.
 ```
 
-### A.3 Review (Fable)
+The implementation step is designed to run to completion without a human:
 
-```
-Review the PR for task "<TASK ID>" against docs/SPEC.md and docs/PLAN.md.
-Read the diff, then the task, then the SPEC sections it cites. You have not
-seen this code being written; do not assume it does what the description says.
+- **State is on disk.** `docs/PROGRESS.md` is a checkbox list, one line per task (`[ ]` todo, `[~]` in progress, `[x]` done, `[!]` blocked, `[-]` skipped because a dependency is blocked), plus an append-only log. Sonnet re-reads it before every task, so context compaction and session restarts do not lose the loop.
+- **A Stop hook keeps it going.** `/implement` creates `.claude/implement.lock`. While that file exists and open tasks remain, the Stop hook in `.claude/hooks/implement-guard.sh` refuses the stop and points Sonnet at the next task. It releases on its own after three consecutive stops with no change to the task list, the working tree, or `HEAD`, which means Sonnet is stuck rather than working. `rm .claude/implement.lock` is the manual escape hatch.
+- **Blocked tasks never stop the run.** A task Sonnet cannot complete is marked `[!]` with the reason in the log; tasks that depend on it are `[-]`. The reviewer decides what to do with them.
+- **One branch, one commit per task, one PR per run.** Because nobody is there to merge per-task PRs, SPEC §3.10's "small PRs" becomes "small commits": each task is a single commit whose message follows the PR template in `CLAUDE.md`. `/implement` opens one draft PR for the whole run if a remote and `gh` are available, otherwise records that it could not.
+- **Phone verification is owed, not faked.** Phase-end tasks push the branch and write `Phone: NOT VERIFIED (human)`. `docs/HANDOFF.md` and `docs/REVIEW.md` list the checks still owed.
+- **Permissions.** `.claude/settings.json` allows the build, test, and git commands the loop needs and denies force-pushes and hard resets, so an unattended run does not stall on a prompt. Run the implement step in auto or accept-edits mode.
 
-Check, in order, and report findings most severe first:
-1. Determinism: any Math.random, Date, iteration over Map/Set/object keys in
-   core or sim, floating-point reductions whose order depends on data, or
-   neighbour resolution without an id tiebreak.
-2. Boundaries: DOM, timers, or fetch in core; sim state mutated from the main
-   thread; config values hard-coded outside config.js.
-3. Tests: do the acceptance tests named in the task exist, do they test the
-   mechanic in isolation using config overrides rather than re-deriving the
-   formula, and would they fail if the mechanic were removed? Run them. Run
-   the invariant and soak suites if core/ changed.
-4. Performance: per-tick allocation, O(n²) neighbour scans that bypass the
-   spatial grid, snapshot buffers rebuilt per frame.
-5. Spec drift: anything the diff does that SPEC says otherwise, or that PLAN
-   marked out of scope for this task.
-6. Only then: readability and naming.
+### A.1 Planning (Fable) — `.claude/commands/plan-build.md`
 
-Approve only if 1–3 are clean. For each finding give file:line, what is wrong,
-what would break, and the minimal fix. If you conclude SPEC itself is wrong,
-say so as a separate "Spec issue" rather than approving a deviation.
-```
+Derives `docs/PLAN.md` from this document following the phases in §11, one task per commit of ≤ ~400 non-test lines, each with Goal, Files touched, Design constraints (SPEC sections cited), Acceptance tests (named), Out of scope, Verification, and Depends on. Resolves §12 open questions as decisions or bounded spikes. Writes the all-unchecked `docs/PROGRESS.md` and the repo `CLAUDE.md`. Writes no code.
+
+### A.2 Implementation (Sonnet) — `.claude/commands/implement.md`
+
+Loops over `docs/PROGRESS.md` until nothing is open: tests first, smallest change that passes, `typecheck && lint && test` green, headless run for `core/` changes, sweep tables for tuning tasks, one commit, one log entry. Never asks a question; under-specified tasks get the SPEC-consistent interpretation recorded in the commit and log. Finishes by writing `docs/HANDOFF.md`, deleting the lock, and printing `READY FOR REVIEW`.
+
+### A.3 Review (Fable) — `.claude/commands/review-build.md`
+
+Reviews the branch commit by commit against this document and `PLAN.md`, in the order determinism, boundaries, tests (run, and sample-mutated), performance, spec drift, interpretation choices, blocked tasks, then style. Approves only if the first three are clean across the whole branch. Otherwise turns findings into `R<round>-<nn>` tasks with named tests, appends them to `PLAN.md` and `PROGRESS.md`, and hands back to `/implement`. Never fixes code directly, so every change on the branch has a task, a test, and a commit.
