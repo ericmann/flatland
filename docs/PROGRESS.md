@@ -29,7 +29,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-15 Idle mode — auto-camera, caption, ticker, clock, fonts
 - [x] P1-16 Phase 1 end — push, preview, phone checks
 - [x] P2-01 Mutation and genetic distance
-- [ ] P2-02 Brain forward pass over the SoA
+- [x] P2-02 Brain forward pass over the SoA
 - [ ] P2-03 Brains drive behaviour; seeded genesis prior; reflex layer retained
 - [ ] P2-04 Species table, speciation, extinction, phylogeny and lineage names
 - [ ] P2-05 Evolution tuning — mutation, speciation, brain
@@ -1140,3 +1140,18 @@ always-latent edge case around tick 2587 (`y` became exactly `40` on a
 40-tile-tall world). Fixed by rounding `nx`/`ny` with `Math.fround`
 *before* the bounds check, so the check and the stored value agree.
 Verified with a direct 5,000-tick repro at seed 3 before and after.
+
+### P2-02 — pending sha (see commit)
+Tests: `test/unit/brain.test.js` (5 cases: a hand-computed toy network,
+all-0.5 genes give zero weights, the output bias row shifts outputs with
+zero inputs, weight accessors round-trip, and a 100k-call allocation
+check). All passed on the first implementation attempt.
+Config keys introduced: `brain.weightScale` (2.0, ⚠️), `brain.enabled`
+(true, not flagged as an assumption — a mechanic toggle, matching
+`plants.enabled`/`metabolism.enabled`'s pattern, not a tuned value).
+Interpretation: `OUTPUT.turn`'s index (0) is duplicated locally as
+`OUTPUT_TURN` in `brain.js` rather than imported from `reflex.js`, the
+same avoid-an-import-cycle reason `ecology.js` duplicates `OUTPUT.eat`
+(P1-07's log entry) — `reflex.js` will import `brain.js` once P2-03 wires
+the forward pass into the policy switch, so `brain.js` importing
+`reflex.js` now would set up exactly that cycle one task early.
