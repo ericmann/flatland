@@ -5,7 +5,7 @@ Started: 2026-09-18T15:20:35Z
 ## Tasks
 - [x] P0-01 Repository scaffold and toolchain
 - [x] P0-02 Seeded RNG, deterministic math, config module
-- [ ] P0-03 Light, seasons and the world clock
+- [x] P0-03 Light, seasons and the world clock
 - [ ] P0-04 Value noise
 - [ ] P0-05 Terrain generation and region names
 - [ ] P0-06 Terrain tuning sweep
@@ -104,7 +104,7 @@ sandbox denies `rm -rf node_modules`); CI's first run will exercise `npm ci`
 against the committed lockfile.
 No config keys introduced (none needed yet).
 
-### P0-02 — pending sha (see commit)
+### P0-02 — 4a808cb
 Tests: `test/unit/rng.test.js` (9 cases incl. state save/restore and fork),
 `test/unit/fmath.test.js` (9 cases, all six functions plus TAU/clamp/lerp),
 `test/unit/config.test.js` (10 cases incl. the DOCS-completeness walk).
@@ -129,3 +129,24 @@ Interpretation:
   "always false"/"always true" over 1000 draws each.
 - `makeConfig` validates non-finite numbers anywhere in the override tree
   (not just top-level), and deep-freezes the whole result recursively.
+
+### P0-03 — pending sha (see commit)
+Tests: `test/unit/light.test.js` (12 cases: lightAt zero/peak/night bounds,
+config-independence, dayFraction range and mid-summer peak, season quarter
+boundaries and year rollover, clock text at the three named boundary ticks
+plus a day-increment case, sunArc angle/up). Confirmed failing with "Cannot
+find module" before implementation.
+Interpretation:
+- `sunArc`'s `angle = π(1 − u/f)` is π at dawn (u=0) and falls to 0 at dusk
+  (u→f), not the reverse — I initially wrote the test backwards and had to
+  correct it; this matches the mockup's arc glyph, which places the sun dot
+  at the left (cx = 20+17·cos(π) = 3) at dawn and sweeps right as the angle
+  falls to 0 at dusk. `up` (not specified in the design constraint's return
+  shape beyond the field name) is defined as `u < f`, i.e. "sun currently
+  above the horizon" — the only reading consistent with "holds at π through
+  the night" needing a distinct signal for night vs. day at angle=π.
+- `u(tick, cfg)` and `yearFracOf(tick, cfg)` use a positive-safe modulo
+  (`((x % m) + m) % m`) so negative ticks (not expected in normal operation
+  but not excluded by the type) don't produce a negative day/year fraction.
+No config keys introduced (light.js only reads `time.ticksPerDay` /
+`time.daysPerYear` from P0-02).
