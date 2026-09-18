@@ -4,7 +4,7 @@ Started: 2026-09-18T15:20:35Z
 
 ## Tasks
 - [x] P0-01 Repository scaffold and toolchain
-- [ ] P0-02 Seeded RNG, deterministic math, config module
+- [x] P0-02 Seeded RNG, deterministic math, config module
 - [ ] P0-03 Light, seasons and the world clock
 - [ ] P0-04 Value noise
 - [ ] P0-05 Terrain generation and region names
@@ -73,7 +73,7 @@ Started: 2026-09-18T15:20:35Z
 ## Log
 (one entry per task, appended by /implement)
 
-### P0-01 — pending sha (see commit)
+### P0-01 — 592e4a7
 Tests: `test/unit/smoke.test.js` — "1 + 1 === 2" and one case per required
 script name in `package.json`. Confirmed failing (no package.json) before
 implementation.
@@ -103,3 +103,29 @@ served "Flatland" at `/`. Could not run a from-scratch `npm ci` locally (the
 sandbox denies `rm -rf node_modules`); CI's first run will exercise `npm ci`
 against the committed lockfile.
 No config keys introduced (none needed yet).
+
+### P0-02 — pending sha (see commit)
+Tests: `test/unit/rng.test.js` (9 cases incl. state save/restore and fork),
+`test/unit/fmath.test.js` (9 cases, all six functions plus TAU/clamp/lerp),
+`test/unit/config.test.js` (10 cases incl. the DOCS-completeness walk).
+Confirmed all three failing with "Cannot find module" before implementation.
+Config keys introduced (all documented in `DOCS`): `world.width` (256, ⚠️),
+`world.height` (160, ⚠️), `world.maxOrganisms` (2000), `world.cellSize` (8),
+`time.ticksPerDay` (1800, ⚠️), `time.daysPerYear` (24, ⚠️).
+Interpretation:
+- `fmath.js` implements sin/cos/atan2 via Taylor series with range reduction
+  and a half-angle CORDIC-style reduction for atan2 (built only from
+  `+ − × ÷`, `Math.sqrt`, `Math.floor`, `Math.abs`); exp/log/tanh via
+  Taylor series with binary range reduction. Measured max errors are ~1e-14
+  to ~1e-16 (9+ orders of margin over the required 1e-6), verified with a
+  20,000-point sweep per function against `Math.*` outside the test suite.
+  PI/TAU/LN2 are hardcoded nearest-double literals, not `Math.PI`/`Math.LN2`
+  property reads, per the "only these primitives" constraint.
+- Sanity-checked the eslint core rules (P0-01) actually fire by linting a
+  throwaway file with `Math.random`, `Date.now`, `Math.sin`, `window`,
+  `for...in` and bare `console` — all seven flagged, file then deleted.
+- `Rng.chance(0)`/`chance(1)` still consume no randomness by short-circuit
+  (documented in the JSDoc); not tested for that specific property beyond
+  "always false"/"always true" over 1000 draws each.
+- `makeConfig` validates non-finite numbers anywhere in the override tree
+  (not just top-level), and deep-freezes the whole result recursively.
