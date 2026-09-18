@@ -13,6 +13,9 @@ import { lightAt } from './light.js';
 import { generateTerrain } from './terrain.js';
 import { OrganismStore, HASH_ORDER } from './organisms.js';
 import { genomeLength, BRAIN_INPUTS, BRAIN_OUTPUTS } from './genome.js';
+import { Ledger } from './ledger.js';
+import { fillInitialPlants, growPlants, decayCarcasses } from './ecology.js';
+import { applyDue } from './interventions.js';
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
@@ -119,6 +122,10 @@ export class World {
       new Float32Array(total),
     ];
 
+    /** The energy conservation ledger (SPEC §4.4). */
+    this.ledger = new Ledger();
+    fillInitialPlants(this);
+
     const gLen = genomeLength(cfg);
     this.store = new OrganismStore(cfg.world.maxOrganisms, gLen);
 
@@ -144,13 +151,16 @@ export class World {
   }
 
   /**
-   * Advance one tick. Later tasks insert the SPEC §6.3 stages here, in
-   * order, each behind its own config `enabled` flag.
+   * Advance one tick (SPEC §6.3). Later tasks insert further stages here,
+   * in order, each behind its own config `enabled` flag.
    * @returns {void}
    */
   step() {
     this.tick++;
     this.light = lightAt(this.tick, this.cfg);
+    applyDue(this);
+    growPlants(this);
+    decayCarcasses(this);
   }
 
   /**

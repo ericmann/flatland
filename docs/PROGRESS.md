@@ -15,7 +15,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-01 Organism SoA store
 - [x] P1-02 Genome layout and phenotype mapping
 - [x] P1-03 World skeleton, genesis, hash, test helpers, determinism invariant
-- [ ] P1-04 Plants, carcasses, soil, the energy ledger and the rain intervention
+- [x] P1-04 Plants, carcasses, soil, the energy ledger and the rain intervention
 - [ ] P1-05 Spatial grid and senses
 - [ ] P1-06 Reflex policy, movement, metabolism, aging and death
 - [ ] P1-07 Grazing, scavenging and predation
@@ -400,7 +400,7 @@ Interpretation:
   a 2-tuple, since JSDoc tuple types didn't structurally match the frozen
   readonly array type `makeConfig` produces.
 
-### P1-03 — pending sha (see commit)
+### P1-03 — e621fd8
 Tests: `test/unit/world.test.js` (11 cases: genesis lands every organism on
 non-water inside the map, genesis counts match config, genesis is skipped
 when `organisms` is given even empty, step increments tick and light
@@ -443,3 +443,53 @@ Interpretation:
   separate explicit step (`runGenesis(world)`), so `test/helpers.js`'s
   `makeWorld` can skip it when an `organisms` list is given, and so a
   `World` can be constructed and inspected before any population exists.
+
+### P1-04 — pending sha (see commit)
+Tests: `test/unit/ecology.test.js` (9 cases: growth zero at real night L=0,
+growth matches the exact formula at soil=0, soil raises growth and is
+consumed, plants never exceed cap over 500 ticks, plants.enabled=false
+disables growth, carcass decays slower on mud than grass and feeds soil,
+carcass.enabled=false disables decay), `test/unit/ledger.test.js` (5 cases:
+genesis equals stocks total after `initGenesisLedger`, relativeError is
+~0 fresh and stays <1e-3 after 500 ticks, queueIntervention rejects
+past/current ticks, pending stays sorted by (tick, insertion order)), and
+`test/invariants/energy.test.js` (the SPEC §9.2 invariant: relative error
+<1e-3 every 100 ticks over 10,000 ticks with two rain interventions).
+Confirmed all three files failing for the right reason (rain doing
+nothing, decay doing nothing) before implementation; two of my own test
+drafts needed fixes before passing (see Interpretation).
+Config keys introduced: `terrain.plantCap` ([0,0,0.35,1,0.6,0], ⚠️),
+`plants.enabled` (true), `plants.growth` (0.004, ⚠️), `plants.soilBoost`
+(2.0, ⚠️), `plants.initialFill` (0.6), `carcass.enabled` (true),
+`carcass.decay` (0.002, ⚠️), `carcass.decayMud` (0.0007, ⚠️),
+`soil.uptake` (0.001, ⚠️), `interventions.rain.amount` (0.3).
+Interpretation:
+- "Initial plants at genesis: ... ledger.genesis += Σp, plus Σ(energy+
+  body) of the genesis population" can't be implemented as incremental
+  bookkeeping split across two files this task cannot touch: `genesis.js`
+  (P1-03, creates organisms) and `test/helpers.js` (P1-03, orchestrates
+  world+genesis) are both outside this task's Files touched. Resolved by
+  making `ledger.genesis` a one-shot snapshot: `initGenesisLedger(world)`
+  (new, in `ledger.js`) sets it to the current total of every stock,
+  called explicitly once the world's terrain/plants/population are all in
+  place. `fillInitialPlants` (in the `World` constructor, before any
+  organism exists) only fills the plants array; it does not touch the
+  ledger, avoiding any double-counting risk regardless of call order.
+- Found and fixed two bugs in my own first test drafts, not in the
+  implementation: (1) "plant growth is zero at L=0" checked light
+  immediately after tick 0, but light near dawn is a tiny *positive*
+  value, not exactly 0 — L is only exactly 0 well into the night portion
+  of the day, so the test now advances to 90% through the day first. (2)
+  "soil raises growth and is consumed" captured `soilBefore` but then
+  compared it against itself with no step in between (always equal by
+  construction) — fixed to step once after capturing "before" values and
+  compare against "after". Both are documented here because they'd have
+  looked like real implementation failures without this note.
+- Plant growth's `ledger.sunlight`/`flows.photosynthesis` and
+  `flows.uptake` are attributed as exact fractions of the realised growth
+  (`applied * base'/want'` and `applied * fromSoil'/want'`), which sum to
+  precisely `applied` by construction (the two fractions sum to 1) — no
+  dissipation term is needed on the plant side of growth. The *soil's own*
+  Float32 rounding when subtracting `fromSoil'` is accounted separately,
+  with any gap against the intended amount going to `dissipated`, per the
+  general realised-vs-intended rule.
