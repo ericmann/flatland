@@ -950,7 +950,7 @@ Interpretation:
   constraint but follows directly from "battery pause" (P1-14) needing to
   not fast-forward through the paused interval.
 
-### P1-13 — pending sha (see commit)
+### P1-13 — ec1409a
 Tests: `test/unit/sim-client.test.js` (2 cases: `send` forwards `{type,
 ...payload}` and the transfer list; `on` routes events by type and
 unsubscribes independently), `test/unit/organism-layer.test.js` (2 cases:
