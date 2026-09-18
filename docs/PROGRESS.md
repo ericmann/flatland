@@ -19,7 +19,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-05 Spatial grid and senses
 - [x] P1-06 Reflex policy, movement, metabolism, aging and death
 - [x] P1-07 Grazing, scavenging and predation
-- [ ] P1-08 Density-dependent breeding (asexual, no mutation)
+- [x] P1-08 Density-dependent breeding (asexual, no mutation)
 - [ ] P1-09 Chronicle core, stats sampling and the no-allocation invariant
 - [ ] P1-10 Headless harness, ecology sweep columns and the throughput gate
 - [ ] P1-11 Ecology tuning and the reduced soak test
@@ -627,7 +627,7 @@ Interpretation:
   (fixed by explicitly zeroing that tile). None of these reflect a defect
   in `reflex.js`.
 
-### P1-07 — pending sha (see commit)
+### P1-07 — 9e6fde4
 Tests: `test/unit/ecology.test.js` (extended, 5 new cases: grazing at
 etaHerb*(1-d) with the rest dissipated, a full organism does not graze, a
 pure carnivore gains nothing from plants, scavenging at etaCarn*d, no
@@ -703,3 +703,47 @@ Interpretation:
   seeding the same grass tile with plants, so the herbivore branch of
   `eatMeal` also fired unexpectedly (fixed by explicitly zeroing plants
   on that tile).
+
+### P1-08 — pending sha (see commit)
+Tests: `test/unit/breeding.test.js` (7 cases: no births below breedEnergy
+or before maturity, an isolated organism breeds at baseRate over 10,000
+single-tick trials within ±20%, K neighbours never breed and K/2
+neighbours breed at about half rate, the child receives
+childEnergyFraction of parent energy plus its own body with the ledger
+exact to <1e-9, the child copies the genome exactly and inherits species/
+generation+1/parent id, the child lands on land inside the map, a parent
+killed this tick does not give birth). Confirmed all 6 birth-mechanics
+cases failing before implementation (the eligibility cases happened to
+pass immediately since an empty birth queue is indistinguishable from "no
+mechanism yet"); all 7 passed on the first implementation attempt.
+Config keys introduced: `breeding.enabled` (true), `breeding.radius` (6,
+⚠️), `breeding.localK` (10, ⚠️), `breeding.baseRate` (0.01, ⚠️),
+`breeding.childEnergyFraction` (0.35, ⚠️).
+Interpretation:
+- `checkBreeding` is called as the last stage of the per-organism loop
+  (after `ageOrganism`), so eligibility (`energy > breedEnergy`,
+  `age > maturityTicks`) is checked against the organism's state at the
+  end of this tick's processing (post-eating, post-metabolism,
+  post-aging) rather than its state at the start of the tick — not
+  specified either way; this reading lets an organism that just ate
+  enough to cross `breedEnergy` breed the same tick, which seems like the
+  more natural simulation semantics.
+- `resolveBirths` is a new function (not `resolve()` itself), called
+  right after `resolve(this)` in `step()`: since `resolve()` already frees
+  every slot marked `dying` before `resolveBirths` runs, checking
+  `store.alive[parent]` there is sufficient to skip a parent that died
+  this tick — no changes to `resolve()` were needed, matching the P1-07
+  precedent of extending the tick lifecycle by composition rather than by
+  editing the existing function.
+- The ledger split for a birth is `dissipated += realisedParentLoss -
+  store.energy[child] - store.body[child]`: the parent's realised energy
+  loss must equal the child's new energy plus its new body mass, with any
+  Float32 rounding gap (on either side) going to dissipated — the same
+  realised-vs-intended pattern established in P1-06/P1-07, applied fresh
+  here since births weren't covered by either earlier fix.
+- `resolveBirths` needs `applyPhenotype` (genome.js, safe: genome.js has
+  no dependency back on ecology/world/reflex) and `EV_BIRTH`/`recordEvent`
+  (world.js, already an existing cycle edge from P1-07). `OUTPUT.breed`'s
+  index (7) is duplicated as a local constant for the same reason
+  `OUTPUT.eat` was in P1-07 (avoiding a three-way import cycle through
+  reflex.js).
