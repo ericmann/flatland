@@ -6,7 +6,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P0-01 Repository scaffold and toolchain
 - [x] P0-02 Seeded RNG, deterministic math, config module
 - [x] P0-03 Light, seasons and the world clock
-- [ ] P0-04 Value noise
+- [x] P0-04 Value noise
 - [ ] P0-05 Terrain generation and region names
 - [ ] P0-06 Terrain tuning sweep
 - [ ] P0-07 A seeded terrain renders in the browser
@@ -130,7 +130,7 @@ Interpretation:
 - `makeConfig` validates non-finite numbers anywhere in the override tree
   (not just top-level), and deep-freezes the whole result recursively.
 
-### P0-03 — pending sha (see commit)
+### P0-03 — 0c05290
 Tests: `test/unit/light.test.js` (12 cases: lightAt zero/peak/night bounds,
 config-independence, dayFraction range and mid-summer peak, season quarter
 boundaries and year rollover, clock text at the three named boundary ticks
@@ -150,3 +150,24 @@ Interpretation:
   but not excluded by the type) don't produce a negative day/year fraction.
 No config keys introduced (light.js only reads `time.ticksPerDay` /
 `time.daysPerYear` from P0-02).
+
+### P0-04 — pending sha (see commit)
+Tests: `test/unit/noise.test.js` (8 cases: same-seed determinism, different
+seeds differ, [0,1] bounds, neighbour smoothness at scale 22, edge wrapping
+in both directions, Float32-rounded output) and `fbm` (single-layer
+identity, weighted multi-layer sum). Confirmed failing with "Cannot find
+module" before implementation; all 8 passed on the first implementation
+attempt.
+Interpretation:
+- `makeNoise(rng, size)` fills the lattice directly from `rng.float()` in
+  row-major order (matching the mockup's `noiseGrid`), and `at(x, y)` wraps
+  lattice indices with a positive-safe modulo so negative coordinates and
+  coordinates past `size` both sample validly rather than reading out of
+  bounds or reflecting.
+- Output is rounded with `Math.fround` at both `at()` and `fbm()` so a
+  caller storing results directly into a `Float32Array` sees byte-identical
+  values to calling the function again later (SPEC §3.1: no float
+  order-of-operations surprises between a fresh call and a stored value).
+No config keys introduced (noise.js takes lattice size and layer scale/
+weight as call arguments; `terrain.octaves` is introduced by P0-05, which
+owns the terrain-specific defaults).
