@@ -3,6 +3,7 @@ import { TERRAIN } from '../../src/core/terrain.js';
 import {
   regionName,
   regionWord,
+  speciesName,
   HERB_NOUNS,
   CARN_NOUNS,
   OMNI_NOUNS,
@@ -72,5 +73,36 @@ describe('species noun lists (SPEC §4.10)', () => {
 
   it('omnivore nouns match the spec list', () => {
     expect(OMNI_NOUNS).toEqual(['Foragers', 'Rovers', 'Wanderers']);
+  });
+});
+
+describe('speciesName', () => {
+  it('species names are unique and cycle nouns then numerals', () => {
+    const table = { names: [] };
+    // 5 herbivore nouns for TERRAIN.GRASS ("Meadow"): all 5 should be used
+    // before any numeral suffix appears.
+    for (let i = 0; i < HERB_NOUNS.length; i++) {
+      const name = speciesName(table, 'herbivore', TERRAIN.GRASS, i);
+      expect(name.startsWith('Meadow ')).toBe(true);
+      expect(name).not.toMatch(/II|III|IV|V|VI|VII|VIII|IX|X|\d/);
+      table.names.push(name);
+    }
+    expect(new Set(table.names).size).toBe(HERB_NOUNS.length);
+
+    // The noun pool for this region word is now exhausted: the next name
+    // reuses a noun with a roman-numeral suffix.
+    const sixth = speciesName(table, 'herbivore', TERRAIN.GRASS, HERB_NOUNS.length);
+    expect(sixth).toMatch(/ II$/);
+    expect(table.names).not.toContain(sixth);
+  });
+
+  it("noun follows the founder's diet class", () => {
+    const table = { names: [] };
+    const herb = speciesName(table, 'herbivore', TERRAIN.GRASS, 0);
+    const omni = speciesName(table, 'omnivore', TERRAIN.GRASS, 0);
+    const carn = speciesName(table, 'carnivore', TERRAIN.GRASS, 0);
+    expect(HERB_NOUNS.some((n) => herb.endsWith(n))).toBe(true);
+    expect(OMNI_NOUNS.some((n) => omni.endsWith(n))).toBe(true);
+    expect(CARN_NOUNS.some((n) => carn.endsWith(n))).toBe(true);
   });
 });

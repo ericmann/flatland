@@ -103,6 +103,10 @@ export const DEFAULTS = Object.freeze({
     pBig: 0.01,
     hueScale: 0.2,
   }),
+  species: Object.freeze({
+    theta: 0.6,
+    centroidRate: 0.02,
+  }),
   // Phenotype ranges (SPEC §4.6): traitValue(cfg, gene, trait) = lo + gene*(hi-lo).
   // One [lo, hi] pair per trait in genome.js's TRAIT_NAMES order.
   phenotype: Object.freeze({
@@ -507,6 +511,22 @@ export const DOCS = new Map([
       units: 'multiplier',
       assumption: true,
       doc: "Multiplies sigmaMut for the hue gene only, so hue drifts slower than other traits (SPEC §4.6: 'slow hue').",
+    },
+  ],
+  [
+    'species.theta',
+    {
+      units: 'trait-block Euclidean distance',
+      assumption: true,
+      doc: 'A newborn founds a new species when its trait-block distance from its species centroid exceeds this (SPEC §4.9).',
+    },
+  ],
+  [
+    'species.centroidRate',
+    {
+      units: 'EMA weight',
+      assumption: true,
+      doc: "A species' centroid drifts toward a member that stays in it by this fraction per birth (SPEC §4.9): centroid += (traits - centroid) * centroidRate.",
     },
   ],
   [

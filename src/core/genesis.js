@@ -106,7 +106,8 @@ export function runGenesis(world) {
   const founderTraits = new Float32Array(TRAIT_COUNT);
   /** @type {{ x: number, y: number } | null} */
   let firstCentre = null;
-  let created = 0;
+  /** @type {string[]} one per lineage, in creation order (SPEC §4.11's genesis sentence). */
+  const lineageNames = [];
 
   // The seeded prior (SPEC §4.7): computed once, in gene space, then each
   // founder's weight genes are the prior plus their own noise draw.
@@ -127,6 +128,8 @@ export function runGenesis(world) {
     founderTraits[TRAIT.diet] = rng.range(dietLo, dietHi);
 
     const memberCount = lineage.carn ? g.carnivoresPerLineage : g.herbivoresPerLineage;
+    /** The lineage's species id, created from the first member placed (SPEC §4.9). */
+    let speciesId = -1;
     for (let m = 0; m < memberCount; m++) {
       const slot = store.alloc();
       if (slot === -1) {
@@ -159,18 +162,21 @@ export function runGenesis(world) {
       store.heading[slot] = TAU * rng.float();
       store.energy[slot] = g.energyFraction * store.energyMax[slot];
       store.age[slot] = 0;
-      store.species[slot] = speciesIndex; // temporary until P2-04's species table
+      if (speciesId === -1) {
+        speciesId = world.species.create(world, gOff, -1, store.x[slot], store.y[slot]);
+        lineageNames.push(world.species.names[speciesId]);
+      }
+      store.species[slot] = speciesId;
+      world.species.count[speciesId]++;
       store.generation[slot] = 1;
       store.parent[slot] = 0;
       store.sick[slot] = 0;
       store.flags[slot] = 0;
-      created++;
     }
   }
 
-  // The genesis chronicle entry (SPEC §4.11). P2-04 rewrites this with
-  // lineage names once the real species table exists; for now it just
-  // reports counts and the first lineage's region.
+  // The genesis chronicle entry (SPEC §4.11): lineage names, from the
+  // real species table.
   const place =
     firstCentre !== null
       ? regionName(firstCentre.x, firstCentre.y, world.terrain, world.width, world.height)
@@ -178,7 +184,7 @@ export function runGenesis(world) {
   world.chronicle.add(
     world.tick,
     KIND.GENESIS,
-    `Genesis. ${created} organisms in ${lineages.length} lineages.`,
+    `Genesis. ${lineages.length} lineages seeded: ${lineageNames.join(', ')}.`,
     place,
     [],
   );

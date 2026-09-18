@@ -31,6 +31,7 @@ import { policy, reflexLayer, act, metabolise, ageOrganism } from './reflex.js';
 import { forward } from './brain.js';
 import { Chronicle } from './chronicle.js';
 import { Stats } from './stats.js';
+import { SpeciesTable } from './species.js';
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
@@ -97,6 +98,7 @@ const COUNTER_KEYS = Object.freeze([
   'splits',
   'extinctions',
   'immigrations',
+  'speciesRefused',
 ]);
 
 /** Death cause codes, written into `world.dying` and resolved into `counters` (SPEC §4.5). */
@@ -188,6 +190,7 @@ function resolve(world) {
       recordEvent(world, EV_DEATH, store.x[i], store.y[i], store.species[i], cause);
     }
 
+    world.species.onDeath(world, i, cause);
     store.free(i);
   }
 }
@@ -294,6 +297,8 @@ export class World {
     this.chronicle = new Chronicle();
     /** Periodic ecological samples (SPEC §9.3), a ring buffer over `cfg.stats.historyLength`. */
     this.stats = new Stats(this);
+    /** The species (phylogeny) table (SPEC §4.9-4.10). */
+    this.species = new SpeciesTable(cfg);
   }
 
   /**
@@ -359,7 +364,10 @@ export class World {
    * state, as an 8-character lowercase hex string (SPEC §3.1, §6.3). Order:
    * tick, rng state, next organism id; terrain, plants, carcass, soil,
    * the four pheromone channels; then the organism store's arrays in
-   * `HASH_ORDER`. The species table (P2-04) appends its columns later.
+   * `HASH_ORDER`; then the species table's `ancestor, born, died, count,
+   * centroid` columns (P2-04). Names are strings and are not hashed —
+   * they are a function of hashed state plus renames, which are logged
+   * interventions (P4-04).
    * @returns {string}
    */
   hash() {
@@ -379,6 +387,12 @@ export class World {
     for (const name of HASH_ORDER) {
       h = hashUpdate(h, bytesOf(store[name]));
     }
+    const species = this.species;
+    h = hashUpdate(h, bytesOf(species.ancestor));
+    h = hashUpdate(h, bytesOf(species.born));
+    h = hashUpdate(h, bytesOf(species.died));
+    h = hashUpdate(h, bytesOf(species.count));
+    h = hashUpdate(h, bytesOf(species.centroid));
     return h.toString(16).padStart(8, '0');
   }
 }

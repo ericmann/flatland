@@ -31,7 +31,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P2-01 Mutation and genetic distance
 - [x] P2-02 Brain forward pass over the SoA
 - [x] P2-03 Brains drive behaviour; seeded genesis prior; reflex layer retained
-- [ ] P2-04 Species table, speciation, extinction, phylogeny and lineage names
+- [x] P2-04 Species table, speciation, extinction, phylogeny and lineage names
 - [ ] P2-05 Evolution tuning — mutation, speciation, brain
 - [ ] P2-06 Protocol extension — species table, phylogeny events, family record, richer status
 - [ ] P2-07 Procedural sprites and colour modes
@@ -1184,3 +1184,50 @@ local `THROUGHPUT_MIN` override to verify this task (documented, not a
 change to the committed default, same pattern as P1-10/P1-12); `npm run
 test:soak` (the P1-11-pinned seed) and `npm run headless -- --ticks
 30000` both still ran correctly, just slower.
+
+### P2-04 — pending sha (see commit)
+Tests: `test/unit/species.test.js` (new file, 5 cases: within-θ join +
+centroid EMA, beyond-θ split with correct ancestor/born, extinction
+records died=tick without deleting the row, species counts sum to the
+living population after 2,000 ticks, hash changes when a centroid
+changes), `test/unit/names.test.js` (+2 cases: names cycle nouns then
+roman numerals and are unique; noun follows diet class),
+`test/unit/chronicle.test.js` (+2 cases: split/extinct sentences name
+both lineages and a place; genesis lists lineage names — also updated
+the pre-existing genesis-entry-format test for the new sentence). All new
+cases passed on the first implementation attempt.
+Config keys introduced: `species.theta` (0.6, ⚠️), `species.centroidRate`
+(0.02, ⚠️). Counter introduced: `speciesRefused` (species table full).
+Verified beyond the unit suite: `npm run headless -- --ticks 30000`
+(seed 1) shows real speciation (40), extinction (13) and a Shannon
+diversity of 3.23 across 30+ living species, with chronicle text reading
+correctly, e.g. "A new lineage, Scrub Browsers IV, splits from Meadow
+Foragers in the northern central scrub." and "Meadow Foragers are
+extinct. The last one died of old age in the northern eastern meadow."
+Interpretation:
+- `assignNewborn(world, slot)` requires `store.species[slot]` to already
+  be inherited from the parent *before* the call (not passed as a
+  separate argument, matching the literal 2-arg signature in PLAN.md);
+  `ecology.js`'s `resolveBirths` sets the inherited value first, then
+  calls it, letting the method either leave that value alone or replace
+  it with a newly-founded species id.
+- `create(world, traitsOff, ancestor, x, y)` reads the founding member's
+  trait genes from `world.store.genome` at `traitsOff` — for genesis,
+  this is the *first* member of the lineage actually placed (not the
+  pre-noise `founderTraits` template), since a genuine, already-written
+  genome offset is what `create`'s signature implies and what
+  `assignNewborn`/`distanceTo` need to be consistent with elsewhere.
+- Chronicle `split` subjects `[newId, parentId]` are species ids (matching
+  the sentence's lineage-name context and `EV_HUNT`/`EV_BIRTH`'s existing
+  species-id convention in `a`/`b`), not organism ids; `extinct`'s
+  subjects are `[speciesId]` (not specified in PLAN.md's sentence list).
+- `chronicle.js`'s death-verb table (`DEATH_VERB`, matching `world.js`'s
+  `DEATH` codes 1-6) is a local duplicate, not an import of `DEATH` from
+  `world.js` — `world.js` already imports `Chronicle`, so importing
+  `DEATH` back would cycle (same reason `ecology.js` duplicates
+  `OUTPUT.eat`, P1-07's log entry).
+- The hash extension hashes only the five columns PLAN.md names
+  (`ancestor, born, died, count, centroid`), not `n`/`hue`/`originX`/
+  `originY`/`dietClassAtBirth`, per its literal wording; in practice any
+  divergence in `n` still shows up in the other columns (a new species
+  necessarily writes into them).

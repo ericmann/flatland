@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Chronicle, KIND } from '../../src/core/chronicle.js';
+import { Chronicle, KIND, sentence, deathVerb } from '../../src/core/chronicle.js';
 import { makeWorld } from '../helpers.js';
 
 describe('genesis chronicle entry', () => {
@@ -11,7 +11,40 @@ describe('genesis chronicle entry', () => {
     expect(entry.kind).toBe(KIND.GENESIS);
     expect(typeof entry.place).toBe('string');
     expect(entry.place.length).toBeGreaterThan(0);
-    expect(entry.text).toMatch(/^Genesis\. \d+ organisms in \d+ lineages\.$/);
+    expect(entry.text).toMatch(/^Genesis\. \d+ lineages seeded: .+\.$/);
+  });
+
+  it('genesis lists lineage names', () => {
+    const world = makeWorld({ seed: 5 });
+    const entry = world.chronicle.entries[0];
+    for (const name of world.species.names) {
+      expect(entry.text).toContain(name);
+    }
+    expect(world.species.names.length).toBe(
+      world.cfg.genesis.herbivoreLineages + world.cfg.genesis.carnivoreLineages,
+    );
+  });
+});
+
+describe('sentence (P2-04)', () => {
+  it('split and extinct sentences name both lineages and a place', () => {
+    const split = sentence(KIND.SPLIT, {
+      name: 'Meadow Grazers II',
+      parent: 'Meadow Grazers',
+      place: 'the northern meadow',
+    });
+    expect(split).toContain('Meadow Grazers II');
+    expect(split).toContain('Meadow Grazers');
+    expect(split).toContain('the northern meadow');
+
+    const extinct = sentence(KIND.EXTINCT, {
+      name: 'Rock Stalkers',
+      verb: deathVerb(1), // DEATH.STARVED
+      place: 'the eastern rocks',
+    });
+    expect(extinct).toContain('Rock Stalkers');
+    expect(extinct).toContain('starved');
+    expect(extinct).toContain('the eastern rocks');
   });
 });
 

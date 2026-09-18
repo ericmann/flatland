@@ -430,14 +430,17 @@ export function resolveBirths(world) {
     store.y[slot] = cy;
     store.heading[slot] = TAU * world.rng.float();
     store.age[slot] = 0;
-    store.species[slot] = store.species[parent];
+    store.species[slot] = store.species[parent]; // inherited by default; assignNewborn may override below
     store.generation[slot] = store.generation[parent] + 1;
     store.parent[slot] = store.id[parent];
     store.sick[slot] = 0;
     store.flags[slot] = 0;
 
+    const parentSpecies = store.species[parent];
+    world.species.assignNewborn(world, slot);
+
     world.counters.born++;
-    recordEvent(world, EV_BIRTH, cx, cy, store.species[slot], store.species[parent]);
+    recordEvent(world, EV_BIRTH, cx, cy, store.species[slot], parentSpecies);
   }
 
   world.birthQueueLength = 0;

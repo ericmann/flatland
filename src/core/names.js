@@ -57,6 +57,49 @@ export const CARN_NOUNS = Object.freeze(['Stalkers', 'Hunters', 'Lurkers', 'Ambu
 /** Species nouns for omnivores (SPEC §4.10). */
 export const OMNI_NOUNS = Object.freeze(['Foragers', 'Rovers', 'Wanderers']);
 
+/** Roman numerals for the 1st through 10th repeat of an exhausted name (SPEC §4.10); beyond that, a plain number. */
+const ROMAN_SUFFIX = Object.freeze([
+  '',
+  ' II',
+  ' III',
+  ' IV',
+  ' V',
+  ' VI',
+  ' VII',
+  ' VIII',
+  ' IX',
+  ' X',
+]);
+
+/**
+ * A unique species name (SPEC §4.10): `${regionWord(terrainType)}
+ * ${noun}`, the noun from the diet class's noun list, starting at
+ * `ordinal % nouns.length` and advancing until an unused name is found;
+ * once every noun for that region word is taken, appends a roman-numeral
+ * (then decimal) suffix and starts again.
+ * @param {{ names: string[] }} table anything with a `names` array to check for collisions.
+ * @param {'herbivore'|'omnivore'|'carnivore'} dietClass
+ * @param {number} terrainType a TERRAIN value
+ * @param {number} ordinal a monotonic counter (e.g. the species id), spreading names across the noun list.
+ * @returns {string}
+ */
+export function speciesName(table, dietClass, terrainType, ordinal) {
+  const nouns =
+    dietClass === 'herbivore' ? HERB_NOUNS : dietClass === 'carnivore' ? CARN_NOUNS : OMNI_NOUNS;
+  const word = regionWord(terrainType);
+  const used = new Set(table.names);
+
+  for (let suffixIndex = 0; ; suffixIndex++) {
+    const suffix =
+      suffixIndex < ROMAN_SUFFIX.length ? ROMAN_SUFFIX[suffixIndex] : ` ${suffixIndex + 1}`;
+    for (let i = 0; i < nouns.length; i++) {
+      const noun = nouns[(ordinal + i) % nouns.length];
+      const name = `${word} ${noun}${suffix}`;
+      if (!used.has(name)) return name;
+    }
+  }
+}
+
 // Re-exported so callers of names.js don't also need to import terrain.js
 // just to pass a TERRAIN value in.
 export { TERRAIN };
