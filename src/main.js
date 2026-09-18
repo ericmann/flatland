@@ -1,62 +1,104 @@
-// Entry point. For now (P0-07): generate a seeded terrain on the main
-// thread and render it with pan/zoom. The Worker, organisms and full UI
-// chrome arrive in later Phase 1/2 tasks — see docs/PLAN.md.
-import { makeConfig } from './core/config.js';
-import { generateTerrain } from './core/terrain.js';
+// Entry point (P1-13): the simulation runs in a Worker (or the
+// main-thread fallback), the main thread only requests snapshots, decodes
+// and renders them, and forwards input as intent messages. Terrain is no
+// longer generated here — it arrives in the first snapshot.
+import { createSim, SimClient } from './ui/sim-client.js';
 import { Renderer } from './render/renderer.js';
 import { clamp, zoomAt, fit, screenToWorld } from './render/camera.js';
+import { decodeSnapshot } from './sim/snapshot.js';
+import { FLAG_TERRAIN } from './sim/protocol.js';
 
 const params = new URLSearchParams(window.location.search);
 const seedParam = Number(params.get('seed'));
 const seed = Number.isFinite(seedParam) && seedParam > 0 ? Math.floor(seedParam) : 1;
 
-const cfg = makeConfig();
-const { terrain } = generateTerrain(seed, cfg);
-
 const app = document.getElementById('app');
-
 const view = document.createElement('canvas');
 view.id = 'view';
 if (app) {
   app.replaceChildren(view);
 }
 
-const renderer = new Renderer({ width: cfg.world.width, height: cfg.world.height, view });
-const worldW = cfg.world.width * renderer.px;
-const worldH = cfg.world.height * renderer.px;
+const client = new SimClient(createSim());
 
-renderer.resize();
-renderer.paintTerrain(terrain);
-
+/** @type {import('./render/renderer.js').Renderer | null} */
+let renderer = null;
 /** @type {import('./render/camera.js').Camera} */
-let cam = fit({ x: 0, y: 0, z: 1 }, view.width, view.height, worldW, worldH);
+let cam = { x: 0, y: 0, z: 1 };
+let worldW = 0;
+let worldH = 0;
+/** @type {*} the most recently decoded snapshot, redrawn on pan/zoom/resize without a round-trip to the sim. */
+let lastSnapshot = null;
+let snapshotOutstanding = false;
+let needsTerrain = true; // the renderer has no cached terrain until the first FLAG_TERRAIN reply.
+let painted = false;
 
 /**
- * Re-clamp the camera and draw one frame.
+ * Redraw the last known snapshot at the current camera, if both exist.
  * @returns {void}
  */
-function draw() {
+function redraw() {
+  if (!renderer || !lastSnapshot) return;
   cam = clamp(cam, view.width, view.height, worldW, worldH);
-  renderer.present(cam);
-  // The first painted frame is a signal e2e tests wait on (see P0-08).
-  document.documentElement.dataset.painted = '1';
+  renderer.draw(lastSnapshot, cam, { night: true });
+  if (!painted) {
+    document.documentElement.dataset.painted = '1';
+    painted = true;
+  }
 }
 
-window.addEventListener('resize', () => {
+client.on('loaded', (msg) => {
+  renderer = new Renderer({ width: msg.width, height: msg.height, view });
+  worldW = msg.width * renderer.px;
+  worldH = msg.height * renderer.px;
   renderer.resize();
-  draw();
+  cam = fit({ x: 0, y: 0, z: 1 }, view.width, view.height, worldW, worldH);
+});
+
+client.on('status', (msg) => {
+  document.documentElement.dataset.tick = String(msg.tick);
+});
+
+client.on('snapshot', (msg) => {
+  lastSnapshot = decodeSnapshot(msg.buffer);
+  if (lastSnapshot.terrain) needsTerrain = false;
+  redraw();
+  client.send('releaseSnapshot', { buffer: msg.buffer }, [msg.buffer]);
+  snapshotOutstanding = false;
+});
+
+client.send('load', { seed });
+
+/**
+ * Request the next snapshot, once per animation frame and only when the
+ * previous one has already been released (SPEC §6.4).
+ * @returns {void}
+ */
+function requestFrame() {
+  if (!snapshotOutstanding) {
+    snapshotOutstanding = true;
+    client.send('requestSnapshot', { flags: needsTerrain ? FLAG_TERRAIN : 0 });
+  }
+  requestAnimationFrame(requestFrame);
+}
+requestAnimationFrame(requestFrame);
+
+window.addEventListener('resize', () => {
+  if (renderer) renderer.resize();
+  redraw();
 });
 
 view.addEventListener(
   'wheel',
   (e) => {
+    if (!renderer) return;
     e.preventDefault();
     const rect = view.getBoundingClientRect();
     const sx = (e.clientX - rect.left) * renderer.dpr;
     const sy = (e.clientY - rect.top) * renderer.dpr;
     const anchor = screenToWorld(cam, view.width, view.height, sx, sy);
     cam = zoomAt(cam, Math.exp(-e.deltaY * 0.0015), anchor.x, anchor.y);
-    draw();
+    redraw();
   },
   { passive: false },
 );
@@ -70,11 +112,11 @@ view.addEventListener('pointerdown', (e) => {
 });
 
 view.addEventListener('pointermove', (e) => {
-  if (!drag) return;
+  if (!drag || !renderer) return;
   const dx = (e.clientX - drag.x) * renderer.dpr;
   const dy = (e.clientY - drag.y) * renderer.dpr;
   cam = { x: drag.cx - dx / cam.z, y: drag.cy - dy / cam.z, z: cam.z };
-  draw();
+  redraw();
 });
 
 view.addEventListener('pointerup', () => {
@@ -83,5 +125,3 @@ view.addEventListener('pointerup', () => {
 view.addEventListener('pointercancel', () => {
   drag = null;
 });
-
-draw();

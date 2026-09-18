@@ -24,7 +24,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-10 Headless harness, ecology sweep columns and the throughput gate
 - [x] P1-11 Ecology tuning and the reduced soak test
 - [x] P1-12 Fixed-timestep scheduler, protocol and snapshot encoder
-- [ ] P1-13 Worker glue, main-thread fallback, organism and light rendering
+- [x] P1-13 Worker glue, main-thread fallback, organism and light rendering
 - [ ] P1-14 App state machine, input contract, floating cluster, battery pause
 - [ ] P1-15 Idle mode — auto-camera, caption, ticker, clock, fonts
 - [ ] P1-16 Phase 1 end — push, preview, phone checks
@@ -949,3 +949,49 @@ Interpretation:
   trigger a large catch-up burst — this wasn't spelled out in the design
   constraint but follows directly from "battery pause" (P1-14) needing to
   not fast-forward through the paused interval.
+
+### P1-13 — pending sha (see commit)
+Tests: `test/unit/sim-client.test.js` (2 cases: `send` forwards `{type,
+...payload}` and the transfer list; `on` routes events by type and
+unsubscribes independently), `test/unit/organism-layer.test.js` (2 cases:
+one `fillRect` per living organism at `x·4, y·4` sized `round(size·2)`;
+colour from hue), `test/unit/lens-layer.test.js` (2 cases: night alpha
+0/0.72 at L=1/0; warm band peaks at L=0.18, gone by L≥0.36). All three
+files' first implementation attempt passed every case. Also updated
+`test/unit/terrain-layer.test.js` (now 4 cases) for the new
+`paintTerrain(imageData, snapshot)` signature and plant/carcass tinting.
+Verification beyond the unit suite: `npm run build` (Worker bundles into
+its own chunk), `npx playwright test` (8/8, both projects, including the
+two new e2e cases), and a manual screenshot of `vite preview` confirming
+terrain, the genesis organism cluster and the night tint all render
+correctly in real Chromium.
+Interpretation:
+- `terrain-layer.paintTerrain`'s signature changed from `(imageData,
+  terrain, w, h)` to `(imageData, snapshot)` per this task's own design
+  constraint; `snapshot` only needs to duck-type `{terrain, plants,
+  carcass, width, height}`, so the renderer can pass a cached-terrain
+  stand-in on frames whose real snapshot omits `FLAG_TERRAIN`. Updated
+  the pre-existing P0-07 test for the new signature and the plant/carcass
+  tint formulas (out of this task's Files touched, but required for the
+  suite to stay green — same precedent as every prior task that touched
+  an earlier task's test file).
+- `Renderer.paintTerrain(terrain)` (P0-07) is replaced by
+  `Renderer.draw(snapshot, cam, { night })`, which owns the "repaint the
+  terrain ImageData only when dirty or every 6th frame" decision (SPEC
+  §6.5) and caches the last-received raw terrain array, since most
+  snapshots after the first omit it (`FLAG_TERRAIN` is only requested by
+  `main.js` until the first snapshot with `snapshot.terrain` arrives).
+- `organism-layer.drawOrganisms`'s `colorMode` parameter is accepted but
+  ignored (`'self'`/hue-based is the only mode this task implements, per
+  the design constraint); a future task (P2-07/P2-09) extends the
+  function's body, not its signature.
+- `main-thread.js`'s `Scheduler` is constructed once, before any `load`
+  message, so its `budgetMs` override reads `DEFAULTS.sim.fallbackBudgetMs`
+  directly from `core/config.js` rather than a per-load `cfg` (which
+  doesn't exist yet at that point) — still config-derived, never a bare
+  literal.
+- `worker.js`'s pump loop restarts on both `load` and `resume` (the
+  design constraint only says "starts on load, stops while paused");
+  without also restarting on `resume`, a paused-then-resumed sim would
+  never pump again, since the self-perpetuating `MessageChannel` chain
+  had already ended when it stopped for the pause.

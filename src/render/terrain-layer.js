@@ -1,8 +1,11 @@
 /**
- * Terrain rendering: paint a terrain grid into an ImageData at 1 px/tile
- * (SPEC §6.5). Only touches `imageData.data`, so it is testable in node
- * with a plain `{ data: Uint8ClampedArray }` — no real canvas needed.
- * Plant/carcass tinting arrives in P1-13; this is flat palette colour only.
+ * Terrain rendering: paint a terrain grid into an ImageData at 1 px/tile,
+ * tinted by plants (grass/scrub/mud) and whitened by a carcass, exactly as
+ * `docs/mockup.html`'s `renderTerrain` (SPEC §6.5). Water gets no
+ * animation, unlike the mockup — the renderer must produce identical
+ * pixels for identical snapshot data (SPEC §3.1: deterministic frames).
+ * Only touches `imageData.data`, so it is testable in node with a plain
+ * `{ data: Uint8ClampedArray }` — no real canvas needed.
  */
 import { TERRAIN } from '../core/terrain.js';
 
@@ -17,23 +20,40 @@ export const TCOL = Object.freeze([
 ]);
 
 /**
- * Paint each tile of `terrain` into `imageData` at its palette colour with
- * full opacity.
+ * Paint each tile of `snapshot` into `imageData`, full opacity.
  * @param {{ data: Uint8ClampedArray }} imageData
- * @param {Uint8Array} terrain flat w*h grid of TERRAIN values
- * @param {number} w
- * @param {number} h
+ * @param {{ terrain: Uint8Array, plants: Float32Array, carcass: Float32Array, width: number, height: number }} snapshot
  * @returns {void}
  */
-export function paintTerrain(imageData, terrain, w, h) {
+export function paintTerrain(imageData, snapshot) {
+  const { terrain, plants, carcass, width, height } = snapshot;
   const data = imageData.data;
-  const total = w * h;
+  const total = width * height;
   for (let i = 0; i < total; i++) {
-    const color = TCOL[terrain[i]];
+    const t = terrain[i];
+    let [r, g, b] = TCOL[t];
+    const p = plants[i];
+    if (t === TERRAIN.GRASS) {
+      r = 62 + (92 - 62) * p;
+      g = 78 + (150 - 78) * p;
+      b = 42 + (62 - 42) * p;
+    } else if (t === TERRAIN.SCRUB) {
+      r = 88 + (107 - 88) * p;
+      g = 92 + (122 - 92) * p;
+      b = 52 + (58 - 52) * p;
+    } else if (t === TERRAIN.MUD) {
+      g = 61 + 30 * p;
+    }
+    const cc = carcass[i];
+    if (cc > 0) {
+      r = r + (232 - r) * cc;
+      g = g + (226 - g) * cc;
+      b = b + (204 - b) * cc;
+    }
     const o = i * 4;
-    data[o] = color[0];
-    data[o + 1] = color[1];
-    data[o + 2] = color[2];
+    data[o] = r;
+    data[o + 1] = g;
+    data[o + 2] = b;
     data[o + 3] = 255;
   }
 }

@@ -5,6 +5,11 @@
  * mutators — it only reads the plain typed arrays it is handed.
  */
 import { paintTerrain as paintTerrainImageData } from './terrain-layer.js';
+import { drawOrganisms } from './organism-layer.js';
+import { drawNight } from './lens-layer.js';
+
+/** Re-paint the terrain ImageData at most this often, in frames (SPEC §6.5). */
+const TERRAIN_REPAINT_EVERY = 6;
 
 export class Renderer {
   /**
@@ -28,6 +33,10 @@ export class Renderer {
     this.terrainCanvas.height = height;
     this.terrainCtx = /** @type {CanvasRenderingContext2D} */ (this.terrainCanvas.getContext('2d'));
     this.terrainImage = this.terrainCtx.createImageData(width, height);
+
+    /** The last terrain grid received (terrain type never changes after generation/intervention); cached so a snapshot without FLAG_TERRAIN can still repaint the plant/carcass tint. */
+    this._cachedTerrain = null;
+    this._frame = 0;
   }
 
   /**
@@ -44,17 +53,40 @@ export class Renderer {
   }
 
   /**
-   * Paint the terrain grid into the 1px/tile ImageData, then scale it 4x
-   * into the offscreen world canvas with smoothing off.
-   * @param {Uint8Array} terrain
+   * Draw one frame from a decoded snapshot: the terrain/plant/carcass
+   * layer (repainted only when dirty or every 6th frame, SPEC §6.5),
+   * organisms, the night lens, then present at the camera transform.
+   * @param {*} snapshot a `decodeSnapshot()` result
+   * @param {import('./camera.js').Camera} cam
+   * @param {{ night?: boolean }} [opts]
    * @returns {void}
    */
-  paintTerrain(terrain) {
-    paintTerrainImageData(this.terrainImage, terrain, this.width, this.height);
-    this.terrainCtx.putImageData(this.terrainImage, 0, 0);
+  draw(snapshot, cam, { night = false } = {}) {
+    if (snapshot.terrain) this._cachedTerrain = snapshot.terrain;
+
+    const dirty = snapshot.terrainDirty || this._frame % TERRAIN_REPAINT_EVERY === 0;
+    if (dirty && this._cachedTerrain) {
+      paintTerrainImageData(this.terrainImage, {
+        terrain: this._cachedTerrain,
+        plants: snapshot.plants,
+        carcass: snapshot.carcass,
+        width: this.width,
+        height: this.height,
+      });
+      this.terrainCtx.putImageData(this.terrainImage, 0, 0);
+    }
+
+    const worldW = this.width * this.px;
+    const worldH = this.height * this.px;
     this.worldCtx.imageSmoothingEnabled = false;
-    this.worldCtx.clearRect(0, 0, this.worldCanvas.width, this.worldCanvas.height);
-    this.worldCtx.drawImage(this.terrainCanvas, 0, 0, this.width * this.px, this.height * this.px);
+    this.worldCtx.clearRect(0, 0, worldW, worldH);
+    this.worldCtx.drawImage(this.terrainCanvas, 0, 0, worldW, worldH);
+
+    drawOrganisms(this.worldCtx, snapshot, 'self');
+    if (night) drawNight(this.worldCtx, snapshot.light, worldW, worldH);
+
+    this._frame++;
+    this.present(cam);
   }
 
   /**
