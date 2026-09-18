@@ -1141,7 +1141,7 @@ always-latent edge case around tick 2587 (`y` became exactly `40` on a
 *before* the bounds check, so the check and the stored value agree.
 Verified with a direct 5,000-tick repro at seed 3 before and after.
 
-### P2-02 — pending sha (see commit)
+### P2-02 — 0840d4e
 Tests: `test/unit/brain.test.js` (5 cases: a hand-computed toy network,
 all-0.5 genes give zero weights, the output bias row shifts outputs with
 zero inputs, weight accessors round-trip, and a 100k-call allocation
