@@ -768,7 +768,7 @@ Config keys introduced: `stats.sampleEvery` (30), `stats.historyLength`
 (1024) — neither flagged as assumptions, matching the plan's Conventions
 table.
 
-### P1-10 — pending sha (see commit)
+### P1-10 — 2b6e302
 Tests: `test/unit/report.test.js` (9 cases: `ecologyReport` returns every
 field finite, `ticksPerSecond` defaults to 0, `args.mjs`'s
 `parseConfigOverrides`/`flag`/`flagAll`/`parseSeeds`/`parseSize` — all
