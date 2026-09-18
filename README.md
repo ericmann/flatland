@@ -9,6 +9,7 @@ character. The successor to [Helioza](https://github.com/ericmann/helioza).
   interaction.
 - **Build plan:** `docs/PLAN.md`, tracked task-by-task in `docs/PROGRESS.md`.
 - **Working in this repo:** `CLAUDE.md` and `docs/development.md`.
+- **Deployment:** `docs/deployment.md` (Cloudflare Pages).
 
 ## Quick start
 

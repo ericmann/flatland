@@ -11,7 +11,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P0-06 Terrain tuning sweep
 - [x] P0-07 A seeded terrain renders in the browser
 - [x] P0-08 Playwright smoke test and CI e2e step
-- [ ] P0-09 Phase 0 end — deployment docs, headers, push, preview
+- [x] P0-09 Phase 0 end — deployment docs, headers, push, preview
 - [ ] P1-01 Organism SoA store
 - [ ] P1-02 Genome layout and phenotype mapping
 - [ ] P1-03 World skeleton, genesis, hash, test helpers, determinism invariant
@@ -299,7 +299,7 @@ Interpretation:
 No config keys introduced (this task reads `cfg.world.width/height`,
 already defined in P0-02).
 
-### P0-08 — pending sha (see commit)
+### P0-08 — 3808574
 Tests: `test/e2e/smoke.spec.js` — "page loads with no console errors and
 paints a canvas" and "first frame is painted within 1500 ms". Both green
 on `chromium-desktop` and `pixel-7` (4/4) against the built preview server
@@ -320,3 +320,21 @@ Interpretation:
 Verified: `npx playwright install chromium` (browsers were already cached
 from tooling setup); `npm run test:ui` 4/4 green on both projects; `npm run
 typecheck && npm run lint && npm test` (88/88) all green.
+
+### P0-09 — pending sha (see commit)
+Tests: `test/unit/build-output.test.js` — "build copies _headers into
+dist" (spawns `npm run build`, 120s timeout, reads `dist/_headers` back).
+Confirmed failing with ENOENT before `public/_headers` existed.
+Verified: `npm run typecheck && npm run lint && npm test` (89/89) &&
+`npm run build` (confirms `dist/_headers` present) && `npm run test:ui`
+(4/4) all green.
+Preview URL: https://build-2026-09-18.flatland.pages.dev (per Conventions:
+non-alphanumeric characters in the branch name `build/2026-09-18` replaced
+with `-`). The human has connected the Cloudflare Pages project already
+(per this session's earlier conversation) but the branch has not yet been
+pushed as of this log entry — see the Push line below for the actual
+result.
+Phone: NOT VERIFIED (human)
+Phone checklist for Phase 0, to check on the preview URL above: "(1) map
+renders full-bleed with no white flash; (2) one-finger drag pans; (3) page
+does not scroll or bounce; (4) no console errors in remote devtools".
