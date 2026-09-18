@@ -6,7 +6,7 @@
  */
 import { TERRAIN } from './terrain.js';
 import { TAU } from './fmath.js';
-import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS, applyPhenotype } from './genome.js';
+import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS, applyPhenotype, mutate } from './genome.js';
 import { DEATH, EV_HUNT, EV_BIRTH, recordEvent } from './world.js';
 
 /**
@@ -362,8 +362,8 @@ export function checkBreeding(world, i) {
  * Resolve every queued birth, in queue order (= slot order), after kills
  * and deaths have already freed this tick's dead slots (SPEC §4.5, §6.3):
  * a parent that died this tick is skipped, since `resolve()` (world.js)
- * has already freed it by the time this runs. The child's genome is an
- * exact copy (mutation is P2-01, crossover is P5-04). The parent pays the
+ * has already freed it by the time this runs. The child's genome is a
+ * mutated copy of the parent's (SPEC §4.6; crossover is P5-04). The parent pays the
  * child's starting energy plus its body mass; the sum of realised changes
  * (parent's loss vs. child's energy + body) must be zero, with any
  * Float32 rounding gap going to `dissipated` — the same realised-vs-
@@ -394,6 +394,7 @@ export function resolveBirths(world) {
     for (let k = 0; k < gLen; k++) {
       store.genome[cGOff + k] = store.genome[pGOff + k];
     }
+    mutate(world.rng, store.genome, cGOff, cfg);
     applyPhenotype(cfg, store, slot);
 
     const childEnergyIntended = cfg.breeding.childEnergyFraction * store.energy[parent];

@@ -95,6 +95,12 @@ export const DEFAULTS = Object.freeze({
   brain: Object.freeze({
     hidden: 8,
   }),
+  genome: Object.freeze({
+    sigmaMut: 0.05,
+    pMut: 0.15,
+    pBig: 0.01,
+    hueScale: 0.2,
+  }),
   // Phenotype ranges (SPEC §4.6): traitValue(cfg, gene, trait) = lo + gene*(hi-lo).
   // One [lo, hi] pair per trait in genome.js's TRAIT_NAMES order.
   phenotype: Object.freeze({
@@ -449,6 +455,38 @@ export const DOCS = new Map([
       units: 'units',
       assumption: true,
       doc: 'Hidden-layer width of the brain (SPEC §4.7); sizes the genome weight block.',
+    },
+  ],
+  [
+    'genome.sigmaMut',
+    {
+      units: 'gene units',
+      assumption: true,
+      doc: 'Standard deviation of a small mutation step, before the hue-specific scale (SPEC §4.6).',
+    },
+  ],
+  [
+    'genome.pMut',
+    {
+      units: 'probability/gene',
+      assumption: true,
+      doc: 'Chance each gene gets a small mutation at birth (SPEC §4.6).',
+    },
+  ],
+  [
+    'genome.pBig',
+    {
+      units: 'probability/gene',
+      assumption: true,
+      doc: 'Chance each gene also gets a large (4x sigma) mutation at birth, independent of the small one (SPEC §4.6).',
+    },
+  ],
+  [
+    'genome.hueScale',
+    {
+      units: 'multiplier',
+      assumption: true,
+      doc: "Multiplies sigmaMut for the hue gene only, so hue drifts slower than other traits (SPEC §4.6: 'slow hue').",
     },
   ],
   [
