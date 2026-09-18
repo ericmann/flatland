@@ -321,19 +321,19 @@ Verified: `npx playwright install chromium` (browsers were already cached
 from tooling setup); `npm run test:ui` 4/4 green on both projects; `npm run
 typecheck && npm run lint && npm test` (88/88) all green.
 
-### P0-09 — pending sha (see commit)
+### P0-09 — 43e7851
 Tests: `test/unit/build-output.test.js` — "build copies _headers into
 dist" (spawns `npm run build`, 120s timeout, reads `dist/_headers` back).
 Confirmed failing with ENOENT before `public/_headers` existed.
 Verified: `npm run typecheck && npm run lint && npm test` (89/89) &&
 `npm run build` (confirms `dist/_headers` present) && `npm run test:ui`
 (4/4) all green.
+Push: succeeded (`git push -u origin HEAD`), branch `build/2026-09-18`.
 Preview URL: https://build-2026-09-18.flatland.pages.dev (per Conventions:
 non-alphanumeric characters in the branch name `build/2026-09-18` replaced
-with `-`). The human has connected the Cloudflare Pages project already
-(per this session's earlier conversation) but the branch has not yet been
-pushed as of this log entry — see the Push line below for the actual
-result.
+with `-`). The Cloudflare Pages project was connected by the human earlier
+in this session, so this preview should build; it has not been opened by
+a human as of this log entry.
 Phone: NOT VERIFIED (human)
 Phone checklist for Phase 0, to check on the preview URL above: "(1) map
 renders full-bleed with no white flash; (2) one-finger drag pans; (3) page
