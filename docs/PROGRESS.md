@@ -21,7 +21,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-07 Grazing, scavenging and predation
 - [x] P1-08 Density-dependent breeding (asexual, no mutation)
 - [x] P1-09 Chronicle core, stats sampling and the no-allocation invariant
-- [ ] P1-10 Headless harness, ecology sweep columns and the throughput gate
+- [x] P1-10 Headless harness, ecology sweep columns and the throughput gate
 - [ ] P1-11 Ecology tuning and the reduced soak test
 - [ ] P1-12 Fixed-timestep scheduler, protocol and snapshot encoder
 - [ ] P1-13 Worker glue, main-thread fallback, organism and light rendering
@@ -748,7 +748,7 @@ Interpretation:
   `OUTPUT.eat` was in P1-07 (avoiding a three-way import cycle through
   reflex.js).
 
-### P1-09 — pending sha (see commit)
+### P1-09 — 5041dd9
 Tests: `test/unit/chronicle.test.js` (5 cases: genesis entry exists at
 tick 0 with kind genesis and a non-empty place, flush returns only new
 entries then null across two rounds, entries stay ordered and are never
@@ -767,6 +767,57 @@ implementation attempt (a genuine first for this build — every other Phase
 Config keys introduced: `stats.sampleEvery` (30), `stats.historyLength`
 (1024) — neither flagged as assumptions, matching the plan's Conventions
 table.
+
+### P1-10 — pending sha (see commit)
+Tests: `test/unit/report.test.js` (9 cases: `ecologyReport` returns every
+field finite, `ticksPerSecond` defaults to 0, `args.mjs`'s
+`parseConfigOverrides`/`flag`/`flagAll`/`parseSeeds`/`parseSize` — all
+passed on first implementation) and `test/invariants/throughput.test.js`
+("a 64x40 world with 200 organisms sustains >= 2000 ticks/s") exactly as
+specified, including its `THROUGHPUT_MIN` env-var escape hatch.
+Interpretation — real performance fix required: `gather()`'s
+`directionalSample` in `src/core/senses.js` recomputed `cos`/`sin` of the 8
+compass angles (compile-time constants) on every call and allocated a
+fresh result object every call, up to twice per organism per tick. Fixed
+by precomputing a `COMPASS_UNIT` table once at module load and reusing a
+single scratch object (safe: `gather`'s two call sites fully extract every
+field before the next call). Raw Node throughput measured via a
+`stepN`-only benchmark went from 1074 to ~3000-3480 ticks/s across three
+repeated runs (1.5-1.7x over the 2000 budget) — a genuine fix kept
+regardless of the point below.
+Interpretation — throughput gate is environment-noisy under vitest, not
+under-optimized: after the fix above, `npx vitest run
+test/invariants/throughput.test.js` still measures only ~900-1450 ticks/s
+in this sandbox (varies run to run), well under raw Node's 3000+. Root-
+caused, not guessed: (1) ruled out `--expose-gc` as the cause (raw Node
+with it measured ~3069 t/s, an ~11% tax, not the ~2.3-3.8x gap seen); (2)
+ruled out `pool:'forks'`-specific fork overhead as the whole story by
+probing `process.execArgv` inside a vitest test — no unusual V8 flags;
+(3) built a minimal repro (two trivial exported functions called 50M times
+in a tight loop) that reproduced a ~14.8x slowdown under vitest vs raw
+Node (173ms vs 2565ms) for logic with zero simulation code involved, and
+confirmed the tax does not shrink with a 20M-iteration warm-up (2484ms) —
+so it is a steady-state characteristic of vitest's ES module execution
+model (its SSR/vite-node transform wraps cross-module bindings, defeating
+V8 inlining for hot cross-file calls), not a JIT-warmup or fork-startup
+artifact. `src/core`'s module boundaries (senses.js/fmath.js/reflex.js/
+ecology.js, per SPEC §6.2's module map) make this tax unavoidable for any
+determinism-respecting implementation without a much larger, out-of-scope
+restructuring. Since SPEC §8 targets "a GitHub runner" specifically (not
+this local sandbox) and the test's own design already builds in
+`THROUGHPUT_MIN` for exactly this kind of environment variance, local
+verification for this task was run with `THROUGHPUT_MIN=800 npm test`
+(green: 230/230). The committed default in `throughput.test.js` is
+unchanged at 2000 exactly per SPEC/PLAN — CI on the actual GitHub runner
+is the real arbiter; if it also falls short there, the fix is either
+raising CI's configured `THROUGHPUT_MIN` or a follow-up task to reduce
+`src/core`'s hot-path cross-module call surface.
+`scripts/headless.mjs` and `scripts/sweep.mjs`'s new ecology columns
+(`pop herb omni carn species H plants% born starved hunted old extinctAt
+tps`, gated on `--ticks > 0`, with a `survived` summary count) both
+verified by hand against `npm run headless -- --ticks 5000` and
+`node scripts/sweep.mjs --seeds 1..3 --ticks 2000`. `docs/development.md`
+documents both scripts' flags and the throughput override.
 Interpretation:
 - The genesis chronicle entry is added inside `genesis.js`'s `runGenesis`
   (in this task's Files touched, unlike P1-07/P1-08 where it was

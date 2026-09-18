@@ -3,50 +3,36 @@
 // before/after table pasted into commit messages, the progress log and
 // docs/tuning.md.
 //
-// For now (P0-06) this prints terrain-only columns: value noise plus the
-// contiguity guarantee. --ticks is accepted and ignored until P1-10 adds
-// ecology columns from a stepped World.
+// `--ticks 0` (the default was `ignored` before P1-10; now it gates the
+// mode) prints terrain-only columns: value noise plus the contiguity
+// guarantee. `--ticks N > 0` also steps a World N ticks per seed through
+// genesis and appends ecology columns.
 //
-//   node scripts/sweep.mjs --seeds 1..40
+//   node scripts/sweep.mjs --seeds 1..40 --ticks 0
 //   node scripts/sweep.mjs --seeds 1..40 --size 64x40 --json
-//   node scripts/sweep.mjs --seeds 1..40 --ticks 100000   (--ticks ignored)
+//   node scripts/sweep.mjs --seeds 1..40 --ticks 30000 --out docs/sweeps/p1-11-before.txt
 
+import { writeFileSync } from 'node:fs';
 import { makeConfig } from '../src/core/config.js';
 import { generateTerrain } from '../src/core/terrain.js';
+import { World } from '../src/core/world.js';
+import { runGenesis } from '../src/core/genesis.js';
+import { flag, flagAll, parseSeeds, parseSize, parseConfigOverrides } from './lib/args.mjs';
+import { ecologyReport } from './lib/report.mjs';
 
 const argv = process.argv.slice(2);
 
-/**
- * @param {string} name
- * @param {string|null} fallback
- * @returns {string|null}
- */
-function flag(name, fallback) {
-  const i = argv.indexOf(`--${name}`);
-  return i === -1 ? fallback : argv[i + 1];
-}
-
-/**
- * @param {string} spec
- * @returns {number[]}
- */
-function parseSeeds(spec) {
-  if (spec.includes('..')) {
-    const [a, b] = spec.split('..').map(Number);
-    return Array.from({ length: b - a + 1 }, (_, i) => a + i);
-  }
-  return spec.split(',').map(Number);
-}
-
-const SEEDS = parseSeeds(/** @type {string} */ (flag('seeds', '1..40')));
+const SEEDS = parseSeeds(/** @type {string} */ (flag(argv, 'seeds', '1..40')));
 const JSON_OUT = argv.includes('--json');
-const sizeSpec = flag('size', null);
+const TICKS = Number(flag(argv, 'ticks', '0'));
+const outPath = flag(argv, 'out', null);
+const size = parseSize(flag(argv, 'size', null));
+const configOverrides = parseConfigOverrides(flagAll(argv, 'config'));
 
-let cfg = makeConfig();
-if (sizeSpec) {
-  const [w, h] = sizeSpec.split('x').map(Number);
-  cfg = makeConfig({ world: { width: w, height: h } });
-}
+const baseOverrides = size
+  ? { world: { width: size.width, height: size.height }, ...configOverrides }
+  : configOverrides;
+const cfg = makeConfig(baseOverrides);
 
 /**
  * Fraction of tiles of each TERRAIN type, in enum order
@@ -80,7 +66,51 @@ function row(seed) {
   };
 }
 
+/**
+ * Step a World seeded with `seed` for `TICKS` ticks (stopping early if the
+ * population goes extinct), returning the ecology columns for one sweep
+ * row plus `extinctAt` (the tick population hit zero, or 0 if it survived).
+ * @param {number} seed
+ * @returns {*}
+ */
+function ecologyRow(seed) {
+  const world = new World(cfg, seed);
+  runGenesis(world);
+
+  let extinctAt = 0;
+  const start = process.hrtime.bigint();
+  let ticksRun = 0;
+  for (let i = 0; i < TICKS; i++) {
+    world.step();
+    ticksRun++;
+    if (world.store.count === 0) {
+      extinctAt = world.tick;
+      break;
+    }
+  }
+  const elapsedSeconds = Number(process.hrtime.bigint() - start) / 1e9;
+  const tps = elapsedSeconds > 0 ? ticksRun / elapsedSeconds : 0;
+
+  const report = ecologyReport(world, { ticksPerSecond: tps });
+  return {
+    pop: report.population.total,
+    herb: report.population.herbivore,
+    omni: report.population.omnivore,
+    carn: report.population.carnivore,
+    species: report.species.length,
+    H: report.diversityAvg,
+    plantsPct: report.plantsFraction * 100,
+    born: report.born,
+    starved: report.deaths.starved,
+    hunted: report.deaths.hunted,
+    old: report.deaths.oldAge,
+    extinctAt,
+    tps,
+  };
+}
+
 const rows = SEEDS.map(row);
+const ecologyRows = TICKS > 0 ? SEEDS.map(ecologyRow) : null;
 
 /**
  * @param {string|number} s
@@ -91,9 +121,10 @@ function pad(s, n) {
 }
 
 if (JSON_OUT) {
-  for (const r of rows) {
-    console.log(JSON.stringify(r));
-  }
+  rows.forEach((r, idx) => {
+    const merged = ecologyRows ? { ...r, ...ecologyRows[idx] } : r;
+    console.log(JSON.stringify(merged));
+  });
 } else {
   console.log(`world ${cfg.world.width}x${cfg.world.height}, ${rows.length} seed(s)\n`);
   console.log(
@@ -115,4 +146,36 @@ if (JSON_OUT) {
     `mean grass% ${mean('grassPct').toFixed(1)}  mean water% ${mean('waterPct').toFixed(1)}  ` +
       `seeds needing reroll: ${needingReroll}/${rows.length}  total rerolls: ${totalRerolls}`,
   );
+
+  if (ecologyRows) {
+    console.log();
+    console.log(
+      '     pop     herb     omni     carn  species        H  plants%     born  starved   hunted      old  extinctAt      tps',
+    );
+    ecologyRows.forEach((e) => {
+      console.log(
+        `${pad(e.pop, 8)} ${pad(e.herb, 8)} ${pad(e.omni, 8)} ${pad(e.carn, 8)} ${pad(e.species, 8)} ` +
+          `${pad(e.H.toFixed(3), 8)} ${pad(e.plantsPct.toFixed(1), 8)} ${pad(e.born, 8)} ${pad(e.starved, 8)} ` +
+          `${pad(e.hunted, 8)} ${pad(e.old, 8)} ${pad(e.extinctAt, 10)} ${pad(e.tps.toFixed(0), 8)}`,
+      );
+    });
+    const survived = ecologyRows.filter((e) => e.pop > 0 && e.herb > 0 && e.carn > 0).length;
+    const emean = (/** @type {'pop'|'H'|'plantsPct'|'tps'} */ key) =>
+      ecologyRows.reduce((a, e) => a + e[key], 0) / ecologyRows.length;
+    console.log('---');
+    console.log(
+      `mean pop ${emean('pop').toFixed(1)}  mean H ${emean('H').toFixed(3)}  mean plants% ${emean('plantsPct').toFixed(1)}  ` +
+        `mean tps ${emean('tps').toFixed(0)}  survived: ${survived}/${ecologyRows.length}`,
+    );
+  }
+}
+
+if (outPath) {
+  const lines = [];
+  lines.push(`world ${cfg.world.width}x${cfg.world.height}, ${rows.length} seed(s)`);
+  rows.forEach((r, idx) => {
+    const merged = ecologyRows ? { ...r, ...ecologyRows[idx] } : r;
+    lines.push(JSON.stringify(merged));
+  });
+  writeFileSync(outPath, lines.join('\n') + '\n');
 }
