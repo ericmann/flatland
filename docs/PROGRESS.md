@@ -9,7 +9,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P0-04 Value noise
 - [x] P0-05 Terrain generation and region names
 - [x] P0-06 Terrain tuning sweep
-- [ ] P0-07 A seeded terrain renders in the browser
+- [x] P0-07 A seeded terrain renders in the browser
 - [ ] P0-08 Playwright smoke test and CI e2e step
 - [ ] P0-09 Phase 0 end — deployment docs, headers, push, preview
 - [ ] P1-01 Organism SoA store
@@ -212,7 +212,7 @@ Interpretation:
   mechanism works; bringing that reroll count down to the P0-06 target
   (≤2/40) is P0-06's job, not this task's.
 
-### P0-06 — pending sha (see commit)
+### P0-06 — 0a0dd35
 Sweep (`docs/tuning.md`): before, seeds needing reroll 15/40 (28 total,
 mean grass 43.4%/water 10.9% by tile count); after (re-weighted octaves
 toward the low-frequency layer, widened mud/grass/scrub thresholds), 0/40
@@ -257,3 +257,44 @@ Interpretation:
   `package.json`, `package-lock.json` and `tsconfig.json`, outside this
   task's stated Files touched, but was unavoidable to make `npm run
   typecheck` pass on the required `scripts/sweep.mjs`.
+
+### P0-07 — pending sha (see commit)
+Tests: `test/unit/camera.test.js` (10 cases: clamp keeps the view inside
+the world / centres a smaller world / clamps z to [1,8], zoomAt keeps the
+anchor fixed and snaps/clamps zoom, fit for a smaller-than-view world and
+the floor-at-1 case for a larger one, screenToWorld inverts worldToScreen)
+and `test/unit/terrain-layer.test.js` (2 cases: palette colour + alpha 255
+per tile, TCOL has one 3-tuple per terrain type). Confirmed failing with
+"Cannot find module" before implementation; all 10 camera cases needed one
+fix (see Interpretation) after the first attempt, terrain-layer passed
+immediately.
+Beyond the stated acceptance tests, verified in a real headless Chromium
+(a throwaway script, deleted after use, not part of this commit): `npm run
+dev` serves the page with zero console errors; a mouse drag changes the
+rendered frame (pan works); a wheel scroll changes it again (zoom works);
+loading `?seed=2` after `?seed=1` produces a visibly different screenshot
+(different seeds render different terrain) — this is the task's own
+verification line, confirmed rather than assumed.
+Interpretation:
+- `fit`'s "min 1" (SPEC §6.5's zoom range is 1-8, and tiles are drawn at
+  integer pixel scales) means it floors at zoom 1 and does not shrink
+  further even when the world is larger than the view — it will crop
+  rather than go below the platform's minimum supported zoom. My first
+  draft of the acceptance test assumed the opposite (shrink-to-fit an
+  oversized world) and failed against my own `fit` implementation, which
+  already matched the mockup's `fitWorld` (`Math.max(1, Math.min(...))`)
+  and the literal "floored at 1" wording; I corrected the test, not the
+  code, and split it into the two distinct cases (world smaller than view
+  vs. larger) so both behaviors are covered explicitly.
+- `document.documentElement.dataset.painted = '1'` is set after the first
+  `present()` even though P0-08 (Playwright smoke test) is the task that
+  actually needs it and doesn't list `src/main.js` in its own Files
+  touched — P0-07 is the only task that owns the render loop where this
+  hook naturally belongs, so it's added now as a small forward-compatible
+  addition rather than leaving P0-08 with an unowned dependency.
+- `index.html` gained one line (`<link rel="stylesheet" href="/src/style.css">`)
+  even though it wasn't listed in this task's Files touched — `src/style.css`
+  is listed and is useless unless linked from the page; treated as
+  implied by the stated file list.
+No config keys introduced (this task reads `cfg.world.width/height`,
+already defined in P0-02).
