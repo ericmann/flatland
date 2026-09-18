@@ -1112,7 +1112,7 @@ the preview URL above:
 6. `?worker=0` still runs (fixed above; verified in a desktop browser,
    not yet on a phone).
 
-### P2-01 — pending sha (see commit)
+### P2-01 — 1b1d2f3
 Tests: `test/unit/genome.test.js` (extended, +11 cases: bounds over 10,000
 mutations of an extreme genome; sd checks for pMut-only, pBig-only and
 hue-scaled mutation within ±15%; a no-op case; determinism for a fixed
