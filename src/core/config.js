@@ -56,6 +56,41 @@ export const DEFAULTS = Object.freeze({
     moveCost: Object.freeze([3, 1, 1.6, 1, 1.3, 1.5]),
     visibility: Object.freeze([1, 1.3, 1, 1, 0.45, 1]),
   }),
+  organisms: Object.freeze({
+    energyMaxBase: 150,
+    bodyMassPerSize: 40,
+  }),
+  brain: Object.freeze({
+    hidden: 8,
+  }),
+  // Phenotype ranges (SPEC §4.6): traitValue(cfg, gene, trait) = lo + gene*(hi-lo).
+  // One [lo, hi] pair per trait in genome.js's TRAIT_NAMES order.
+  phenotype: Object.freeze({
+    size: Object.freeze([0.6, 2.0]),
+    speed: Object.freeze([0.05, 0.25]),
+    diet: Object.freeze([0, 1]),
+    visionPeak: Object.freeze([0, 1]),
+    visionWidth: Object.freeze([0.15, 0.6]),
+    visionRange: Object.freeze([4, 16]),
+    metabolism: Object.freeze([0.6, 1.4]),
+    lifespan: Object.freeze([1.0, 3.0]),
+    maturity: Object.freeze([0.15, 0.45]),
+    breedThreshold: Object.freeze([0.5, 0.9]),
+    boldness: Object.freeze([0, 1]),
+    sociality: Object.freeze([0, 1]),
+    prefTemp: Object.freeze([0, 1]),
+    swim: Object.freeze([0, 1]),
+    resistance: Object.freeze([0, 1]),
+    hue: Object.freeze([0, 360]),
+    emit0: Object.freeze([0, 1]),
+    emit1: Object.freeze([0, 1]),
+    emit2: Object.freeze([0, 1]),
+    emit3: Object.freeze([0, 1]),
+    sense0: Object.freeze([0, 1]),
+    sense1: Object.freeze([0, 1]),
+    sense2: Object.freeze([0, 1]),
+    sense3: Object.freeze([0, 1]),
+  }),
 });
 
 /** @type {Map<string, ConfigDoc>} */
@@ -196,7 +231,67 @@ export const DOCS = new Map([
       doc: 'Detection-range multiplier by terrain type (SPEC §4.2: sand exposed, scrub hides).',
     },
   ],
+  [
+    'organisms.energyMaxBase',
+    {
+      units: 'energy',
+      assumption: true,
+      doc: 'Base of energyMax = energyMaxBase * (0.5 + size) (SPEC §4.5).',
+    },
+  ],
+  [
+    'organisms.bodyMassPerSize',
+    {
+      units: 'energy per size unit',
+      assumption: true,
+      doc: 'body = bodyMassPerSize * size: energy paid by the parent at birth, returned to the carcass at death (SPEC §4.4, §4.5).',
+    },
+  ],
+  [
+    'brain.hidden',
+    {
+      units: 'units',
+      assumption: true,
+      doc: 'Hidden-layer width of the brain (SPEC §4.7); sizes the genome weight block.',
+    },
+  ],
 ]);
+
+// One DOCS entry per phenotype.<trait> range (SPEC §4.6), generated instead
+// of duplicated by hand for all 24 traits.
+const PHENOTYPE_UNITS = Object.freeze({
+  size: 'multiplier (sprite size and body mass)',
+  speed: 'tiles/tick',
+  diet: 'axis [0,1] (0 = obligate herbivore, 1 = obligate carnivore)',
+  visionPeak: 'light level [0,1]',
+  visionWidth: 'light level width',
+  visionRange: 'tiles',
+  metabolism: 'multiplier',
+  lifespan: 'days',
+  maturity: 'fraction of lifespan',
+  breedThreshold: 'fraction of energyMax',
+  boldness: 'unitless [0,1]',
+  sociality: 'unitless [0,1]',
+  prefTemp: 'unitless [0,1]',
+  swim: 'unitless [0,1]',
+  resistance: 'unitless [0,1]',
+  hue: 'degrees',
+  emit0: 'unitless [0,1]',
+  emit1: 'unitless [0,1]',
+  emit2: 'unitless [0,1]',
+  emit3: 'unitless [0,1]',
+  sense0: 'unitless [0,1]',
+  sense1: 'unitless [0,1]',
+  sense2: 'unitless [0,1]',
+  sense3: 'unitless [0,1]',
+});
+for (const [trait, units] of Object.entries(PHENOTYPE_UNITS)) {
+  DOCS.set(`phenotype.${trait}`, {
+    units,
+    assumption: true,
+    doc: `Phenotype range [lo, hi] for the ${trait} trait gene (SPEC §4.6).`,
+  });
+}
 
 /**
  * Is `v` a plain object (not an array, not null, not a class instance)?
