@@ -4,7 +4,10 @@ import { World } from '../../src/core/world.js';
 import { runGenesis } from '../../src/core/genesis.js';
 import { TERRAIN } from '../../src/core/terrain.js';
 import { lightAt } from '../../src/core/light.js';
-import { alive, makeWorld } from '../helpers.js';
+import { gather } from '../../src/core/senses.js';
+import { policy, OUTPUT } from '../../src/core/reflex.js';
+import { genomeLength, BRAIN_OUTPUTS, TRAIT_COUNT } from '../../src/core/genome.js';
+import { alive, makeWorld, isolate } from '../helpers.js';
 
 describe('genesis', () => {
   it('places every organism on a non-water tile inside the map', () => {
@@ -119,5 +122,57 @@ describe('World construction', () => {
     expect(world.height).toBe(6);
     runGenesis(world);
     expect(world.store.count).toBeGreaterThan(0);
+  });
+});
+
+describe('brain vs. reflex policy wiring (P2-03)', () => {
+  it("with brain.enabled = false the reflex policy runs (outputs equal the policy's)", () => {
+    // Full energy (no hunger) and no threat/food gradient near the
+    // organism, so reflexLayer's force-eat never fires and act() never
+    // touches outputs: the full step() pipeline should leave outputs
+    // exactly as policy() (not the brain) set them.
+    const opts = {
+      width: 20,
+      height: 20,
+      seed: 1,
+      terrain: TERRAIN.GRASS,
+      config: isolate('movement'),
+      organisms: [{ x: 10, y: 10 }],
+    };
+    const stepped = makeWorld(opts);
+    const reference = makeWorld(opts);
+
+    stepped.step();
+
+    reference.tick++;
+    reference.light = lightAt(reference.tick, reference.cfg);
+    reference.grid.rebuild(reference.store);
+    gather(reference, 0);
+    policy(reference, 0);
+
+    expect(Array.from(stepped.outputs.slice(0, BRAIN_OUTPUTS))).toEqual(
+      Array.from(reference.outputs.slice(0, BRAIN_OUTPUTS)),
+    );
+  });
+
+  it('the reflex layer forces eat on food when hungry even if the brain says otherwise', () => {
+    const world = makeWorld({
+      width: 20,
+      height: 20,
+      seed: 1,
+      terrain: TERRAIN.GRASS,
+      config: isolate('movement', 'plants', 'brain'),
+      organisms: [{ x: 10, y: 10, energy: 1 }], // very hungry
+    });
+    // Zero every weight gene: the brain's own prediction for `eat` is
+    // sigmoid of a strongly negative bias (weight = (0 - 0.5)*2*scale), i.e.
+    // "don't eat" — the reflex layer must override this when hungry on food.
+    const gLen = genomeLength(world.cfg);
+    world.store.genome.fill(0, TRAIT_COUNT, gLen); // slot 0's own weight block
+    world.plants.fill(1); // food present under the organism
+
+    world.step();
+
+    expect(world.outputs[OUTPUT.eat]).toBe(1);
   });
 });

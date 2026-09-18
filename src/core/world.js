@@ -28,6 +28,7 @@ import { applyDue } from './interventions.js';
 import { Grid } from './grid.js';
 import { gather } from './senses.js';
 import { policy, reflexLayer, act, metabolise, ageOrganism } from './reflex.js';
+import { forward } from './brain.js';
 import { Chronicle } from './chronicle.js';
 import { Stats } from './stats.js';
 
@@ -311,7 +312,20 @@ export class World {
     for (let i = 0; i < this.store.highWater; i++) {
       if (!this.store.alive[i]) continue;
       gather(this, i);
-      policy(this, i);
+      if (this.cfg.brain.enabled) {
+        forward(
+          this.cfg,
+          this.store.genome,
+          i * this.store.genomeLength,
+          this.inputs,
+          i * BRAIN_INPUTS,
+          this.outputs,
+          i * BRAIN_OUTPUTS,
+          this.hidden,
+        );
+      } else {
+        policy(this, i);
+      }
       reflexLayer(this, i);
       act(this, i);
       // Eating and predation-target-finding slot in here (SPEC §6.3,

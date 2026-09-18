@@ -6,6 +6,7 @@
 import { sin, cos, TAU } from './fmath.js';
 import { TERRAIN } from './terrain.js';
 import { TRAIT, TRAIT_COUNT, applyPhenotype } from './genome.js';
+import { writePrior } from './brain.js';
 import { regionName } from './names.js';
 import { KIND } from './chronicle.js';
 
@@ -107,6 +108,13 @@ export function runGenesis(world) {
   let firstCentre = null;
   let created = 0;
 
+  // The seeded prior (SPEC §4.7): computed once, in gene space, then each
+  // founder's weight genes are the prior plus their own noise draw.
+  const priorGenome = new Float32Array(gLen);
+  if (g.brainPrior === 'seeded') {
+    writePrior(priorGenome, 0, cfg);
+  }
+
   for (let speciesIndex = 0; speciesIndex < lineages.length; speciesIndex++) {
     const lineage = lineages[speciesIndex];
     const centre = findLineageCentre(world);
@@ -131,10 +139,12 @@ export function runGenesis(world) {
         const v = founderTraits[t] + rng.gaussian() * g.lineageNoise;
         store.genome[gOff + t] = Math.max(0, Math.min(1, v));
       }
-      // Weight block stays at 0.5 (SPEC §4.6: "the rare, big mutation");
-      // P2-03 replaces this with a seeded reflex prior.
+      // Weight genes (SPEC §4.7): seeded prior + per-member noise, or
+      // uniform random, per genesis.brainPrior.
       for (let k = TRAIT_COUNT; k < gLen; k++) {
-        store.genome[gOff + k] = 0.5;
+        const v =
+          g.brainPrior === 'seeded' ? priorGenome[k] + rng.gaussian() * g.brainNoise : rng.float();
+        store.genome[gOff + k] = Math.max(0, Math.min(1, v));
       }
       applyPhenotype(cfg, store, slot);
 

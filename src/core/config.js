@@ -152,6 +152,8 @@ export const DEFAULTS = Object.freeze({
     energyFraction: 0.6,
     dietHerbivore: Object.freeze([0.02, 0.2]),
     dietCarnivore: Object.freeze([0.8, 0.98]),
+    brainPrior: 'seeded',
+    brainNoise: 0.1,
   }),
   senses: Object.freeze({
     sampleDistance: 3,
@@ -794,6 +796,14 @@ const GENESIS_DOCS = Object.freeze({
   dietCarnivore: [
     'diet axis [0,1] range',
     'Range the carnivore founder diet gene is drawn from (SPEC §4.6 diet axis).',
+  ],
+  brainPrior: [
+    "'seeded' | 'random'",
+    "'seeded' initialises founder brain weights from brain.writePrior plus noise; 'random' draws each weight gene uniformly (SPEC §4.7).",
+  ],
+  brainNoise: [
+    'sd of gene value',
+    "Standard deviation of each founder's per-weight-gene noise around the seeded prior (only used when brainPrior = 'seeded').",
   ],
 });
 for (const [key, [units, doc]] of Object.entries(GENESIS_DOCS)) {

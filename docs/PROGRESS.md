@@ -30,7 +30,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-16 Phase 1 end — push, preview, phone checks
 - [x] P2-01 Mutation and genetic distance
 - [x] P2-02 Brain forward pass over the SoA
-- [ ] P2-03 Brains drive behaviour; seeded genesis prior; reflex layer retained
+- [x] P2-03 Brains drive behaviour; seeded genesis prior; reflex layer retained
 - [ ] P2-04 Species table, speciation, extinction, phylogeny and lineage names
 - [ ] P2-05 Evolution tuning — mutation, speciation, brain
 - [ ] P2-06 Protocol extension — species table, phylogeny events, family record, richer status
@@ -1155,3 +1155,32 @@ same avoid-an-import-cycle reason `ecology.js` duplicates `OUTPUT.eat`
 (P1-07's log entry) — `reflex.js` will import `brain.js` once P2-03 wires
 the forward pass into the policy switch, so `brain.js` importing
 `reflex.js` now would set up exactly that cycle one task early.
+
+### P2-03 — pending sha (see commit)
+Tests: `test/unit/brain.test.js` (+1 case: a prior brain turns toward
+food, away from a threat, and eats when hungry on food),
+`test/unit/genesis.test.js` (new file, 2 cases: seeded-prior founders
+differ only by noise, sd ≈ `brainNoise`; random-prior weight genes are
+uniform, mean ≈ 0.5, sd ≈ 1/√12), `test/unit/world.test.js` (+2 cases:
+`brain.enabled = false` reproduces `policy()`'s outputs exactly;
+`reflexLayer` overrides a brain that predicts "don't eat" when hungry on
+food). All new cases passed on the first implementation attempt.
+Config keys introduced: `genesis.brainPrior` (`'seeded'`, ⚠️),
+`genesis.brainNoise` (0.1, ⚠️).
+Interpretation: `writePrior` zeroes every weight gene first (not just the
+six mapped `W1` entries and the listed `W2` entries), so the prior is
+fully determined regardless of the genome buffer's prior contents —
+PLAN.md's "every other W1 = 0" / "all else 0" read most naturally as a
+completeness statement about the *result*, not an instruction to leave
+untouched genes at whatever a caller happened to put there.
+Finding, not fixed here (out of scope: "Tuning, speciation"; flagging for
+P5-06's scheduled performance pass): wiring in `brain.forward()` is
+substantially more expensive than the Phase 1 reflex `policy()` it
+replaces. Raw Node throughput on the P1-10 benchmark scenario dropped
+from ~3450 ticks/s to ~2000 ticks/s (measured directly, not a vitest
+artifact — see P1-10's log for that separate, still-present ~2.3x vitest
+tax on top of this). `npm test`'s throughput invariant needed a lower
+local `THROUGHPUT_MIN` override to verify this task (documented, not a
+change to the committed default, same pattern as P1-10/P1-12); `npm run
+test:soak` (the P1-11-pinned seed) and `npm run headless -- --ticks
+30000` both still ran correctly, just slower.
