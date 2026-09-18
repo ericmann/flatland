@@ -38,6 +38,55 @@ npm run headless     # node scripts/headless.mjs — run a seed with no browser
 npm run sweep        # node scripts/sweep.mjs — one row per seed, for tuning
 ```
 
+## Headless harness
+
+`scripts/headless.mjs` steps one seeded `World` with no browser and prints an
+ecology report: population by diet class and species, births, deaths by
+cause, hunts, speciation/extinction/immigration counts, Shannon diversity,
+plants fraction, a vision-class histogram, achieved ticks/s, the world hash,
+and the last 10 chronicle lines.
+
+```
+node scripts/headless.mjs                                    # seed 1, 30000 ticks, default size
+node scripts/headless.mjs --seed 2 --ticks 5000
+node scripts/headless.mjs --size 64x40 --config genesis.herbivoresPerLineage=56
+node scripts/headless.mjs --json --quiet                     # one JSON object, no other output
+```
+
+Flags: `--seed N` (1), `--ticks N` (30000), `--size WxH`, `--config
+key.path=value` (repeatable; dotted keys, numbers/booleans/strings parsed
+automatically), `--quiet` (suppress the human-readable report), `--json`
+(print one JSON object instead).
+
+## Sweep script
+
+`scripts/sweep.mjs` runs many seeds and prints one row per seed, for pasting
+before/after tables into a tuning task's commit message. `--ticks 0` (the
+default) prints terrain-only columns; `--ticks N > 0` also steps a `World`
+through genesis for `N` ticks per seed (stopping early on extinction) and
+appends ecology columns: `pop herb omni carn species H plants% born starved
+hunted old extinctAt tps`, plus a summary row with means and
+`survived = count(pop > 0 ∧ herb > 0 ∧ carn > 0)`.
+
+```
+npm run sweep -- --seeds 1..40 --ticks 0            # terrain only
+npm run sweep -- --seeds 1..40 --ticks 30000        # terrain + ecology
+node scripts/sweep.mjs --seeds 1..3 --ticks 2000 --json
+node scripts/sweep.mjs --seeds 1..40 --ticks 30000 --out docs/sweeps/p1-11-before.txt
+```
+
+Flags: `--seeds a..b|a,b,c` (1..40), `--ticks N` (0), `--size WxH`, `--config
+key.path=value` (repeatable), `--json`, `--out file` (also write the table to
+a file, one JSON line per seed).
+
+## Throughput gate
+
+`test/invariants/throughput.test.js` (SPEC §8) asserts a 64x40, 200-organism
+world sustains at least `THROUGHPUT_MIN` (env var, default 2000) ticks/s on a
+GitHub runner. Override locally with e.g. `THROUGHPUT_MIN=1000 npm test` if
+your machine's `vitest` overhead differs from CI's — see the P1-10 log entry
+in `docs/PROGRESS.md` for a measured comparison against raw Node.
+
 ## Determinism rules (see CLAUDE.md for the full list)
 
 - Only `world.rng` produces randomness in `src/core` and `src/sim`. No

@@ -36,6 +36,28 @@ export const INPUT = Object.freeze({
 const COMPASS_DIRECTIONS = 8;
 
 /**
+ * Unit vectors for the 8 compass directions, precomputed once at module
+ * load rather than recomputed with `cos`/`sin` on every
+ * `directionalSample` call — these 8 angles are compile-time constants,
+ * and `directionalSample` runs up to twice per organism per tick, so this
+ * removes up to 16 fmath transcendental calls per organism per tick
+ * (found while chasing the P1-10 throughput gate; see the P1-10 log entry).
+ * @type {[number, number][]}
+ */
+const COMPASS_UNIT = Array.from({ length: COMPASS_DIRECTIONS }, (_, k) => {
+  const angle = (k * TAU) / COMPASS_DIRECTIONS;
+  return [cos(angle), sin(angle)];
+});
+
+/**
+ * Scratch result for `directionalSample`, reused across calls instead of
+ * allocating a fresh object each time (SPEC §3.5: no per-tick allocation).
+ * Safe because `gather` only ever calls `directionalSample` synchronously,
+ * one at a time, reading the result immediately.
+ */
+const sampleScratch = { rawX: 0, rawY: 0, maxSample: 0 };
+
+/**
  * The flat tile index for a world position, or -1 if out of bounds.
  * @param {import('./world.js').World} world
  * @param {number} x
@@ -67,9 +89,8 @@ function directionalSample(world, x, y, distance, field, excludeWater) {
   let rawY = 0;
   let maxSample = 0;
   for (let k = 0; k < COMPASS_DIRECTIONS; k++) {
-    const angle = (k * TAU) / COMPASS_DIRECTIONS;
-    const ux = cos(angle);
-    const uy = sin(angle);
+    const ux = COMPASS_UNIT[k][0];
+    const uy = COMPASS_UNIT[k][1];
     const idx = tileAt(world, x + distance * ux, y + distance * uy);
     let sample = 0;
     if (idx !== -1 && !(excludeWater && world.terrain[idx] === TERRAIN.WATER)) {
@@ -79,7 +100,10 @@ function directionalSample(world, x, y, distance, field, excludeWater) {
     rawY += uy * sample;
     if (sample > maxSample) maxSample = sample;
   }
-  return { rawX, rawY, maxSample };
+  sampleScratch.rawX = rawX;
+  sampleScratch.rawY = rawY;
+  sampleScratch.maxSample = maxSample;
+  return sampleScratch;
 }
 
 /**
