@@ -23,6 +23,7 @@ export const DEFAULTS = Object.freeze({
     height: 160,
     maxOrganisms: 2000,
     cellSize: 8,
+    maxSpecies: 2048,
   }),
   time: Object.freeze({
     ticksPerDay: 1800,
@@ -91,6 +92,17 @@ export const DEFAULTS = Object.freeze({
     sense2: Object.freeze([0, 1]),
     sense3: Object.freeze([0, 1]),
   }),
+  genesis: Object.freeze({
+    herbivoreLineages: 3,
+    herbivoresPerLineage: 50,
+    carnivoreLineages: 1,
+    carnivoresPerLineage: 24,
+    lineageNoise: 0.05,
+    clusterRadius: 12,
+    energyFraction: 0.6,
+    dietHerbivore: Object.freeze([0.02, 0.2]),
+    dietCarnivore: Object.freeze([0.8, 0.98]),
+  }),
 });
 
 /** @type {Map<string, ConfigDoc>} */
@@ -125,6 +137,14 @@ export const DOCS = new Map([
       units: 'tiles',
       assumption: false,
       doc: 'Spatial hash cell size for the neighbour grid (SPEC §6.3).',
+    },
+  ],
+  [
+    'world.maxSpecies',
+    {
+      units: 'count',
+      assumption: false,
+      doc: 'Fixed capacity of the species table (memory ceiling, not an ecological cap; SPEC §10), added in P1-03 for later use by P2-04.',
     },
   ],
   [
@@ -291,6 +311,37 @@ for (const [trait, units] of Object.entries(PHENOTYPE_UNITS)) {
     assumption: true,
     doc: `Phenotype range [lo, hi] for the ${trait} trait gene (SPEC §4.6).`,
   });
+}
+
+// One DOCS entry per genesis.* key (SPEC §4.5, §4.9), all assumptions.
+const GENESIS_DOCS = Object.freeze({
+  herbivoreLineages: ['count', 'Number of founder herbivore lineages at genesis.'],
+  herbivoresPerLineage: ['count', 'Members per herbivore founder lineage at genesis.'],
+  carnivoreLineages: ['count', 'Number of founder carnivore lineages at genesis.'],
+  carnivoresPerLineage: ['count', 'Members per carnivore founder lineage at genesis.'],
+  lineageNoise: [
+    'sd of gene value',
+    "Standard deviation of each member's per-trait-gene noise around its lineage founder.",
+  ],
+  clusterRadius: [
+    'tiles',
+    "Radius of the uniform disc genesis members are scattered in around their lineage's centre.",
+  ],
+  energyFraction: [
+    'fraction of energyMax',
+    'Starting energy for a genesis organism, as a fraction of its own energyMax.',
+  ],
+  dietHerbivore: [
+    'diet axis [0,1] range',
+    'Range the herbivore founder diet gene is drawn from (SPEC §4.6 diet axis).',
+  ],
+  dietCarnivore: [
+    'diet axis [0,1] range',
+    'Range the carnivore founder diet gene is drawn from (SPEC §4.6 diet axis).',
+  ],
+});
+for (const [key, [units, doc]] of Object.entries(GENESIS_DOCS)) {
+  DOCS.set(`genesis.${key}`, { units, assumption: true, doc });
 }
 
 /**
