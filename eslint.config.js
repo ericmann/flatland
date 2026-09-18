@@ -78,9 +78,18 @@ export default [
   },
   // Node-side tooling.
   {
-    files: ['scripts/**/*.mjs', 'scripts/**/*.js', 'test/**/*.js'],
+    files: ['scripts/**/*.mjs', 'scripts/**/*.js', 'test/**/*.js', 'playwright.config.js'],
     languageOptions: {
       globals: { ...globals.node },
+    },
+  },
+  // Playwright e2e specs run under Node, but page.evaluate/waitForFunction
+  // callbacks are strings/closures executed inside the browser, so these
+  // files reference both node and browser globals.
+  {
+    files: ['test/e2e/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
     },
   },
   // src/core and src/sim: no Math.random, no Date.now, no wall-clock.

@@ -18,7 +18,7 @@
     "test:watch": "vitest",
     "test:soak": "vitest run test/soak",
     "test:all": "vitest run",
-    "test:ui": "echo \"no e2e yet\"",
+    "test:ui": "playwright test",
     "typecheck": "tsc --noEmit --checkJs",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
