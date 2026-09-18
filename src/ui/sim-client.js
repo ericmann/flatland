@@ -59,11 +59,16 @@ export class SimClient {
  * Pick a `Worker` transport when available, else the main-thread fallback
  * (SPEC §6.4, §10: some embedded WebViews have no `Worker`). Both expose
  * the same `postMessage`/`onmessage` surface, so `SimClient` never knows
- * which one it has.
+ * which one it has. `?worker=0` forces the fallback even when `Worker`
+ * exists, for testing both paths (P1-13's own verification step, picked
+ * up in P1-16 alongside the phone checklist's `?worker=0 still runs`
+ * item — this function existed since P1-13 but never actually read the
+ * query param it was supposed to honour).
  * @returns {*}
  */
 export function createSim() {
-  if (typeof Worker === 'function') {
+  const forceFallback = new URLSearchParams(window.location.search).get('worker') === '0';
+  if (!forceFallback && typeof Worker === 'function') {
     return new Worker(new URL('../sim/worker.js', import.meta.url), { type: 'module' });
   }
   return createMainThreadSim();
