@@ -1,11 +1,13 @@
 /**
- * Genome layout and trait -> phenotype mapping (SPEC §4.6). No mutation
- * (P2-01), no distance (P2-01) and no brain evaluation (P2-02) here.
+ * Genome layout, trait -> phenotype mapping, mutation and trait-block
+ * distance (SPEC §4.6). No brain evaluation (P2-02) here.
  *
- * Determinism (SPEC §3.1): every export is a pure function of its
- * arguments; nothing here touches randomness.
+ * Determinism (SPEC §3.1): every export except `mutate` is a pure
+ * function of its arguments; `mutate` consumes `world.rng` (passed in,
+ * never touched globally) in gene-index order.
  */
 import { TRAIT_COUNT } from './organisms.js';
+import { clamp } from './fmath.js';
 
 export { TRAIT_COUNT };
 
@@ -102,6 +104,81 @@ export function traitValue(cfg, gene, trait) {
   const phenotype = cfg.phenotype;
   const [lo, hi] = phenotype[TRAIT_NAMES[trait]];
   return lo + gene * (hi - lo);
+}
+
+/**
+ * Mutate one organism's whole genome (trait block plus brain weights) in
+ * place, in gene-index order (SPEC §4.6): for each gene, independently, a
+ * small step (`chance(pMut)` -> `+= gaussian() x sigma`) and a large step
+ * (`chance(pBig)` -> `+= gaussian() x 4*sigma`), clamped to [0,1]. The hue
+ * gene's sigma is scaled by `genome.hueScale` so hue drifts slower than
+ * other traits.
+ * @param {import('./rng.js').Rng} rng
+ * @param {Float32Array} genome
+ * @param {number} offset the genome's start index (`slot * genomeLength`)
+ * @param {typeof import('./config.js').DEFAULTS} cfg
+ * @param {{ forceBig?: boolean }} [opts] `forceBig` (immigration, P3-06)
+ *   applies the large step unconditionally, skipping the `chance(pBig)`
+ *   draw entirely.
+ * @returns {void}
+ */
+export function mutate(rng, genome, offset, cfg, opts = {}) {
+  const len = genomeLength(cfg);
+  const sigma = cfg.genome.sigmaMut;
+  const pMut = cfg.genome.pMut;
+  const pBig = cfg.genome.pBig;
+  const hueScale = cfg.genome.hueScale;
+
+  for (let k = 0; k < len; k++) {
+    const sd = k === TRAIT.hue ? sigma * hueScale : sigma;
+    let g = genome[offset + k];
+    if (rng.chance(pMut)) {
+      g += rng.gaussian() * sd;
+    }
+    if (opts.forceBig || rng.chance(pBig)) {
+      g += rng.gaussian() * sd * 4;
+    }
+    genome[offset + k] = clamp(g, 0, 1);
+  }
+}
+
+/** Euclidean trait-block distance if every trait gene differed maximally. */
+export const MAX_TRAIT_DISTANCE = Math.sqrt(TRAIT_COUNT);
+
+/**
+ * Euclidean distance between two genomes' trait blocks only (SPEC §4.6:
+ * the brain weight block is excluded).
+ * @param {Float32Array} genome
+ * @param {number} aOff
+ * @param {number} bOff
+ * @returns {number}
+ */
+export function distance(genome, aOff, bOff) {
+  let sum = 0;
+  for (let t = 0; t < TRAIT_COUNT; t++) {
+    const d = genome[aOff + t] - genome[bOff + t];
+    sum += d * d;
+  }
+  return Math.sqrt(sum);
+}
+
+/**
+ * Like `distance`, but against a trait block stored in a separate array
+ * (e.g. a species' running centroid, P2-04) rather than another slot in
+ * the same genome array.
+ * @param {Float32Array} genome
+ * @param {number} off
+ * @param {Float32Array} centroid
+ * @param {number} cOff
+ * @returns {number}
+ */
+export function distanceTo(genome, off, centroid, cOff) {
+  let sum = 0;
+  for (let t = 0; t < TRAIT_COUNT; t++) {
+    const d = genome[off + t] - centroid[cOff + t];
+    sum += d * d;
+  }
+  return Math.sqrt(sum);
 }
 
 /**

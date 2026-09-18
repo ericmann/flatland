@@ -127,8 +127,10 @@ describe('checkBreeding + resolvePredationKills-style resolution (birth mechanic
     expect(relativeError(world)).toBeLessThan(1e-9);
   });
 
-  it('the child copies the genome exactly and inherits species, generation+1 and the parent id', () => {
-    const world = bareWorld({ config: { breeding: { baseRate: 1 } } }); // force a birth
+  it('the child copies the genome exactly when pMut = pBig = 0', () => {
+    const world = bareWorld({
+      config: { breeding: { baseRate: 1 }, genome: { pMut: 0, pBig: 0 } },
+    }); // force a birth, disable mutation
     const parent = eligible(world);
     const gLen = world.store.genomeLength;
     const parentGenome = world.store.genome.slice(parent * gLen, parent * gLen + gLen);
@@ -146,6 +148,21 @@ describe('checkBreeding + resolvePredationKills-style resolution (birth mechanic
     expect(world.store.generation[child]).toBe(parentGen + 1);
     expect(world.store.parent[child]).toBe(parentId);
     expect(world.store.age[child]).toBe(0);
+  });
+
+  it('the child differs from the parent with default mutation rates', () => {
+    const world = bareWorld({ config: { breeding: { baseRate: 1 } } }); // force a birth
+    const parent = eligible(world);
+    const gLen = world.store.genomeLength;
+    const parentGenome = world.store.genome.slice(parent * gLen, parent * gLen + gLen);
+    const parentId = world.store.id[parent];
+
+    world.step();
+
+    const child = alive(world).find((s) => s !== parent && world.store.parent[s] === parentId);
+    expect(child).toBeDefined();
+    const childGenome = world.store.genome.slice(child * gLen, child * gLen + gLen);
+    expect(Array.from(childGenome)).not.toEqual(Array.from(parentGenome));
   });
 
   it('the child is born on land inside the map', () => {

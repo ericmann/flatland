@@ -28,7 +28,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-14 App state machine, input contract, floating cluster, battery pause
 - [x] P1-15 Idle mode — auto-camera, caption, ticker, clock, fonts
 - [x] P1-16 Phase 1 end — push, preview, phone checks
-- [ ] P2-01 Mutation and genetic distance
+- [x] P2-01 Mutation and genetic distance
 - [ ] P2-02 Brain forward pass over the SoA
 - [ ] P2-03 Brains drive behaviour; seeded genesis prior; reflex layer retained
 - [ ] P2-04 Species table, speciation, extinction, phylogeny and lineage names
@@ -1111,3 +1111,32 @@ the preview URL above:
 5. Backgrounding the tab pauses the clock and foregrounding resumes it.
 6. `?worker=0` still runs (fixed above; verified in a desktop browser,
    not yet on a phone).
+
+### P2-01 — pending sha (see commit)
+Tests: `test/unit/genome.test.js` (extended, +11 cases: bounds over 10,000
+mutations of an extreme genome; sd checks for pMut-only, pBig-only and
+hue-scaled mutation within ±15%; a no-op case; determinism for a fixed
+rng seed; `distance`/`distanceTo` symmetry, zero-for-identical-traits,
+weight-block exclusion; `MAX_TRAIT_DISTANCE`), `test/unit/breeding.test.js`
+(renamed the exact-copy case to set `genome.pMut = pBig = 0`, added "the
+child differs from the parent with default mutation rates"). All new
+cases passed on the first implementation attempt.
+Config keys introduced: `genome.sigmaMut` (0.05, ⚠️), `genome.pMut` (0.15,
+⚠️), `genome.pBig` (0.01, ⚠️), `genome.hueScale` (0.2, ⚠️).
+Interpretation: none — the design constraint's formulas were precise
+enough to implement directly.
+Also fixed (required for `npm test` to stay green; not in this task's
+Files touched, but a latent bug this task's own new rng draws happened to
+finally trigger — same precedent as every prior such fix): `reflex.js`'s
+`act()` computed the bounds check (`nx/ny < 0` or `>= width/height`) on
+unrounded doubles, then stored the same doubles into `store.x`/`store.y`
+(`Float32Array`, auto-rounding on assignment). A double just under
+`width`/`height` (passing the check) could round *up* to exactly
+`width`/`height` once stored, putting the organism out of bounds.
+Mutation's added `rng.chance()`/`rng.gaussian()` draws per birth
+reshuffled every seed's downstream rng sequence enough that seed 3's
+`test/invariants/bounds.test.js` case finally landed on this
+always-latent edge case around tick 2587 (`y` became exactly `40` on a
+40-tile-tall world). Fixed by rounding `nx`/`ny` with `Math.fround`
+*before* the bounds check, so the check and the stored value agree.
+Verified with a direct 5,000-tick repro at seed 3 before and after.

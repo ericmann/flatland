@@ -120,8 +120,14 @@ export function act(world, i) {
   const speed = store.pheno[i * TRAIT_COUNT + TRAIT.speed];
   const v = (speed * throttle) / moveCost;
 
-  const nx = store.x[i] + cos(heading) * v;
-  const ny = store.y[i] + sin(heading) * v;
+  // Rounded to float32 *before* the bounds check, not after: store.x/y are
+  // Float32Array, so an unrounded double just under width/height (passing
+  // the check) can round up to exactly width/height once stored, putting
+  // the organism out of bounds (found via P2-01's bounds.test.js — adding
+  // mutation's rng draws shifted seed 3's whole sequence enough to finally
+  // hit this always-latent P1-06 edge case).
+  const nx = Math.fround(store.x[i] + cos(heading) * v);
+  const ny = Math.fround(store.y[i] + sin(heading) * v);
 
   if (nx < 0 || nx >= world.width || ny < 0 || ny >= world.height) {
     store.heading[i] = wrapAngle(heading + TAU / 2);
