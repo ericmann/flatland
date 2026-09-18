@@ -21,6 +21,8 @@ import {
   eatMeal,
   huntTarget,
   resolvePredationKills,
+  checkBreeding,
+  resolveBirths,
 } from './ecology.js';
 import { applyDue } from './interventions.js';
 import { Grid } from './grid.js';
@@ -256,6 +258,8 @@ export class World {
     this.dying = new Uint8Array(cap);
     this.attackTarget = new Int32Array(cap);
     this.birthQueue = new Int32Array(cap);
+    /** Number of valid entries currently in `birthQueue` (reset each tick by `resolveBirths`). */
+    this.birthQueueLength = 0;
     this.queryOut = new Int32Array(cap);
 
     /** The per-tick spatial hash (SPEC §6.3), rebuilt in step(). */
@@ -311,11 +315,16 @@ export class World {
       }
       metabolise(this, i);
       ageOrganism(this, i);
+      checkBreeding(this, i);
     }
     if (this.cfg.predation.enabled) {
       resolvePredationKills(this);
     }
     resolve(this);
+    // Births are resolved after kills and deaths (SPEC §4.5, §6.3), so a
+    // parent that died this tick (already freed by resolve() above) does
+    // not breed.
+    resolveBirths(this);
   }
 
   /**

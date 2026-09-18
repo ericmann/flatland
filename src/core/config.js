@@ -158,6 +158,13 @@ export const DEFAULTS = Object.freeze({
   reflex: Object.freeze({
     hungerGate: 0.15,
   }),
+  breeding: Object.freeze({
+    enabled: true,
+    radius: 6,
+    localK: 10,
+    baseRate: 0.01,
+    childEnergyFraction: 0.35,
+  }),
 });
 
 /** @type {Map<string, ConfigDoc>} */
@@ -552,6 +559,46 @@ export const DOCS = new Map([
       units: 'probability per tick',
       assumption: true,
       doc: 'Probability an attack within reach succeeds (SPEC §4.5).',
+    },
+  ],
+  [
+    'breeding.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for breeding (SPEC §9.1).',
+    },
+  ],
+  [
+    'breeding.radius',
+    {
+      units: 'tiles',
+      assumption: true,
+      doc: 'Radius counted for the local density N in the density-dependent breeding rule (SPEC §4.5).',
+    },
+  ],
+  [
+    'breeding.localK',
+    {
+      units: 'count',
+      assumption: true,
+      doc: 'Local carrying capacity K_local: breeding probability scales by max(0, 1 - N/K) (SPEC §4.5).',
+    },
+  ],
+  [
+    'breeding.baseRate',
+    {
+      units: 'probability per tick at N=0',
+      assumption: true,
+      doc: 'Breeding probability with no crowding (SPEC §4.5).',
+    },
+  ],
+  [
+    'breeding.childEnergyFraction',
+    {
+      units: 'fraction of parent energy',
+      assumption: true,
+      doc: "Energy given to a newborn, as a fraction of the parent's energy at the moment of birth (SPEC §4.5).",
     },
   ],
 ]);

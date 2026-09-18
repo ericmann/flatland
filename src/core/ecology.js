@@ -5,17 +5,20 @@
  * `fmath` only, no allocation (SPEC §3.1, §6.3).
  */
 import { TERRAIN } from './terrain.js';
-import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS } from './genome.js';
-import { DEATH, EV_HUNT, recordEvent } from './world.js';
+import { TAU } from './fmath.js';
+import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS, applyPhenotype } from './genome.js';
+import { DEATH, EV_HUNT, EV_BIRTH, recordEvent } from './world.js';
 
 /**
- * reflex.js's OUTPUT.eat index, duplicated here as a literal rather than
- * imported: importing from reflex.js would create a three-way import
- * cycle (ecology -> reflex -> world -> ecology) on top of the existing
- * world <-> ecology cycle, since reflex.js already imports DEATH from
- * world.js. reflex.js's OUTPUT enum is `{ turn:0, throttle:1, eat:2, ... }`.
+ * reflex.js's OUTPUT.eat and OUTPUT.breed indices, duplicated here as
+ * literals rather than imported: importing from reflex.js would create a
+ * three-way import cycle (ecology -> reflex -> world -> ecology) on top of
+ * the existing world <-> ecology cycle, since reflex.js already imports
+ * DEATH from world.js. reflex.js's OUTPUT enum is
+ * `{ turn:0, throttle:1, eat:2, emit0..3:3-6, breed:7 }`.
  */
 const OUTPUT_EAT = 2;
+const OUTPUT_BREED = 7;
 
 /**
  * Fill every tile's plant level to `plants.initialFill` of its cap
@@ -312,4 +315,129 @@ export function resolvePredationKills(world) {
     store.body[j] = 0;
     world.dying[j] = DEATH.HUNTED;
   }
+}
+
+/**
+ * Check breeding eligibility for one organism and, if it passes the
+ * density-dependent roll, queue it in `world.birthQueue` (SPEC §4.5).
+ * Eligible when `breeding.enabled`, `outputs.breed >= 0.5`,
+ * `energy > breedEnergy`, `age > maturityTicks`; breeding probability is
+ * `baseRate * max(0, 1 - N/localK)`, N = living organisms of any species
+ * within `breeding.radius` (excluding self).
+ * @param {import('./world.js').World} world
+ * @param {number} i
+ * @returns {void}
+ */
+export function checkBreeding(world, i) {
+  if (!world.cfg.breeding.enabled) return;
+
+  const store = world.store;
+  if (world.outputs[i * BRAIN_OUTPUTS + OUTPUT_BREED] < 0.5) return;
+  if (store.energy[i] <= store.breedEnergy[i]) return;
+  if (store.age[i] <= store.maturityTicks[i]) return;
+
+  const cfg = world.cfg;
+  const radius = cfg.breeding.radius;
+  const x = store.x[i];
+  const y = store.y[i];
+
+  const n = world.grid.queryRange(x, y, radius, world.queryOut);
+  const queryOut = world.queryOut;
+  let count = 0;
+  for (let k = 0; k < n; k++) {
+    const j = queryOut[k];
+    if (j === i) continue;
+    const dx = store.x[j] - x;
+    const dy = store.y[j] - y;
+    if (dx * dx + dy * dy <= radius * radius) count++;
+  }
+
+  const p = cfg.breeding.baseRate * Math.max(0, 1 - count / cfg.breeding.localK);
+  if (world.rng.chance(p)) {
+    world.birthQueue[world.birthQueueLength++] = i;
+  }
+}
+
+/**
+ * Resolve every queued birth, in queue order (= slot order), after kills
+ * and deaths have already freed this tick's dead slots (SPEC §4.5, §6.3):
+ * a parent that died this tick is skipped, since `resolve()` (world.js)
+ * has already freed it by the time this runs. The child's genome is an
+ * exact copy (mutation is P2-01, crossover is P5-04). The parent pays the
+ * child's starting energy plus its body mass; the sum of realised changes
+ * (parent's loss vs. child's energy + body) must be zero, with any
+ * Float32 rounding gap going to `dissipated` — the same realised-vs-
+ * intended rule used throughout `src/core`.
+ * @param {import('./world.js').World} world
+ * @returns {void}
+ */
+export function resolveBirths(world) {
+  const store = world.store;
+  const cfg = world.cfg;
+  const ledger = world.ledger;
+  const queue = world.birthQueue;
+  const n = world.birthQueueLength;
+
+  for (let q = 0; q < n; q++) {
+    const parent = queue[q];
+    if (!store.alive[parent]) continue; // died this tick; resolve() already freed it
+
+    const slot = store.alloc();
+    if (slot === -1) {
+      world.counters.capacityRefused++;
+      continue;
+    }
+
+    const gLen = store.genomeLength;
+    const pGOff = parent * gLen;
+    const cGOff = slot * gLen;
+    for (let k = 0; k < gLen; k++) {
+      store.genome[cGOff + k] = store.genome[pGOff + k];
+    }
+    applyPhenotype(cfg, store, slot);
+
+    const childEnergyIntended = cfg.breeding.childEnergyFraction * store.energy[parent];
+    const cost = childEnergyIntended + store.body[slot];
+
+    if (store.energy[parent] < cost) {
+      store.free(slot);
+      continue;
+    }
+
+    const beforeParent = store.energy[parent];
+    store.energy[parent] = Math.fround(beforeParent - cost);
+    const realisedParentLoss = beforeParent - store.energy[parent];
+
+    store.energy[slot] = Math.fround(childEnergyIntended);
+
+    ledger.dissipated += realisedParentLoss - store.energy[slot] - store.body[slot];
+    ledger.flows.births += realisedParentLoss;
+
+    const px = store.x[parent];
+    const py = store.y[parent];
+    let cx = px + world.rng.range(-0.5, 0.5);
+    let cy = py + world.rng.range(-0.5, 0.5);
+    cx = Math.max(0, Math.min(world.width - 1e-3, cx));
+    cy = Math.max(0, Math.min(world.height - 1e-3, cy));
+    const tile = Math.floor(cy) * world.width + Math.floor(cx);
+    if (world.terrain[tile] === TERRAIN.WATER) {
+      cx = px;
+      cy = py;
+    }
+
+    store.x[slot] = cx;
+    store.y[slot] = cy;
+    store.heading[slot] = TAU * world.rng.float();
+    store.age[slot] = 0;
+    store.species[slot] = store.species[parent];
+    store.generation[slot] = store.generation[parent] + 1;
+    store.parent[slot] = store.id[parent];
+    store.sick[slot] = 0;
+    store.flags[slot] = 0;
+
+    world.counters.born++;
+    recordEvent(world, EV_BIRTH, cx, cy, store.species[slot], store.species[parent]);
+  }
+
+  world.birthQueueLength = 0;
 }
