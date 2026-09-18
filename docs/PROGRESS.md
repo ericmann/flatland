@@ -996,7 +996,7 @@ Interpretation:
   never pump again, since the self-perpetuating `MessageChannel` chain
   had already ended when it stopped for the pause.
 
-### P1-14 — pending sha (see commit)
+### P1-14 — ae1d7cb
 Tests: `test/ui/app.test.js` (6 cases, jsdom), `test/ui/input.test.js`
 (4 cases, jsdom), `test/e2e/input.spec.js` (4 cases: drag, pinch — skipped
 on chromium-desktop, touch-only — tap-opens-station, and the speed-key
