@@ -20,7 +20,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-06 Reflex policy, movement, metabolism, aging and death
 - [x] P1-07 Grazing, scavenging and predation
 - [x] P1-08 Density-dependent breeding (asexual, no mutation)
-- [ ] P1-09 Chronicle core, stats sampling and the no-allocation invariant
+- [x] P1-09 Chronicle core, stats sampling and the no-allocation invariant
 - [ ] P1-10 Headless harness, ecology sweep columns and the throughput gate
 - [ ] P1-11 Ecology tuning and the reduced soak test
 - [ ] P1-12 Fixed-timestep scheduler, protocol and snapshot encoder
@@ -704,7 +704,7 @@ Interpretation:
   `eatMeal` also fired unexpectedly (fixed by explicitly zeroing plants
   on that tile).
 
-### P1-08 — pending sha (see commit)
+### P1-08 — f61eac7
 Tests: `test/unit/breeding.test.js` (7 cases: no births below breedEnergy
 or before maturity, an isolated organism breeds at baseRate over 10,000
 single-tick trials within ±20%, K neighbours never breed and K/2
@@ -747,3 +747,46 @@ Interpretation:
   index (7) is duplicated as a local constant for the same reason
   `OUTPUT.eat` was in P1-07 (avoiding a three-way import cycle through
   reflex.js).
+
+### P1-09 — pending sha (see commit)
+Tests: `test/unit/chronicle.test.js` (5 cases: genesis entry exists at
+tick 0 with kind genesis and a non-empty place, flush returns only new
+entries then null across two rounds, entries stay ordered and are never
+mutated by flush, add() defaults subjects to []) and
+`test/unit/stats.test.js` (6 cases: diet-class and species counts, Shannon
+diversity of two equal species is exactly ln(2), plantsFraction =
+sum(plants)/sum(cap), the ring buffer wraps at a small historyLength
+without losing the newest sample, an empty world samples to
+pop=0/diversity=0, stats.counters is the same object as world.counters)
+and `test/invariants/allocation.test.js` (heapUsed grows less than 4MB
+over 10,000 ticks after a 2,000-tick warm-up — measured 0.021MB, ~190x
+under budget). Confirmed all three files failing with "Cannot find
+module" before implementation; all 11 cases passed on the first
+implementation attempt (a genuine first for this build — every other Phase
+1 task needed at least one fix).
+Config keys introduced: `stats.sampleEvery` (30), `stats.historyLength`
+(1024) — neither flagged as assumptions, matching the plan's Conventions
+table.
+Interpretation:
+- The genesis chronicle entry is added inside `genesis.js`'s `runGenesis`
+  (in this task's Files touched, unlike P1-07/P1-08 where it was
+  excluded), using the *first* lineage's centre (herbivore lineage 0,
+  always first since herbivore lineages are pushed before carnivore ones)
+  for the place name, per the design constraint's literal wording ("place
+  = region name of the first lineage's centre").
+- Converted `runGenesis`'s lineage loop from `.forEach()` to a plain
+  indexed `for` loop: TypeScript's control-flow narrowing does not track a
+  `let` variable's non-null assignment across a `.forEach()` callback
+  boundary back to the enclosing scope, which produced a spurious `never`
+  type error on `firstCentre.x`/`.y` after the loop. A plain `for` loop
+  (same enclosing scope) resolves this with identical runtime behaviour —
+  a typecheck-driven refactor, not a logic change.
+- `Stats`'s constructor takes the whole `world` (not just `cfg`) so it can
+  set `this.counters = world.counters` (a reference, per the design
+  constraint) at construction time, alongside sizing its ring buffers from
+  `world.cfg.stats.historyLength` and `world.cfg.world.maxSpecies`.
+- `speciesCount` is indexed directly by `store.species[i]` (bounded to
+  0-3 in Phase 1, well inside the 2048-slot scratch array); this only
+  becomes load-bearing once P2-04's real species table can allocate up to
+  `world.maxSpecies` ids, which this design already accommodates without
+  changes.
