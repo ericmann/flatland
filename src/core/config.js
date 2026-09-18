@@ -124,6 +124,17 @@ export const DEFAULTS = Object.freeze({
     dietHerbivore: Object.freeze([0.02, 0.2]),
     dietCarnivore: Object.freeze([0.8, 0.98]),
   }),
+  senses: Object.freeze({
+    sampleDistance: 3,
+    kinRadius: 5,
+    kinNorm: 8,
+  }),
+  // Only the two keys senses.js needs now; enabled/reach/killChance arrive
+  // with predation itself in P1-07.
+  predation: Object.freeze({
+    minDiet: 0.5,
+    maxPreySizeRatio: 1.5,
+  }),
 });
 
 /** @type {Map<string, ConfigDoc>} */
@@ -374,6 +385,46 @@ export const DOCS = new Map([
       units: 'units',
       assumption: true,
       doc: 'Hidden-layer width of the brain (SPEC §4.7); sizes the genome weight block.',
+    },
+  ],
+  [
+    'senses.sampleDistance',
+    {
+      units: 'tiles',
+      assumption: false,
+      doc: 'Radius of the 8-compass-direction plant/carcass gradient sample (SPEC §4.7).',
+    },
+  ],
+  [
+    'senses.kinRadius',
+    {
+      units: 'tiles',
+      assumption: false,
+      doc: 'Radius within which same-species neighbours count toward the kin-density input (SPEC §4.7).',
+    },
+  ],
+  [
+    'senses.kinNorm',
+    {
+      units: 'count',
+      assumption: false,
+      doc: 'Kin count that saturates the kin-density input at 1 (SPEC §4.7).',
+    },
+  ],
+  [
+    'predation.minDiet',
+    {
+      units: 'diet axis [0,1]',
+      assumption: true,
+      doc: 'Minimum diet-axis value for an organism to be capable of predation (used by senses and predation, SPEC §4.5).',
+    },
+  ],
+  [
+    'predation.maxPreySizeRatio',
+    {
+      units: 'ratio',
+      assumption: true,
+      doc: "Prey must be no larger than the predator's size times this ratio (SPEC §4.5).",
     },
   ],
 ]);

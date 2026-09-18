@@ -16,7 +16,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P1-02 Genome layout and phenotype mapping
 - [x] P1-03 World skeleton, genesis, hash, test helpers, determinism invariant
 - [x] P1-04 Plants, carcasses, soil, the energy ledger and the rain intervention
-- [ ] P1-05 Spatial grid and senses
+- [x] P1-05 Spatial grid and senses
 - [ ] P1-06 Reflex policy, movement, metabolism, aging and death
 - [ ] P1-07 Grazing, scavenging and predation
 - [ ] P1-08 Density-dependent breeding (asexual, no mutation)
@@ -444,7 +444,7 @@ Interpretation:
   `makeWorld` can skip it when an `organisms` list is given, and so a
   `World` can be constructed and inspected before any population exists.
 
-### P1-04 — pending sha (see commit)
+### P1-04 — 3c5c1d0
 Tests: `test/unit/ecology.test.js` (9 cases: growth zero at real night L=0,
 growth matches the exact formula at soil=0, soil raises growth and is
 consumed, plants never exceed cap over 500 ticks, plants.enabled=false
@@ -493,3 +493,65 @@ Interpretation:
   Float32 rounding when subtracting `fromSoil'` is accounted separately,
   with any gap against the intended amount going to `dissipated`, per the
   general realised-vs-intended rule.
+
+### P1-05 — pending sha (see commit)
+Tests: `test/unit/grid.test.js` (4 cases: rebuild places every slot in
+exactly one cell in slot order, dead slots excluded, queryRange has no
+false negatives, queryRange stays within a practical `r + cellSize*sqrt2`
+bound for non-adversarial queries) and `test/unit/senses.test.js` (12
+cases: acuity/range formula, nocturnal-sees-farther-at-low-light,
+scrub/sand visibility gating detection distance, threat direction and
+proximity, same-species-never-a-threat, plant gradient direction,
+carnivore prey-seeking direction, kin density counting, terrain input
+bounds for every terrain type, bias always 1, pheromones still 0,
+nearest-tie determinism). Confirmed both files failing with "Cannot find
+module" before implementation; 3 of 16 senses cases failed on the first
+run for a test-setup reason, not an implementation bug (see
+Interpretation).
+Config keys introduced: `senses.sampleDistance` (3), `senses.kinRadius`
+(5), `senses.kinNorm` (8) — none flagged assumptions; `predation.minDiet`
+(0.5, ⚠️) and `predation.maxPreySizeRatio` (1.5, ⚠️) — only the two keys
+senses.js needs now, `predation.enabled`/`reach`/`killChance` arrive with
+predation itself in P1-07.
+Interpretation:
+- Three of my own senses.test.js drafts failed because every organism
+  `test/helpers.js`'s `makeOrganism` creates defaults to `species = 0`,
+  so two organisms I intended as predator/prey were accidentally the same
+  species — which `gather()` correctly excludes from both threat and prey
+  detection (SPEC §4.5: "the nearest j of a *different* species"). Fixed
+  by explicitly assigning a different `store.species[...]` to the second
+  organism in each of those tests, not by changing `gather()`.
+- `threatProx` and the prey-seeking vector's magnitude (`1 − dist/range`)
+  use the organism's own raw vision `range`, not the target-tile-scaled
+  effective range (`range × visibility[tile]`) used for the detection
+  *threshold* itself — the design constraint's formula literally says
+  "range", and using the raw value means proximity reports "how close
+  relative to my typical vision," not "how close relative to how well I
+  could see it in this specific terrain." Flagging this as a literal
+  reading in case the reviewer intends the tile-scaled value instead.
+- The plant gradient's `plantVec` combines the raw 8-direction weighted
+  sum for *direction* with the single largest sample (`plantMag = max
+  sample / cap_max`) for *magnitude*, rather than the raw vector's own
+  Euclidean magnitude — the design constraint names `plantMag` as a
+  distinct quantity from the raw sum without ever using it in the `food`
+  formula unless it's meant to replace the raw vector's magnitude, which
+  is the only construction that gives it a use and keeps `plantVec` and
+  `preyVec` on the same [0,1]-ish magnitude scale (`preyVec`'s own
+  magnitude is explicitly `1 − dist/range`, not a raw sum).
+- Carcass fallback sampling does not exclude water tiles (unlike plants,
+  where SPEC states it explicitly) — carcasses are not defined to occur
+  on water in this build, so the check would be a no-op; applying it
+  anyway would cost nothing but adds no test-observable behavior, so it
+  was left out for a slightly simpler implementation.
+- Two grid queries happen per organism per tick (one shared by threat and
+  prey at the organism's own vision `range`, one for kin at `kinRadius`),
+  safely reusing the same `world.queryOut` scratch buffer sequentially
+  since all processing of the first query's results completes before the
+  second query overwrites it.
+Verified (beyond the stated tests): the full suite (165/165) still passes
+including the P1-03 determinism invariant (10 seeds x 5000 ticks) and the
+P1-04 energy invariant (10,000 ticks) — both now doing real per-organism
+sensing work every tick, which is expected to (and did) slow the suite
+down noticeably (~106s vs ~1-3s before); this is expected real work
+replacing a no-op, not a regression, and throughput tuning is P1-10/P1-11's
+job, not this task's.

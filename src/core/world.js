@@ -16,6 +16,8 @@ import { genomeLength, BRAIN_INPUTS, BRAIN_OUTPUTS } from './genome.js';
 import { Ledger } from './ledger.js';
 import { fillInitialPlants, growPlants, decayCarcasses } from './ecology.js';
 import { applyDue } from './interventions.js';
+import { Grid } from './grid.js';
+import { gather } from './senses.js';
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
@@ -148,6 +150,9 @@ export class World {
     this.attackTarget = new Int32Array(cap);
     this.birthQueue = new Int32Array(cap);
     this.queryOut = new Int32Array(cap);
+
+    /** The per-tick spatial hash (SPEC §6.3), rebuilt in step(). */
+    this.grid = new Grid(this.width, this.height, cfg.world.cellSize, cap);
   }
 
   /**
@@ -161,6 +166,13 @@ export class World {
     applyDue(this);
     growPlants(this);
     decayCarcasses(this);
+
+    this.grid.rebuild(this.store);
+    for (let i = 0; i < this.store.highWater; i++) {
+      if (this.store.alive[i]) {
+        gather(this, i);
+      }
+    }
   }
 
   /**
