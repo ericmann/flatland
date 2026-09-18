@@ -8,7 +8,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P0-03 Light, seasons and the world clock
 - [x] P0-04 Value noise
 - [x] P0-05 Terrain generation and region names
-- [ ] P0-06 Terrain tuning sweep
+- [x] P0-06 Terrain tuning sweep
 - [ ] P0-07 A seeded terrain renders in the browser
 - [ ] P0-08 Playwright smoke test and CI e2e step
 - [ ] P0-09 Phase 0 end — deployment docs, headers, push, preview
@@ -172,7 +172,7 @@ No config keys introduced (noise.js takes lattice size and layer scale/
 weight as call arguments; `terrain.octaves` is introduced by P0-05, which
 owns the terrain-specific defaults).
 
-### P0-05 — pending sha (see commit)
+### P0-05 — 8505118
 Tests: `test/unit/terrain.test.js` (6 cases: same-seed determinism,
 different seeds differ, six known types, contiguity guarantees for seeds
 1..10, reroll count reported, an impossible-threshold config rerolls then
@@ -211,3 +211,49 @@ Interpretation:
   one seed) before the mechanism succeeds every time — confirms the
   mechanism works; bringing that reroll count down to the P0-06 target
   (≤2/40) is P0-06's job, not this task's.
+
+### P0-06 — pending sha (see commit)
+Sweep (`docs/tuning.md`): before, seeds needing reroll 15/40 (28 total,
+mean grass 43.4%/water 10.9% by tile count); after (re-weighted octaves
+toward the low-frequency layer, widened mud/grass/scrub thresholds), 0/40
+need reroll, mean largest-grass-component 38.3%/largest-water-component
+5.7% (target ranges [30,50]/[5,20] met with margin; min largest-water
+across seeds 2.4%, min largest-grass 17.6%, both clear of the 8%/2%
+guarantee floor). Both tables in `docs/tuning.md` and this commit.
+Tests: `test/unit/terrain.test.js` — kept the seeds-1..10 guarantee test
+(still passes) and added `"seeds 1..40 need at most 2 rerolls in total"`;
+0/40 measured, well inside the ≤2 bound.
+Config keys changed (defaults only, both ⚠️): `terrain.octaves` from
+scale 22/9/4 weighted .6/.3/.1 to scale 30/12/5 weighted .75/.2/.05;
+`terrain.thresholds` mud .44→.42, grass .62→.64, scrub .74→.76 (water and
+sand left close to their P0-05 values).
+Interpretation:
+- "seeds 1..40 need at most 2 rerolls in total" (acceptance test wording)
+  is implemented as "at most 2 of the 40 seeds needed any reroll", not "the
+  sum of every individual reroll count is ≤2" — matches the Design
+  constraints' stated target phrasing ("rerolls needed on ≤ 2 of 40
+  seeds") directly above it.
+- Found and fixed a latent test bug while tuning, not a defect in
+  generateTerrain: the P0-05 test `"different seeds give different
+  terrain"` compared seeds 1 and 2 at the 64×40 test size. Under the new
+  (smoother) octaves, seed 1 needed one reroll, so its accepted attempt
+  used effective seed 1+1=2 — byte-identical to seed 2's own unrerolled
+  attempt. This is the "re-roll with seed+1" mechanism (SPEC §4.2) working
+  exactly as specified, not a bug: any two adjacent seeds can coincide this
+  way whenever the lower one rerolls. Fixed by comparing two seeds
+  (100, 500) far enough apart that their reroll ranges (each
+  [seed, seed+maxRerolls]) can never overlap, with a comment explaining
+  why. `test/unit/terrain.test.js` was not in this task's stated Files
+  touched, but the Acceptance tests section explicitly requires it to gain
+  a new test and keep passing, so this fix falls within that same implied
+  scope.
+- `scripts/sweep.mjs` needed `process.argv`, which exposed a gap in P0-01's
+  tsconfig (`types: []`, so no ambient node globals were available to
+  `scripts/**/*.mjs` even though that glob is in `include`). Added
+  `@types/node` as a devDependency and `"node"` to `tsconfig.json`'s
+  `types` array — a TypeScript-only ambient declaration; it does not weaken
+  eslint's core/sim global denylist, which still fails the lint on any
+  actual use of a banned global in `src/core` or `src/sim`. This touches
+  `package.json`, `package-lock.json` and `tsconfig.json`, outside this
+  task's stated Files touched, but was unavoidable to make `npm run
+  typecheck` pass on the required `scripts/sweep.mjs`.

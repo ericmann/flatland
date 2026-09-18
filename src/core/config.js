@@ -32,17 +32,22 @@ export const DEFAULTS = Object.freeze({
     // Noise layers for fbm: each { scale, weight, lattice } samples a
     // makeNoise(rng, lattice) field at (x/scale, y/scale). Weights sum to 1
     // so the raw fbm value stays in [0,1] before the wetter-edges term.
+    // Tuned in P0-06 (docs/tuning.md): the original 22/9/4-scale mix left
+    // water badly fragmented (many small ponds instead of one connected
+    // body), so the high-frequency layers were weighted down and widened.
     octaves: Object.freeze([
-      Object.freeze({ scale: 22, weight: 0.6, lattice: 16 }),
-      Object.freeze({ scale: 9, weight: 0.3, lattice: 32 }),
-      Object.freeze({ scale: 4, weight: 0.1, lattice: 64 }),
+      Object.freeze({ scale: 30, weight: 0.75, lattice: 16 }),
+      Object.freeze({ scale: 12, weight: 0.2, lattice: 32 }),
+      Object.freeze({ scale: 5, weight: 0.05, lattice: 64 }),
     ]),
+    // Tuned in P0-06 alongside octaves; mud/grass/scrub widened slightly to
+    // keep the grass and scrub bands proportioned after smoothing.
     thresholds: Object.freeze({
       water: 0.34,
-      sand: 0.38,
-      mud: 0.44,
-      grass: 0.62,
-      scrub: 0.74,
+      sand: 0.37,
+      mud: 0.42,
+      grass: 0.64,
+      scrub: 0.76,
     }),
     minGrassFraction: 0.08,
     minWaterFraction: 0.02,

@@ -13,8 +13,14 @@ describe('generateTerrain', () => {
   });
 
   it('different seeds give different terrain', () => {
-    const a = generateTerrain(1, testCfg);
-    const b = generateTerrain(2, testCfg);
+    // Seeds far enough apart (> maxRerolls) that their possible re-roll
+    // ranges [seed, seed+maxRerolls] can never overlap: adjacent seeds can
+    // coincidentally collide when the lower one re-rolls into the higher
+    // one's un-rerolled attempt (both end up generating from the same
+    // effective seed), which is not a bug — it's the "re-roll with seed+1"
+    // mechanism (SPEC §4.2) working as specified.
+    const a = generateTerrain(100, testCfg);
+    const b = generateTerrain(500, testCfg);
     expect(a.terrain).not.toEqual(b.terrain);
   });
 
@@ -40,6 +46,19 @@ describe('generateTerrain', () => {
     const { rerolls } = generateTerrain(3, testCfg);
     expect(rerolls).toBeGreaterThanOrEqual(0);
     expect(Number.isInteger(rerolls)).toBe(true);
+  });
+
+  it('seeds 1..40 need at most 2 rerolls in total, at the default size (P0-06 tuning target)', () => {
+    const defaultCfg = makeConfig();
+    // "at most 2 rerolls in total" tracks the P0-06 tuning target of
+    // "rerolls needed on <= 2 of 40 seeds": count seeds that needed any
+    // reroll at all, not the sum of every individual reroll attempt.
+    let seedsNeedingReroll = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const { rerolls } = generateTerrain(seed, defaultCfg);
+      if (rerolls > 0) seedsNeedingReroll++;
+    }
+    expect(seedsNeedingReroll).toBeLessThanOrEqual(2);
   });
 
   it('a config whose thresholds make grass impossible rerolls then throws with a clear message', () => {
