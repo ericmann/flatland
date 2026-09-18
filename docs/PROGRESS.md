@@ -1156,7 +1156,7 @@ same avoid-an-import-cycle reason `ecology.js` duplicates `OUTPUT.eat`
 the forward pass into the policy switch, so `brain.js` importing
 `reflex.js` now would set up exactly that cycle one task early.
 
-### P2-03 — pending sha (see commit)
+### P2-03 — 9aad5f6
 Tests: `test/unit/brain.test.js` (+1 case: a prior brain turns toward
 food, away from a threat, and eats when hungry on food),
 `test/unit/genesis.test.js` (new file, 2 cases: seeded-prior founders
