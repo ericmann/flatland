@@ -5,8 +5,13 @@ async function waitForApp(page) {
   await page.waitForFunction(() => window.__flatland !== undefined, null, { timeout: 3000 });
 }
 
+// See smoke.spec.js: a fixed `?seed=` bypasses any auto-saved world from
+// IndexedDB (P4-06's boot precedence) so every test here gets its own
+// fresh genesis, immune to another test's auto-save (P4-09 finding).
+const SEED = '90102';
+
 test('drag pans (camera x changes)', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(`/?seed=${SEED}`);
   await waitForApp(page);
   // Zoom in first: at the initial fit zoom the whole world already fits
   // the viewport on some project sizes (e.g. chromium-desktop), leaving no
@@ -33,7 +38,7 @@ test('pinch changes the zoom label', async ({ page }, testInfo) => {
     testInfo.project.name !== 'pixel-7',
     'pinch is a touch-only gesture, exercised on pixel-7',
   );
-  await page.goto('/');
+  await page.goto(`/?seed=${SEED}`);
   await waitForApp(page);
   const before = await page.locator('#zoomv').textContent();
 
@@ -63,7 +68,7 @@ test('pinch changes the zoom label', async ({ page }, testInfo) => {
 });
 
 test('tap on the map opens the station', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(`/?seed=${SEED}`);
   await waitForApp(page);
   expect(await page.evaluate(() => window.__flatland.mode)).toBe('idle');
 
@@ -72,7 +77,7 @@ test('tap on the map opens the station', async ({ page }) => {
 });
 
 test('key 2 shows 4× active in the cluster', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(`/?seed=${SEED}`);
   await waitForApp(page);
 
   await page.keyboard.press('2');
