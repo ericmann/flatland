@@ -1857,7 +1857,7 @@ two-sighting case ("second"), where the two readings coincide.
 
 
 
-### P3-10 — pending sha
+### P3-10 — 6363425
 Sweep columns added to `scripts/sweep.mjs`/`scripts/lib/report.mjs`:
 `immig`, `plagues` (counted from chronicle `KIND.PLAGUE` entries — no
 core change needed), `maxShare%` (largest single species' share of the
