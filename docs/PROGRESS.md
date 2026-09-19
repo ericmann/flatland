@@ -2226,7 +2226,7 @@ alone with `--workers=1`, confirming it is this session's CPU
 contention, not a regression — `test/e2e/pwa.spec.js`'s two new specs
 passed on every run, on both projects, with no retries needed.
 
-### P4-09 — pending sha
+### P4-09 — e90789c
 Goal: every SPEC §9.4 browser check has a passing, stable e2e spec on
 both projects, plus the P4-06 resume check that task deferred.
 Tests: `test/e2e/resume.spec.js` (new: "a reload resumes at or after
