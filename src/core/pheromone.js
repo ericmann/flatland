@@ -58,34 +58,84 @@ export function diffuse(world) {
   for (let c = 0; c < CHANNELS; c++) {
     const p = world.pher[c];
     const rate = rates[c];
-    for (let y = 0; y < height; y++) {
+
+    // P5-06 perf pass: profiling the default 256x160 world showed this
+    // function as the single largest cost in a 20,000-tick run (~28% of
+    // samples) — every one of its four in-bounds checks re-evaluated on
+    // every tile, even though only the outermost ring of tiles is ever
+    // missing a neighbour. Interior tiles (the vast majority) always
+    // have all 4 in-bounds, so `n` is always 4 and this loop computes the
+    // exact same `sum`/`mean`/`clamp` as the general case below with no
+    // branches — same left-to-right summation order (left, right, up,
+    // down) as the border case, and `/4` on a `Float32` sum is exact
+    // (power-of-two divisor), so results are bit-identical, not just
+    // numerically close.
+    for (let y = 1; y < height - 1; y++) {
       const row = y * width;
-      for (let x = 0; x < width; x++) {
+      for (let x = 1; x < width - 1; x++) {
         const i = row + x;
-        let sum = 0;
-        let n = 0;
-        if (x > 0) {
-          sum += p[i - 1];
-          n++;
-        }
-        if (x < width - 1) {
-          sum += p[i + 1];
-          n++;
-        }
-        if (y > 0) {
-          sum += p[i - width];
-          n++;
-        }
-        if (y < height - 1) {
-          sum += p[i + width];
-          n++;
-        }
-        const mean = n > 0 ? sum / n : p[i];
+        const sum = p[i - 1] + p[i + 1] + p[i - width] + p[i + width];
+        const mean = sum / 4;
         scratch[i] = clamp(p[i] + rate * (mean - p[i]), 0, 1);
       }
     }
+
+    // Border tiles (first/last row, first/last column): fewer than 4
+    // in-bounds neighbours, so the general case applies. The two loops
+    // below visit each border tile exactly once (the row loop covers
+    // both corners of each end row; the column loop then covers only the
+    // interior of each end column), and the `width > 1`/`height > 1`
+    // guards keep a 1-wide or 1-tall world (test fixtures use these) from
+    // being visited twice.
+    for (let x = 0; x < width; x++) {
+      diffuseBorderTile(p, scratch, rate, x, 0, width, height);
+      if (height > 1) diffuseBorderTile(p, scratch, rate, x, height - 1, width, height);
+    }
+    for (let y = 1; y < height - 1; y++) {
+      diffuseBorderTile(p, scratch, rate, 0, y, width, height);
+      if (width > 1) diffuseBorderTile(p, scratch, rate, width - 1, y, width, height);
+    }
+
     p.set(scratch);
   }
+}
+
+/**
+ * One border tile's 4-neighbour mean (however many of the 4 are in
+ * bounds), written into `scratch[i]` — the general case `diffuse()`'s
+ * interior fast path above skips for the tiles it knows are all in
+ * bounds. Identical arithmetic to the single loop this replaced.
+ * @param {Float32Array} p
+ * @param {Float32Array} scratch
+ * @param {number} rate
+ * @param {number} x
+ * @param {number} y
+ * @param {number} width
+ * @param {number} height
+ * @returns {void}
+ */
+function diffuseBorderTile(p, scratch, rate, x, y, width, height) {
+  const i = y * width + x;
+  let sum = 0;
+  let n = 0;
+  if (x > 0) {
+    sum += p[i - 1];
+    n++;
+  }
+  if (x < width - 1) {
+    sum += p[i + 1];
+    n++;
+  }
+  if (y > 0) {
+    sum += p[i - width];
+    n++;
+  }
+  if (y < height - 1) {
+    sum += p[i + width];
+    n++;
+  }
+  const mean = n > 0 ? sum / n : p[i];
+  scratch[i] = clamp(p[i] + rate * (mean - p[i]), 0, 1);
 }
 
 /**

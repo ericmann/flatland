@@ -66,7 +66,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P5-03 Swimming
 - [x] P5-04 Mating with crossover
 - [x] P5-05 Phase 5 tuning
-- [ ] P5-06 Performance pass and `docs/performance.md`
+- [x] P5-06 Performance pass and `docs/performance.md`
 - [ ] P5-07 Blog post draft
 - [ ] P5-08 Phase 5 end — push, preview, phone checks
 
@@ -2447,3 +2447,51 @@ ticks/s vs. the required 2000, this machine's ongoing CPU contention,
 see P3-10 onward's log, not a regression — this task touches no
 `src/core` file at all); `npm run test:soak` 20/20.
 Phone: n/a.
+
+### P5-06 — pending sha
+Goal: measure the SPEC §8 budgets without a phone, fix cheap
+regressions, record everything in `docs/performance.md`.
+`scripts/perf.mjs` (new): Node throughput/memory on the default world
+(20,000 ticks) and the exact `throughput.test.js` 64x40/200-organism
+scenario. `test/e2e/perf.spec.js` (new, the acceptance test): mean/p95
+frame time over 300 rAF frames at 1x/16x, idle/station, both Playwright
+projects — all measured a clean 16.67ms mean/p95 (60fps vsync-capped,
+nowhere near the 33ms assert), plus an in-page `data-tick`-over-wall-time
+read of achieved worker tick rate as a bonus SPEC §8 data point (~455-483
+ticks/s at 16x, right at the 480 budget on this machine/Chromium).
+Profiling (`node --prof`) found `pheromone.js`'s `diffuse()` as the
+single largest cost (~28%) on the default 256x160 world: its 4
+in-bounds-neighbour branches were re-evaluated on every tile though only
+the border ring ever needs them. Fixed: split into a branch-free interior
+pass + the original border-only logic (`src/core/pheromone.js`) — bit-
+identical (`npm run headless -- --ticks 5000` hash `ee89a932` unchanged
+before/after via `git stash`), `test/unit/pheromone.test.js` 8/8. ~15-20%
+net throughput gain on the default world; marginal (~1-2%) on the CI
+gate's small 64x40 grid, where profiling instead shows `brain.js`'s
+`forward()` at ~34.5% (an architectural cost flagged back at P2-03,
+"flagging for P5-06's scheduled performance pass" — not an
+allocation/missed-grid bug, out of this task's scope to restructure).
+Honest raw-Node reading on the CI gate scenario after the fix:
+1,510-1,680 ticks/s, below the 2,000 budget and ~51-56% below P1-10's
+original ~3,450 baseline — recorded for the reviewer, not silently
+ignored, since closing it needs a weight-caching architecture change.
+`npx vitest run test/invariants/throughput.test.js` measured 203-313
+ticks/s across four runs this session — the same pre-existing,
+already-root-caused (P1-10) vitest module-transform tax, not new
+information; committed assertion left at `2000` unchanged (CI's GitHub
+runner, not this shared desktop, is SPEC's stated arbiter).
+Interpretation: "measured vs budget" table rows a real phone alone can
+verify (main-thread frame time at the true budget, browser total process
+memory, 4G cold load, battery) are `NOT VERIFIED (human)`, per
+`docs/performance.md`; every other §8 row is measured and recorded there
+with its reproduction command.
+Verification: `node scripts/perf.mjs`; `npm run build && npm run
+test:ui` (36 tests, 2 correctly skipped, 34 passed, incl. the named
+acceptance test on both projects); `npm run typecheck` clean (one
+pre-existing, unrelated `test/helpers.js` error, confirmed via `git
+stash` before this task's changes); `npm run lint` clean; `npm test`
+451/452 (same pre-existing throughput flake, see above).
+Phone: NOT VERIFIED (human) — `docs/performance.md`'s "Phone checklist"
+section lists every row this task could not verify (frame time at the
+real ≤8ms/50fps budget, real device memory, real 4G cold load, real
+battery drain); owed to P5-08's phone pass.
