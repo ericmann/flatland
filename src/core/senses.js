@@ -143,6 +143,10 @@ export function gather(world, i) {
   const R = store.pheno[pOff + TRAIT.visionRange];
   const size = store.pheno[pOff + TRAIT.size];
   const diet = store.pheno[pOff + TRAIT.diet];
+  // Swimming (SPEC §4.2, Phase 5, P5-03): a non-swimmer can't reach food
+  // sitting on water, so its directional food samples count water tiles
+  // as 0; a swimmer samples them normally.
+  const isSwimmer = store.pheno[pOff + TRAIT.swim] >= cfg.swim.threshold;
 
   const L = world.light;
   const dAcuity = (L - lambda) / sigma;
@@ -228,7 +232,14 @@ export function gather(world, i) {
   // magnitude, so opposite-direction cancellation doesn't understate a
   // tile that is lush in multiple directions at once).
   const capMaxPlants = Math.max(...cfg.terrain.plantCap);
-  const plantSample = directionalSample(world, x, y, cfg.senses.sampleDistance, world.plants, true);
+  const plantSample = directionalSample(
+    world,
+    x,
+    y,
+    cfg.senses.sampleDistance,
+    world.plants,
+    !isSwimmer,
+  );
   const plantRawLen = Math.sqrt(
     plantSample.rawX * plantSample.rawX + plantSample.rawY * plantSample.rawY,
   );
@@ -254,7 +265,7 @@ export function gather(world, i) {
       y,
       cfg.senses.sampleDistance,
       world.carcass,
-      false,
+      !isSwimmer,
     );
     const rawLen = Math.sqrt(
       carcassSample.rawX * carcassSample.rawX + carcassSample.rawY * carcassSample.rawY,

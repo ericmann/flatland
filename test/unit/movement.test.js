@@ -80,6 +80,50 @@ describe('act (movement)', () => {
     expect(world.store.heading[slot]).toBeCloseTo(Math.PI / 2, 5);
   });
 
+  it('a swimmer enters water at the swim cost and a non-swimmer does not', () => {
+    const world = makeWorld({
+      width: 20,
+      height: 20,
+      terrain: (x) => (x >= 12 ? TERRAIN.WATER : TERRAIN.GRASS),
+      organisms: [],
+    });
+    const startX = 11.9;
+    const swimmer = makeOrganism(world, { x: startX, y: 10, traits: { speed: 1, swim: 1 } });
+    const nonSwimmer = makeOrganism(world, { x: startX, y: 11, traits: { speed: 1, swim: 0 } });
+    world.store.heading[swimmer] = 0; // +x, straight into the water
+    world.store.heading[nonSwimmer] = 0;
+    setOutputs(world, swimmer, { turn: 0, throttle: 1 });
+    setOutputs(world, nonSwimmer, { turn: 0, throttle: 1 });
+
+    const speed = world.store.pheno[swimmer * TRAIT_COUNT + TRAIT.speed];
+    // moveCost is always the tile *under* the organism (PLAN.md's "type
+    // under i"), so the entering step still costs the grass tile it
+    // starts from; only a swimmer is allowed to land on water at all.
+    const enterDist = speed / world.cfg.terrain.moveCost[TERRAIN.GRASS];
+
+    act(world, swimmer);
+    act(world, nonSwimmer);
+
+    // The swimmer crosses into water.
+    expect(world.store.x[swimmer]).toBeCloseTo(startX + enterDist, 5);
+    const swimmerTile =
+      Math.floor(world.store.y[swimmer]) * 20 + Math.floor(world.store.x[swimmer]);
+    expect(world.terrain[swimmerTile]).toBe(TERRAIN.WATER);
+
+    // The non-swimmer is still blocked (P1-06 behaviour unchanged).
+    expect(world.store.x[nonSwimmer]).toBe(Math.fround(startX));
+    expect(world.store.heading[nonSwimmer]).toBeCloseTo(Math.PI / 2, 5);
+
+    // Now that the swimmer is standing on water, the *next* step is
+    // charged `swim.moveCost` (2.5 ⚠️), not `terrain.moveCost[WATER]` (3)
+    // nor the grass cost.
+    const xBeforeSwim = world.store.x[swimmer];
+    setOutputs(world, swimmer, { turn: 0, throttle: 1 });
+    act(world, swimmer);
+    const swimDist = speed / world.cfg.swim.moveCost;
+    expect(world.store.x[swimmer]).toBeCloseTo(xBeforeSwim + swimDist, 5);
+  });
+
   it('movement.enabled = false freezes positions and heading', () => {
     const world = makeWorld({
       width: 20,
