@@ -26,6 +26,9 @@ function fakeApp() {
     deselect() {
       this.select(null);
     },
+    rename(speciesId, name) {
+      sent.push({ type: 'rename', payload: { speciesId, name } });
+    },
     onSelectionChange(cb) {
       listeners.add(cb);
       return () => listeners.delete(cb);
@@ -96,7 +99,7 @@ describe('createInspector', () => {
     inspector.update({ selectedSlot: 0, selected: rec, light: 0.5 });
 
     expect(el.querySelector('#specName')).toBeTruthy();
-    expect(el.querySelector('#specName').disabled).toBe(true);
+    expect(el.querySelector('#specName').disabled).toBe(false);
     expect(el.querySelector('#diet').textContent).toBe('hunter');
     expect(el.querySelector('#gen').textContent).toBe('gen 3');
     expect(el.querySelector('#bEnergy').style.width).toBe('60%');
@@ -191,6 +194,70 @@ describe('createInspector', () => {
 
     el.querySelector('#unsel').dispatchEvent(new Event('click', { bubbles: true }));
     expect(el.classList.contains('open')).toBe(false);
+  });
+
+  it('changing the name sends a rename intervention and does not change the label until the phylogeny delta arrives', () => {
+    const el = document.createElement('aside');
+    const app = fakeApp();
+    const byId = new Map([[1, { name: 'Old Name' }]]);
+    const speciesStore = { name: (id) => byId.get(id)?.name };
+    const inspector = createInspector({ el, app, cfg, speciesStore });
+    app.select(7);
+
+    const rec = buildRec({ species: 1 });
+    inspector.update({ selectedSlot: 0, selected: rec });
+
+    const specName = el.querySelector('#specName');
+    expect(specName.value).toBe('Old Name');
+
+    specName.value = 'New Name';
+    specName.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(app.sent.at(-1)).toEqual({
+      type: 'rename',
+      payload: { speciesId: 1, name: 'New Name' },
+    });
+
+    // Re-render as if the phylogeny delta has not arrived yet: both the
+    // input and the family text still read the old, still-current name.
+    inspector.update({ selectedSlot: 0, selected: rec });
+    expect(specName.value).toBe('Old Name');
+    expect(el.querySelector('#family').textContent).toContain('Old Name');
+
+    // The phylogeny delta arrives (possibly unique-ified) and only now
+    // does the display change.
+    byId.set(1, { name: 'New Name (2)' });
+    inspector.update({ selectedSlot: 0, selected: rec });
+    expect(specName.value).toBe('New Name (2)');
+  });
+
+  it("typing 'l' in the name input does not toggle the night lens", () => {
+    const el = document.createElement('aside');
+    document.body.appendChild(el);
+    const app = fakeApp();
+    createInspector({ el, app, cfg });
+    app.select(4);
+
+    const specName = /** @type {HTMLInputElement} */ (el.querySelector('#specName'));
+    specName.focus();
+    expect(document.activeElement).toBe(specName);
+
+    // Mirrors app.js's real onKeyDown guard (P1-14): any input/textarea/
+    // select/contentEditable target is ignored before shortcut keys are
+    // even considered, so a real <input> here is what keeps 'l' from
+    // reaching the night-lens toggle.
+    let lensToggled = false;
+    function onKeyDown(e) {
+      const tag = /** @type {HTMLElement | null} */ (e.target)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (e.key === 'l' || e.key === 'L') lensToggled = true;
+    }
+    document.addEventListener('keydown', onKeyDown);
+    specName.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true }));
+    document.removeEventListener('keydown', onKeyDown);
+    document.body.removeChild(el);
+
+    expect(lensToggled).toBe(false);
   });
 
   it('a dead selection empties the inspector', () => {
