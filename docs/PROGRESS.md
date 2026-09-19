@@ -1736,7 +1736,7 @@ test's config; the wider suite's other `organisms: []` tests all run
 too few ticks (or already disable enough via `isolate()`) to hit this,
 confirmed by the full 373-test run passing clean.
 
-### P3-07 — pending sha (see commit)
+### P3-07 — fc3f403
 Tests: `test/unit/chronicle.test.js` (+4: kills aggregate per prey
 lineage and flush into one `hunt-summary` at dawn, table resets after;
 singular/plural/"and others" sentence forms; every `KIND` produces a
