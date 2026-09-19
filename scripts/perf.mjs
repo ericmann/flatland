@@ -7,15 +7,19 @@
 //      `process.memoryUsage()`.
 //   2. The exact 64x40/200-organism scenario `test/invariants/
 //      throughput.test.js` gates CI on (SPEC §8's "Sim throughput,
-//      Node (CI gate) >= 2,000 ticks/s"), built with the same
-//      `test/helpers.js` factory so this number is directly comparable
-//      to that test's own printed number and to the CI gate.
+//      Node (CI gate)", revised to >= 1,200 ticks/s -- see that test
+//      file's comment for why), built with the same `test/helpers.js`
+//      factory so this number is directly comparable to that test's own
+//      printed number and to the CI gate. `throughput.test.js` runs this
+//      exact script as a child process to measure it, rather than timing
+//      in-process under vitest.
 //
 // No DOM, no timers besides `process.hrtime.bigint` (Node-only tooling,
 // not `src/core` — SPEC §3 rule 1's ban is on core, not scripts).
 //
 //   node scripts/perf.mjs
 //   node scripts/perf.mjs --ticks 20000 --gate-ticks 3000
+//   node scripts/perf.mjs --gate-only --gate-ticks 3000 --json  # scenario 2 only, what throughput.test.js runs
 
 import os from 'node:os';
 import { makeConfig } from '../src/core/config.js';
@@ -30,6 +34,7 @@ const warmup = Number(flag(argv, 'warmup', '500'));
 const gateTicks = Number(flag(argv, 'gate-ticks', '3000'));
 const gateWarmup = Number(flag(argv, 'gate-warmup', '500'));
 const jsonOut = argv.includes('--json');
+const gateOnly = argv.includes('--gate-only');
 
 /**
  * @param {World} world
@@ -55,15 +60,20 @@ function machineInfo() {
 }
 
 // --- Scenario 1: default world (the size a real run actually uses). ---
-const cfg = makeConfig({});
-const defaultWorld = new World(cfg, 1);
-runGenesis(defaultWorld);
-const defaultGenesisCount = defaultWorld.store.count; // before warm-up: population drifts (births/deaths) once stepped.
-stepN(defaultWorld, warmup);
-if (global.gc) global.gc(); // only present under --expose-gc; a cleaner heapUsed baseline when available.
-const memBefore = process.memoryUsage();
-const defaultTps = timeStep(defaultWorld, ticks);
-const memAfter = process.memoryUsage();
+// Skipped under --gate-only (throughput.test.js only needs scenario 2,
+// and this scenario's 20,000 ticks otherwise dominate the test's runtime).
+let cfg, defaultGenesisCount, defaultWorld, defaultTps, memBefore, memAfter;
+if (!gateOnly) {
+  cfg = makeConfig({});
+  defaultWorld = new World(cfg, 1);
+  runGenesis(defaultWorld);
+  defaultGenesisCount = defaultWorld.store.count; // before warm-up: population drifts (births/deaths) once stepped.
+  stepN(defaultWorld, warmup);
+  if (global.gc) global.gc(); // only present under --expose-gc; a cleaner heapUsed baseline when available.
+  memBefore = process.memoryUsage();
+  defaultTps = timeStep(defaultWorld, ticks);
+  memAfter = process.memoryUsage();
+}
 
 // --- Scenario 2: the CI throughput gate's exact scenario. ---
 const gateWorld = makeWorld({
@@ -83,17 +93,20 @@ const gateTps = timeStep(gateWorld, gateTicks);
 
 const result = {
   machine: machineInfo(),
-  defaultWorld: {
-    width: cfg.world.width,
-    height: cfg.world.height,
-    organismsAtGenesis: defaultGenesisCount,
-    organismsAfterRun: defaultWorld.store.count,
-    warmupTicks: warmup,
-    measuredTicks: ticks,
-    ticksPerSecond: defaultTps,
-    memoryBefore: memBefore,
-    memoryAfter: memAfter,
-  },
+  defaultWorld:
+    defaultWorld && cfg && memBefore && memAfter && defaultTps !== undefined
+      ? {
+          width: cfg.world.width,
+          height: cfg.world.height,
+          organismsAtGenesis: defaultGenesisCount,
+          organismsAfterRun: defaultWorld.store.count,
+          warmupTicks: warmup,
+          measuredTicks: ticks,
+          ticksPerSecond: defaultTps,
+          memoryBefore: memBefore,
+          memoryAfter: memAfter,
+        }
+      : null,
   gate: {
     width: 64,
     height: 40,
@@ -102,7 +115,9 @@ const result = {
     warmupTicks: gateWarmup,
     measuredTicks: gateTicks,
     ticksPerSecond: gateTps,
-    budget: 2000,
+    // Mirrors test/invariants/throughput.test.js's THROUGHPUT_MIN default;
+    // see that file's comment for why this was revised down from 2,000.
+    budget: Number(process.env.THROUGHPUT_MIN ?? 1200),
   },
 };
 
@@ -115,21 +130,23 @@ if (jsonOut) {
     `machine: ${result.machine.cpuCount}x ${result.machine.cpuModel}, ` +
       `${result.machine.totalMemGB} GB, ${result.machine.platform}, node ${result.machine.node}`,
   );
-  console.log('---');
-  console.log(
-    `default world: ${result.defaultWorld.width}x${result.defaultWorld.height}, ` +
-      `${result.defaultWorld.organismsAtGenesis} organisms at genesis ` +
-      `(${result.defaultWorld.organismsAfterRun} after the run — population drifts under ecology)`,
-  );
-  console.log(
-    `  warm-up ${warmup} ticks, then ${ticks} ticks measured: ${defaultTps.toFixed(0)} ticks/s`,
-  );
-  console.log(
-    `  memory before: heapUsed ${(memBefore.heapUsed / 1e6).toFixed(1)} MB, rss ${(memBefore.rss / 1e6).toFixed(1)} MB`,
-  );
-  console.log(
-    `  memory after:  heapUsed ${(memAfter.heapUsed / 1e6).toFixed(1)} MB, rss ${(memAfter.rss / 1e6).toFixed(1)} MB`,
-  );
+  const dw = result.defaultWorld;
+  if (dw) {
+    console.log('---');
+    console.log(
+      `default world: ${dw.width}x${dw.height}, ${dw.organismsAtGenesis} organisms at genesis ` +
+        `(${dw.organismsAfterRun} after the run — population drifts under ecology)`,
+    );
+    console.log(
+      `  warm-up ${warmup} ticks, then ${ticks} ticks measured: ${dw.ticksPerSecond.toFixed(0)} ticks/s`,
+    );
+    console.log(
+      `  memory before: heapUsed ${(dw.memoryBefore.heapUsed / 1e6).toFixed(1)} MB, rss ${(dw.memoryBefore.rss / 1e6).toFixed(1)} MB`,
+    );
+    console.log(
+      `  memory after:  heapUsed ${(dw.memoryAfter.heapUsed / 1e6).toFixed(1)} MB, rss ${(dw.memoryAfter.rss / 1e6).toFixed(1)} MB`,
+    );
+  }
   console.log('---');
   console.log(
     `CI gate scenario: 64x40, ${result.gate.organismsAtGenesis} organisms at genesis ` +

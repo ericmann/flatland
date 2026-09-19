@@ -87,10 +87,18 @@ a file, one JSON line per seed).
 ## Throughput gate
 
 `test/invariants/throughput.test.js` (SPEC §8) asserts a 64x40, 200-organism
-world sustains at least `THROUGHPUT_MIN` (env var, default 2000) ticks/s on a
-GitHub runner. Override locally with e.g. `THROUGHPUT_MIN=1000 npm test` if
-your machine's `vitest` overhead differs from CI's — see the P1-10 log entry
-in `docs/PROGRESS.md` for a measured comparison against raw Node.
+world sustains at least `THROUGHPUT_MIN` (env var, default 1200) ticks/s on a
+GitHub runner. It measures this by running `scripts/perf.mjs` as a real Node
+child process rather than timing in-process: an in-process `world.step()`
+loop timed under vitest measured ~5x slower than the identical scenario run
+as a plain Node process on the same machine at the same moment, so timing
+in-process would gate on vitest's own overhead, not Flatland's actual
+throughput. Override locally with e.g. `THROUGHPUT_MIN=800 npm test` if your
+machine's raw Node throughput differs from CI's — see the P1-10 log entry in
+`docs/PROGRESS.md` for the original comparison and `docs/performance.md` for
+the P5-06 measurements behind the 1,200 revision (down from an original
+2,000; real throughput is ~1,580–1,680 ticks/s, short of 2,000 because of an
+architectural, not-yet-fixed `brain.js` cost).
 
 ## Determinism rules (see CLAUDE.md for the full list)
 

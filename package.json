@@ -14,7 +14,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run test/unit test/invariants test/ui",
+    "test": "vitest run test/unit test/invariants test/ui --exclude '**/throughput.test.js' && vitest run test/invariants/throughput.test.js",
     "test:watch": "vitest",
     "test:soak": "vitest run test/soak",
     "test:all": "vitest run",
