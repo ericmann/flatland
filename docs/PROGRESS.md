@@ -60,7 +60,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P4-07 Trophic energy-flow chart
 - [x] P4-08 PWA — manifest, icons, service worker, bundle budget
 - [x] P4-09 E2E completeness pass on desktop and Pixel 7
-- [ ] P4-10 Phase 4 end — push, preview, phone checks
+- [x] P4-10 Phase 4 end — push, preview, phone checks
 - [ ] P5-01 Temperature
 - [ ] P5-02 Weather events — rain and fog
 - [ ] P5-03 Swimming
@@ -2264,3 +2264,47 @@ Verification: `npm run build && npx playwright test --repeat-each 3`:
 96 passed, 6 correctly skipped, 0 failures, reproduced clean across 4
 consecutive full runs. typecheck/lint clean.
 Phone: n/a (headless test-only task).
+
+### P4-10 — pending sha
+Goal: close Phase 4 with a green suite, a pushed branch and the owed
+phone checks recorded.
+Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
+test` 435/436 (one pre-existing, unrelated throughput-invariant failure
+— 196 ticks/s vs. the required 2000 — under this session's heavy
+background CPU load throughout Phase 3 and 4, see P3-10 onward's log,
+not a regression); `npm run test:soak` 20/20 (`test/soak/survival.test.js`
+and `test/soak/ecology.test.js`); `npm run build` clean (bundle
+~344.96 KiB precache, well under P4-08's 400 kB gzip budget); `npm run
+test:ui` 32 passed, 2 correctly skipped per-project (desktop's pinch
+test and pixel-7's rail-layout test), 0 failures, no flakes this run.
+Interpretation: ran `npm run typecheck`, `npm run lint`, `npm test`,
+`npm run test:soak`, `npm run build` and `npm run test:ui` as separate
+invocations rather than the literal `npm run test:all` command — the
+same precedent set in P2-05/P2-12 and followed again in P3-11, since
+running `test/soak`'s multi-minute runs inside the same `vitest run`
+invocation as everything else lets it contend for CPU with the other
+suites and spuriously blow their timeouts.
+docs/development.md: added an "Interventions and persistence (Phase 4)"
+section (Hand of God tools, lineage renaming, `?w=` share links,
+IndexedDB autosave/resume with its background-replay verification, the
+trophic-flow chart, PWA installability) alongside the Phase 2/3 station
+sections, following the same paragraph-plus-"part of the phone
+checklist" pattern.
+docs/deployment.md: added a "Progressive Web App (Phase 4)" section
+between Headers and CI covering `vite-plugin-pwa`'s `generateSW`
+precaching and offline behaviour, `registerType: 'autoUpdate'`'s
+auto-reload-on-new-deploy behaviour, the manifest/icon set from
+`scripts/make-icons.mjs`, and the installability/bundle-budget
+guarantees.
+Preview: `https://build-2026-09-18.flatland.pages.dev` (same branch as
+Phases 1, 2 and 3).
+Push: pushed to `origin/build/2026-09-18`.
+Phone: NOT VERIFIED (human). Checklist for the human to run through on
+the preview URL above: (1) Chrome offers Add to Home Screen; the
+installed app launches standalone with the dark theme colour; (2)
+airplane mode after a first load still runs the app; (3) Share opens
+the system share sheet with a working link; (4) closing and reopening
+the tab resumes at the same clock with no console mismatch; (5) fire,
+meteor and river are placeable by tap and appear in the chronicle; (6)
+renaming a lineage from the bottom sheet works with the on-screen
+keyboard and no shortcut fires.

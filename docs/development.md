@@ -143,6 +143,26 @@ plague and migration/immigration events surface in the chronicle ticker
 during idle. Part of the phone checklist (`docs/PROGRESS.md`'s Phase 3
 end log entry).
 
+## Interventions and persistence (Phase 4)
+
+The dock's Hand of God tab arms one of six tools (fire, meteor, plague,
+river, meadow, rain); tapping the map fires it as a logged intervention,
+replayed deterministically from the seed plus the intervention log and
+written to the chronicle with a ⚡ line. The inspector's rename field
+renames a lineage the same way — a logged, chronicled, replayable
+intervention, not a silent mutation. The topbar's Share button encodes the
+running world as a `?w=` URL (SPEC §5.6) through the platform adapter's
+share sheet; opening a shared link replays to its tick and continues live.
+The sim autosaves to IndexedDB (`cfg.persist.autosaveSeconds`, and on
+`document.hidden`), and a bare reload resumes from the last checkpoint,
+verified by a bounded background replay against its recorded hash — a
+mismatch logs a console error rather than silently drifting. The Charts
+tab's third chart is a stacked-area energy flow across the six trophic
+pools, sampled from `world.ledger.flows` each interval. The app is
+installable (manifest + service worker, `vite-plugin-pwa`) and runs
+offline after a first load. Part of the phone checklist (`docs/PROGRESS.md`'s
+Phase 4 end log entry).
+
 ## Module layout
 
 See CLAUDE.md → Module map. `docs/PLAN.md` is the task-by-task build plan;
