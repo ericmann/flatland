@@ -8,6 +8,10 @@
 import { TRAIT, TRAIT_COUNT, traitValue, dietClass, distanceTo } from './genome.js';
 import { regionName, speciesName } from './names.js';
 import { KIND, sentence, deathVerb } from './chronicle.js';
+import { FIRST_HUNTERS, FIRST_NIGHT } from './world.js';
+
+/** Vision-peak threshold below which a species counts as "nocturnal" for the first-night chronicle entry (SPEC §4.11). */
+const NIGHT_VISION_PEAK = 0.35;
 
 /** `dietClassAtBirth` codes (local, matching the same 0/1/2 order the P1-13 snapshot encoder's flagsByte uses). */
 const DIET_CODE = Object.freeze({ herbivore: 0, omnivore: 1, carnivore: 2 });
@@ -83,6 +87,35 @@ export class SpeciesTable {
     this.names[id] = speciesName(this, cls, terrainType, id);
 
     this.dirty[id] = 1;
+
+    // "First" chronicle entries (SPEC §4.11, P3-07), each fires once per
+    // world. Checked here (creation) and, for the night one, again daily
+    // in `checkFirstNight` — a species can also drift into it later via
+    // centroid EMA rather than being born into it.
+    const place = regionName(x, y, world.terrain, world.width, world.height);
+    if (
+      !(world.firsts & FIRST_HUNTERS) &&
+      this.dietClassAtBirth[id] === DIET_CODE.carnivore &&
+      ancestor !== -1 &&
+      this.dietClassAtBirth[ancestor] !== DIET_CODE.carnivore
+    ) {
+      world.firsts |= FIRST_HUNTERS;
+      const text = sentence(KIND.FIRST, {
+        variant: 'hunters',
+        name: this.names[id],
+        ancestor: this.names[ancestor],
+      });
+      world.chronicle.add(world.tick, KIND.FIRST, text, place, [id, ancestor]);
+    }
+    if (!(world.firsts & FIRST_NIGHT)) {
+      const visionPeak = traitValue(cfg, genome[traitsOff + TRAIT.visionPeak], TRAIT.visionPeak);
+      if (visionPeak < NIGHT_VISION_PEAK) {
+        world.firsts |= FIRST_NIGHT;
+        const text = sentence(KIND.FIRST, { variant: 'night', name: this.names[id] });
+        world.chronicle.add(world.tick, KIND.FIRST, text, place, [id]);
+      }
+    }
+
     return id;
   }
 
@@ -175,5 +208,35 @@ export class SpeciesTable {
     );
     const text = sentence(KIND.EXTINCT, { name: this.names[id], verb: deathVerb(cause), place });
     world.chronicle.add(world.tick, KIND.EXTINCT, text, place, [id]);
+  }
+
+  /**
+   * Daily scan for the first-night `first` entry (SPEC §4.11, P3-07): a
+   * species can drift into `visionPeak < 0.35` via the centroid EMA in
+   * `assignNewborn` long after it was created, not only at creation
+   * (already checked in `create()`). Every species (living or extinct —
+   * an extinct one's centroid is frozen at its last value, so checking it
+   * is harmless and still correctly catches a species that crossed the
+   * threshold right before dying out). No-op once the entry has fired.
+   * @param {import('./world.js').World} world
+   * @returns {void}
+   */
+  checkFirstNight(world) {
+    if (world.firsts & FIRST_NIGHT) return;
+    for (let id = 0; id < this.n; id++) {
+      const visionPeak = this.centroid[id * TRAIT_COUNT + TRAIT.visionPeak];
+      if (traitValue(world.cfg, visionPeak, TRAIT.visionPeak) >= NIGHT_VISION_PEAK) continue;
+      world.firsts |= FIRST_NIGHT;
+      const place = regionName(
+        this.originX[id],
+        this.originY[id],
+        world.terrain,
+        world.width,
+        world.height,
+      );
+      const text = sentence(KIND.FIRST, { variant: 'night', name: this.names[id] });
+      world.chronicle.add(world.tick, KIND.FIRST, text, place, [id]);
+      return;
+    }
   }
 }

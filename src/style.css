@@ -395,9 +395,28 @@ body {
 }
 #chron {
   font: 12px var(--mono);
-  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
 }
-#chron div {
+.chron-filters {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px 4px;
+  flex-wrap: wrap;
+  flex: none;
+}
+.chron-filters .chip {
+  width: auto;
+  padding: 3px 9px;
+}
+.chron-rows {
+  overflow: auto;
+  padding: 4px 14px 8px;
+  min-height: 0;
+}
+.chron-rows > div {
   display: flex;
   gap: 12px;
   padding: 2px 0;

@@ -64,14 +64,36 @@ export function deathVerb(cause) {
  */
 export function sentence(kind, ctx) {
   switch (kind) {
+    case KIND.GENESIS:
+      return `Genesis. ${ctx.n} lineages seeded: ${ctx.names.join(', ')}.`;
     case KIND.SPLIT:
       return `A new lineage, ${ctx.name}, splits from ${ctx.parent} in ${ctx.place}.`;
     case KIND.EXTINCT:
       return `${ctx.name} are extinct. The last one ${ctx.verb} in ${ctx.place}.`;
-    case KIND.PLAGUE:
-      return `Plague among the ${ctx.name} in ${ctx.place}: ${ctx.n} sick.`;
+    case KIND.MIGRATION:
+      return ctx.carn
+        ? `${ctx.name} arrive from the ${ctx.edge} edge, hungry.`
+        : `A herd of ${ctx.name} crosses in from the ${ctx.edge} edge.`;
+    case KIND.HUNT_SUMMARY: {
+      const predText = ctx.others ? `${ctx.pred} and others` : ctx.pred;
+      return ctx.n === 1
+        ? `One of the ${ctx.prey} was taken by ${predText} near ${ctx.place}.`
+        : `A hard night for the ${ctx.prey} — ${ctx.n} taken by ${predText}.`;
+    }
     case KIND.FAMINE:
       return `Famine. The plants are down to ${ctx.pct}% in ${ctx.season}.`;
+    case KIND.PLAGUE:
+      return `Plague among the ${ctx.name} in ${ctx.place}: ${ctx.n} sick.`;
+    case KIND.INTERVENTION:
+      return `⚡ ${ctx.text}`;
+    case KIND.NAMING:
+      return `You named the ${ctx.old} ${ctx.new}.`;
+    case KIND.FIRST:
+      return ctx.variant === 'hunters'
+        ? `The ${ctx.name} are the first hunters to rise from the ${ctx.ancestor}.`
+        : `The ${ctx.name} have taken to the night.`;
+    case KIND.WEATHER:
+      return `${ctx.text}`;
     default:
       throw new Error(`sentence: unsupported kind "${kind}"`);
   }

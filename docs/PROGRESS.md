@@ -46,7 +46,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P3-04 Regrowth debt
 - [x] P3-05 Seasons on plants and the famine entry
 - [x] P3-06 Immigration
-- [ ] P3-07 Kill aggregation, `first` events, every chronicle sentence, chronicle filter
+- [x] P3-07 Kill aggregation, `first` events, every chronicle sentence, chronicle filter
 - [ ] P3-08 Charts — population by lineage, diversity with light
 - [ ] P3-09 Idle POI memory and narrative captions
 - [ ] P3-10 Pressure tuning, pinned seeds and the full soak
@@ -1735,5 +1735,58 @@ test checks. Fixed by adding `immigration: { enabled: false }` to that
 test's config; the wider suite's other `organisms: []` tests all run
 too few ticks (or already disable enough via `isolate()`) to hit this,
 confirmed by the full 373-test run passing clean.
+
+### P3-07 — pending sha (see commit)
+Tests: `test/unit/chronicle.test.js` (+4: kills aggregate per prey
+lineage and flush into one `hunt-summary` at dawn, table resets after;
+singular/plural/"and others" sentence forms; every `KIND` produces a
+non-empty `sentence()`, table-driven over `Object.values(KIND)`; first
+hunters and first night each fire exactly once, verified against a
+second qualifying species that must *not* re-fire). `test/ui/
+chronicle-pane.test.js` (+1: each filter chip shows only its mapped
+kinds, a newly-added row respects the currently active filter). All
+pass; full `npm test` scope 378/378 green; `npm run headless --
+ticks 30000` sane (hash `d52f965c`, hunt-summary and migration entries
+both present in the last 10 chronicle lines, no errors).
+Design: fixed-size kill table (`KILL_ROWS=256` (prey,predator,count,
+lastX,lastY) rows + a `KILL_OVERFLOW=64` per-prey-only fallback) lives
+on `world.js` (`recordKill`/`flushKillTable`, called from `ecology.js`'s
+`resolvePredationKills` and at dawn in `step()`); `world.firsts`
+(hashed bitfield, `FIRST_HUNTERS`/`FIRST_NIGHT`) gates each `first`
+entry to once per world, checked both in `SpeciesTable.create()` (a
+newly-created species may already qualify) and, for the night one,
+again daily via a new `checkFirstNight()` method (a species can also
+drift into `visionPeak < 0.35` later via the existing centroid EMA).
+`chronicle.js`'s `sentence()` now has a case for every `KIND`, including
+`genesis`/`migration` (built inline at their call sites, not refactored
+to use `sentence()`, since neither `genesis.js` nor a second look at
+`ecology.js`'s migration text was in this task's Files touched — only
+`sentence()` itself needed to cover them for the table-driven test).
+`chronicle-pane.js` gained a filter chip bar (`All/Lineages/Hunts/
+World/⚡ Hand`) over a nested rows container, remembered in
+`localStorage`; rows are hidden/shown by `data-kind`, never removed, so
+switching filters is instant with no data loss.
+Interpretation: "first hunters" requires `ancestor !== -1` — a genesis
+carnivore founder didn't "rise" from anything the sentence could name,
+so only a real speciation transition (herbivore/omnivore ancestor ->
+carnivore descendant) counts. "First night" has no such guard, since a
+genesis founder legitimately can start nocturnal — confirmed this fires
+often at genesis in practice via the headless run and a fixed pre-
+existing test (below), which is spec-consistent, not a bug.
+Not in Files touched, but required: `ecology.js`'s
+`resolvePredationKills` needed one new line (`recordKill(...)`) right
+next to its existing `recordEvent(EV_HUNT, ...)` call — there is no
+other point in the codebase where a kill happens, so the kill table
+could not be populated without touching the actual kill-resolution
+site, despite `ecology.js` not being listed for this task.
+Found and fixed (a direct consequence of "first" entries now being
+possible at genesis): two pre-existing `chronicle.test.js` tests
+assumed `chronicle.entries[0]` was always the genesis entry, but a
+genesis founder qualifying for `first-night` logs that entry *during*
+`runGenesis`'s per-lineage loop, before the genesis entry itself is
+appended at the end — pushing genesis to a later index for that seed.
+Fixed by finding the genesis entry by `kind` instead of assuming index
+0; the wider suite's other chronicle-entry-order assumptions (searched
+for `chronicle.entries[0]` project-wide) had no other occurrences.
 
 

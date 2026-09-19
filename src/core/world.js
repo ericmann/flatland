@@ -31,7 +31,8 @@ import { Grid } from './grid.js';
 import { gather } from './senses.js';
 import { policy, reflexLayer, act, metabolise, ageOrganism } from './reflex.js';
 import { forward } from './brain.js';
-import { Chronicle } from './chronicle.js';
+import { Chronicle, KIND, sentence } from './chronicle.js';
+import { regionName } from './names.js';
 import { Stats } from './stats.js';
 import { SpeciesTable } from './species.js';
 import {
@@ -127,6 +128,15 @@ export const EV_IMMIGRATION = 4;
 
 const EVENTS_CAPACITY = 64;
 
+/** Fixed-size kill-aggregation table (SPEC §4.11, P3-07): one row per (prey species, predator species) pair seen today. */
+const KILL_ROWS = 256;
+/** Once `KILL_ROWS` is full, further pairs count toward their prey species here (predator identity lost). */
+const KILL_OVERFLOW = 64;
+
+/** `world.firsts` bitfield bits (P3-07). */
+export const FIRST_HUNTERS = 1;
+export const FIRST_NIGHT = 2;
+
 /** Sentinel for `lastImmigrationHerb`/`Carn`: "no immigration yet" (P3-06), a large negative value since tick 0 is real. */
 const NEVER_IMMIGRATED = -1_000_000_000;
 
@@ -152,6 +162,118 @@ export function recordEvent(world, kind, x, y, a, b) {
   ev.b[idx] = b;
   ev.head = (idx + 1) % ev.capacity;
   if (ev.count < ev.capacity) ev.count++;
+}
+
+/**
+ * Record one predation kill into today's kill-aggregation table (SPEC
+ * §4.11, P3-07): finds (or creates) the row for this (prey, predator)
+ * species pair and increments it. Once the fixed-size table is full,
+ * further pairs count toward an overflow bucket keyed by prey species
+ * only (predator identity is lost there); once that overflow is also
+ * full, further kills for a brand-new pair are silently dropped — the
+ * documented bound on this fixed-size table.
+ * @param {World} world
+ * @param {number} preyId prey species id
+ * @param {number} predId predator species id
+ * @param {number} x world x of the kill
+ * @param {number} y world y of the kill
+ * @returns {void}
+ */
+export function recordKill(world, preyId, predId, x, y) {
+  for (let r = 0; r < world.killRowCount; r++) {
+    if (world.killPrey[r] === preyId && world.killPred[r] === predId) {
+      world.killCount[r]++;
+      world.killLastX[r] = x;
+      world.killLastY[r] = y;
+      return;
+    }
+  }
+  if (world.killRowCount < KILL_ROWS) {
+    const r = world.killRowCount++;
+    world.killPrey[r] = preyId;
+    world.killPred[r] = predId;
+    world.killCount[r] = 1;
+    world.killLastX[r] = x;
+    world.killLastY[r] = y;
+    return;
+  }
+  for (let r = 0; r < world.killOverflowRowCount; r++) {
+    if (world.killOverflowPrey[r] === preyId) {
+      world.killOverflowCount[r]++;
+      return;
+    }
+  }
+  if (world.killOverflowRowCount < KILL_OVERFLOW) {
+    const r = world.killOverflowRowCount++;
+    world.killOverflowPrey[r] = preyId;
+    world.killOverflowCount[r] = 1;
+  }
+}
+
+/**
+ * Flush today's kill table into one `hunt-summary` chronicle entry per
+ * prey species with at least one kill (SPEC §4.11), then reset the table
+ * for the next day. Called at dawn (`tick % ticksPerDay === 0`).
+ * @param {World} world
+ * @returns {void}
+ */
+export function flushKillTable(world) {
+  if (world.killRowCount === 0 && world.killOverflowRowCount === 0) return;
+
+  /** @type {number[]} prey species ids, in the row order they first appeared. */
+  const preyIds = [];
+  const seen = new Set();
+  for (let r = 0; r < world.killRowCount; r++) {
+    if (!seen.has(world.killPrey[r])) {
+      seen.add(world.killPrey[r]);
+      preyIds.push(world.killPrey[r]);
+    }
+  }
+  for (let r = 0; r < world.killOverflowRowCount; r++) {
+    if (!seen.has(world.killOverflowPrey[r])) {
+      seen.add(world.killOverflowPrey[r]);
+      preyIds.push(world.killOverflowPrey[r]);
+    }
+  }
+
+  for (const preyId of preyIds) {
+    let total = 0;
+    let topPred = -1;
+    let topCount = -1;
+    let distinctPreds = 0;
+    let lastX = 0;
+    let lastY = 0;
+    for (let r = 0; r < world.killRowCount; r++) {
+      if (world.killPrey[r] !== preyId) continue;
+      total += world.killCount[r];
+      distinctPreds++;
+      if (world.killCount[r] > topCount) {
+        topCount = world.killCount[r];
+        topPred = world.killPred[r];
+      }
+      lastX = world.killLastX[r];
+      lastY = world.killLastY[r];
+    }
+    for (let r = 0; r < world.killOverflowRowCount; r++) {
+      if (world.killOverflowPrey[r] === preyId) total += world.killOverflowCount[r];
+    }
+    if (total < 1) continue;
+
+    const place = regionName(lastX, lastY, world.terrain, world.width, world.height);
+    const preyName = world.species.names[preyId];
+    const predName = topPred !== -1 ? world.species.names[topPred] : 'something unseen';
+    const text = sentence(KIND.HUNT_SUMMARY, {
+      n: total,
+      prey: preyName,
+      pred: predName,
+      others: distinctPreds > 1,
+      place,
+    });
+    world.chronicle.add(world.tick, KIND.HUNT_SUMMARY, text, place, [preyId, topPred]);
+  }
+
+  world.killRowCount = 0;
+  world.killOverflowRowCount = 0;
 }
 
 /** DEATH code -> `world.counters` key, index-aligned (index 0 unused). */
@@ -313,6 +435,21 @@ export class World {
       count: 0,
     };
 
+    /** Kill-aggregation table (SPEC §4.11, P3-07), flushed into `hunt-summary` chronicle entries at dawn. */
+    this.killPrey = new Int32Array(KILL_ROWS).fill(-1);
+    this.killPred = new Int32Array(KILL_ROWS).fill(-1);
+    this.killCount = new Int32Array(KILL_ROWS);
+    this.killLastX = new Float32Array(KILL_ROWS);
+    this.killLastY = new Float32Array(KILL_ROWS);
+    this.killRowCount = 0;
+    /** Once the table above is full, further pairs count here by prey species only. */
+    this.killOverflowPrey = new Int32Array(KILL_OVERFLOW).fill(-1);
+    this.killOverflowCount = new Int32Array(KILL_OVERFLOW);
+    this.killOverflowRowCount = 0;
+
+    /** Bits set once each `first`-kind chronicle entry has fired (P3-07): `FIRST_HUNTERS`, `FIRST_NIGHT`. */
+    this.firsts = 0;
+
     /** Per-organism predation target, set by `ecology.huntTarget` (-1 = none). */
     this.attackTarget.fill(-1);
 
@@ -389,13 +526,19 @@ export class World {
       this.stats.sample(this);
       checkFamine(this);
     }
+    if (this.tick % this.cfg.time.ticksPerDay === 0) {
+      flushKillTable(this);
+      this.species.checkFirstNight(this);
+    }
   }
 
   /**
    * A deterministic FNV-1a 32-bit hash of everything that defines world
    * state, as an 8-character lowercase hex string (SPEC §3.1, §6.3). Order:
    * tick, rng state, next organism id, `famineArmed` (P3-05),
-   * `lastImmigrationHerb`/`Carn` (P3-06); terrain, plants, carcass, soil,
+   * `lastImmigrationHerb`/`Carn` (P3-06), `firsts` (P3-07 — the kill
+   * table itself is transient bookkeeping, like chronicle text, and is
+   * not hashed); terrain, plants, carcass, soil,
    * the regrowth debt grid (P3-04), the four pheromone channels; then the
    * organism store's arrays in
    * `HASH_ORDER`; then the species table's `ancestor, born, died, count,
@@ -412,6 +555,7 @@ export class World {
     h = hashUpdateU32(h, this.famineArmed);
     h = hashUpdateU32(h, this.lastImmigrationHerb);
     h = hashUpdateU32(h, this.lastImmigrationCarn);
+    h = hashUpdateU32(h, this.firsts);
     h = hashUpdate(h, bytesOf(this.terrain));
     h = hashUpdate(h, bytesOf(this.plants));
     h = hashUpdate(h, bytesOf(this.carcass));
