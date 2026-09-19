@@ -2096,7 +2096,7 @@ under other topbar chrome (this task's fix uses overflow-x, not a
 redesign) and that the OS share sheet (not just clipboard fallback)
 actually appears on a real mobile browser.
 
-### P4-06 — pending sha
+### P4-06 — 0aaa64e
 Goal: persist seed + log + state to IndexedDB, resume instantly on
 reload, and verify the resumed state by a bounded background replay
 (Decisions §12.4).
