@@ -2388,7 +2388,7 @@ see P3-10 onward's log, not a regression); `npm run test:soak` 20/20.
 `npm run headless -- --ticks 5000` hash identical across two runs.
 Phone: n/a.
 
-### P5-04 — pending sha
+### P5-04 — e42b4e6
 Goal: add optional sexual reproduction gated by sociality and kin
 proximity (Decisions §12.1). New `ecology.findMate` writes
 `world.mateOf[i]` (-1 = none) during the per-organism loop: nearest
