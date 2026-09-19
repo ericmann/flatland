@@ -50,7 +50,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P3-08 Charts — population by lineage, diversity with light
 - [x] P3-09 Idle POI memory and narrative captions
 - [x] P3-10 Pressure tuning, pinned seeds and the full soak
-- [ ] P3-11 Phase 3 end — push, preview, phone checks
+- [x] P3-11 Phase 3 end — push, preview, phone checks
 - [ ] P4-01 Save records, state snapshots, restore, and the restore determinism case
 - [ ] P4-02 Interventions — every kind in core, replay determinism, ⚡ chronicle
 - [ ] P4-03 Hand of God pane
@@ -1890,3 +1890,33 @@ reads 160-290 ticks/s on this run's machine, reproduced identically
 with this task's changes `git stash`ed — a shared-desktop CPU
 contention artifact (this session ran several hour-long background
 sweeps), not a regression from `regrowth.debtFactor`/`debtTicks`.
+
+### P3-11 — pending sha
+Goal: close Phase 3 with a green suite, a pushed branch and the owed
+phone checks recorded.
+Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
+test` 385/386 (one pre-existing, unrelated throughput-invariant failure
+under this session's heavy background CPU load, see P3-10's log —
+reran in isolation later in this task at 386/386); `npm run test:soak`
+20/20 (both `test/soak/survival.test.js` and this phase's new
+`test/soak/ecology.test.js`); `npm run build` clean; `npm run test:ui`
+20/20 (2 correctly skipped per-project) — two different
+`test/e2e/station.spec.js` tests each flaked once on the first attempt
+while `test:soak`'s 200,000-tick background run was still consuming the
+machine's CPU (a `boundingBox()` layout race and the random-point
+organism-click search both timing-sensitive), then passed cleanly on
+retry once the soak run finished; not a regression, this session's
+CPU load was unusually high throughout. `npm run headless` output sane
+(see P3-10's log).
+docs/development.md: documented the sweep's new P3-10 columns and added
+a "Living systems (Phase 3)" section (scent lenses, the sick marker,
+the Charts dock tab, idle POI continuity narration) alongside the
+Phase 2 station section.
+Preview: `https://build-2026-09-18.flatland.pages.dev` (same branch as
+Phases 1 and 2).
+Phone: NOT VERIFIED (human). Checklist for the human to run through on
+the preview URL above: (1) scent lenses toggle from the strip and
+render as heat without frame drops; (2) charts are readable in the
+170 px dock; (3) chronicle filter chips are tappable; (4) over ten
+minutes of idle, hunt summaries, a famine or plague, and a migration
+appear in the ticker; (5) sick creatures show the marker.
