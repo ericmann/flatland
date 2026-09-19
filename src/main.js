@@ -20,6 +20,7 @@ import { createDock } from './ui/station/dock.js';
 import { createChroniclePane } from './ui/station/chronicle-pane.js';
 import { createPhylogenyPane } from './ui/station/phylogeny-pane.js';
 import { createCharts } from './ui/station/charts.js';
+import { createGodPane } from './ui/station/god-pane.js';
 import { SpeciesStore } from './ui/species-store.js';
 import { Renderer } from './render/renderer.js';
 import { fit } from './render/camera.js';
@@ -69,6 +70,8 @@ let chroniclePane = null;
 let phylogenyPane = null;
 /** @type {ReturnType<typeof createCharts> | null} */
 let charts = null;
+/** @type {ReturnType<typeof createGodPane> | null} */
+let godPane = null;
 /** @type {*} the most recently decoded snapshot, redrawn on pan/zoom/resize without a round-trip to the sim. */
 let lastSnapshot = null;
 /**
@@ -113,6 +116,19 @@ client.on('loaded', (msg) => {
   const worldW = msg.width * renderer.px;
   const worldH = msg.height * renderer.px;
   renderer.resize();
+  // `renderer.resize()` reads `view.parentElement`'s box (SPEC §6.5): the
+  // `#world` grid cell, whose size also changes on a mode switch (idle's
+  // collapsed rail/dock grid rows vs station's) and a dock tab switch (a
+  // taller Hand of God pane vs Chronicle's), neither of which fires a
+  // `window` `resize` event — only a real viewport resize does. Without
+  // this, the canvas's backing-store resolution goes stale relative to
+  // its CSS box after either change, throwing off every screen-to-world
+  // conversion (taps land on the wrong tile) until the next real window
+  // resize. `ResizeObserver` catches both, and any other CSS-only cause.
+  new ResizeObserver(() => {
+    if (renderer) renderer.resize();
+    redraw();
+  }).observe(layout.world);
   const camera = fit({ x: 0, y: 0, z: 1 }, view.width, view.height, worldW, worldH);
 
   app = root
@@ -138,9 +154,11 @@ client.on('loaded', (msg) => {
     chroniclePane = createChroniclePane({ el: dock.panes.chron, cfg });
     phylogenyPane = createPhylogenyPane({ el: dock.panes.phylo, app, speciesStore });
     charts = createCharts({ el: dock.panes.charts, speciesStore });
+    godPane = createGodPane({ el: dock.panes.god, app });
     dock.onPaneChange((name) => {
       phylogenyPane?.setVisible(name === 'phylo');
       charts?.setVisible(name === 'charts');
+      godPane?.setVisible(name === 'god');
     });
     app.onLensChange(redraw); // instant feedback for the L/E keys and rail chips.
     app.onSelectionChange(redraw); // the selection ring appears without waiting for the next snapshot.
