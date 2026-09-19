@@ -2173,7 +2173,7 @@ pre-existing throughput/CPU-contention flake, same as every prior
 Phase 4 task); `npm run build` clean; `npm run headless` sane.
 Phone: n/a (Verification line for this task has no test:ui/browser step).
 
-### P4-08 — pending sha
+### P4-08 — 3a61cd3
 Goal: make Flatland installable and offline (SPEC §2, §6.6, §10) with
 generated icons and a size budget test.
 Tests: `test/unit/make-icons.test.js` (new: PNG signature + IHDR
