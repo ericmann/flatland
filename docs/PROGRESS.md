@@ -2448,7 +2448,7 @@ see P3-10 onward's log, not a regression — this task touches no
 `src/core` file at all); `npm run test:soak` 20/20.
 Phone: n/a.
 
-### P5-06 — pending sha
+### P5-06 — 1d427bb
 Goal: measure the SPEC §8 budgets without a phone, fix cheap
 regressions, record everything in `docs/performance.md`.
 `scripts/perf.mjs` (new): Node throughput/memory on the default world
