@@ -2139,7 +2139,7 @@ the same clock" was checked via the scratch Playwright script above,
 not a permanent e2e spec (out of scope here; P4-09 adds e2e
 completeness). Phone: NOT VERIFIED (human).
 
-### P4-07 — pending sha
+### P4-07 — 691e4a6
 Goal: add the third Charts-pane chart (SPEC §5.2): a stacked-area energy
 flow between the six trophic pools per sample.
 Tests: `test/unit/stats.test.js` (+1: "flow deltas per sample sum to
