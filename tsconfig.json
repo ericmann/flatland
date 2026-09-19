@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "WebWorker"],
+    // "node" makes ambient node globals (process, Buffer, …) resolve for
+    // scripts/**/*.mjs, which need them; P0-01 left this empty because no
+    // script existed yet. This is a TypeScript-only ambient declaration —
+    // it does not affect eslint's core/sim global denylist (P0-01), which
+    // still fails the lint (not the typecheck) on any actual use of a
+    // banned global inside src/core or src/sim.
+    "types": ["node", "vite-plugin-pwa/client"],
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.js", "src/**/*.d.ts", "scripts/**/*.mjs"]
+}

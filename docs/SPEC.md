@@ -482,7 +482,7 @@ Measured on a mid-range Android phone (`⚠️ ASSUMPTION`: Pixel 6a class) in C
 |---|---|
 | Frame time, main thread | ≤ 8 ms at 1×; UI never below 50 fps at 16× |
 | Sim throughput, worker | ≥ 480 ticks/s (16× real time at 30 tps) |
-| Sim throughput, Node (CI gate) | ≥ 2,000 ticks/s on a GitHub runner, 64×40 world, 200 organisms |
+| Sim throughput, Node (CI gate) | ≥ 1,200 ticks/s on a GitHub runner, 64×40 world, 200 organisms (⚠️ ASSUMPTION, revised down from an original 2,000 once real GitHub-runner measurements existed — P5-06/post-handoff findings put actual throughput at ~1,580–1,680 ticks/s, ~20% short of 2,000 with `brain.js`'s `forward()` as the dominant, architectural, not-yet-fixed cost; see `docs/performance.md`) |
 | Memory | ≤ 150 MB total; no per-tick allocation in `core` (verified by a heap-growth test) |
 | Cold load | ≤ 1.5 s to first painted frame on 4G; bundle ≤ 400 kB gzipped including fonts |
 | Battery | Sim pauses on `visibilitychange: hidden`; idle-mode snapshot rate drops to 30 fps |

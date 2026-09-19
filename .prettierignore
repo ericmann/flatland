@@ -1,0 +1,15 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+docs/sweeps/
+package-lock.json
+
+# Pre-existing docs authored by /plan-build and the command chain itself;
+# reformatting them is out of scope for implementation tasks and the exact
+# "### <ID>: <title>" headings in PLAN.md are grepped by the hooks.
+docs/SPEC.md
+docs/PLAN.md
+docs/PROGRESS.md
+docs/mockup.html
+.claude/commands/*.md
