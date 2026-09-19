@@ -33,7 +33,7 @@ const PICK_RADIUS_TILES = 2.5;
  *   getSnapshot?: () => * | null,
  *   speciesStore?: { name: (id: number) => string|undefined } | null,
  * }} opts
- * @returns {{ root: HTMLElement, world: HTMLElement, setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, mode: () => 'idle'|'station', setCamera: (next: import('../render/camera.js').Camera) => void, getLastInteractionAt: () => number, getSelectedId: () => number | null, select: (id: number | null) => void, deselect: () => void, onSelectionChange: (cb: (id: number | null) => void) => (() => void), getHighlightSpecies: () => number | null, setHighlightSpecies: (id: number | null) => void, onHighlightChange: (cb: (id: number | null) => void) => (() => void), getLensState: () => { night: boolean, energy: boolean, scent: boolean[], colorMode: 'self'|'species'|'energy'|'age' }, toggleLens: (key: 'night'|'energy') => void, toggleScent: (channel: number) => void, setColorMode: (mode: 'self'|'species'|'energy'|'age') => void, onLensChange: (cb: (state: *) => void) => (() => void), getGodTool: () => string | null, setGodTool: (tool: string | null) => void, fireGodTool: (kind: string) => void, onGodToolChange: (cb: (tool: string | null) => void) => (() => void), detach: () => void }}
+ * @returns {{ root: HTMLElement, world: HTMLElement, setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, mode: () => 'idle'|'station', setCamera: (next: import('../render/camera.js').Camera) => void, getLastInteractionAt: () => number, getSelectedId: () => number | null, select: (id: number | null) => void, deselect: () => void, onSelectionChange: (cb: (id: number | null) => void) => (() => void), getHighlightSpecies: () => number | null, setHighlightSpecies: (id: number | null) => void, onHighlightChange: (cb: (id: number | null) => void) => (() => void), getLensState: () => { night: boolean, energy: boolean, scent: boolean[], colorMode: 'self'|'species'|'energy'|'age' }, toggleLens: (key: 'night'|'energy') => void, toggleScent: (channel: number) => void, setColorMode: (mode: 'self'|'species'|'energy'|'age') => void, onLensChange: (cb: (state: *) => void) => (() => void), getGodTool: () => string | null, setGodTool: (tool: string | null) => void, fireGodTool: (kind: string) => void, onGodToolChange: (cb: (tool: string | null) => void) => (() => void), rename: (speciesId: number, name: string) => void, detach: () => void }}
  */
 export function createApp({
   root,
@@ -169,6 +169,19 @@ export function createApp({
    */
   function fireGodTool(kind) {
     sim.send('intervene', { event: { kind } });
+  }
+
+  /**
+   * Rename a lineage (SPEC §3.6, §4.10, the `rename` intervention,
+   * P4-04): sent from the inspector's name input, never applied locally
+   * -- the displayed name only changes once the `phylogeny` delta comes
+   * back with the (possibly unique-ified) result.
+   * @param {number} speciesId
+   * @param {string} name
+   * @returns {void}
+   */
+  function rename(speciesId, name) {
+    sim.send('intervene', { event: { kind: 'rename', speciesId, name } });
   }
 
   const hud = createHud(doc);
@@ -468,6 +481,7 @@ export function createApp({
     getGodTool: () => godTool,
     setGodTool,
     fireGodTool,
+    rename,
     /**
      * Subscribe to Hand of God tool arm/disarm changes (god-pane.js).
      * @param {(tool: string | null) => void} cb

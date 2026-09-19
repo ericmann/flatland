@@ -45,6 +45,43 @@ test('clicking an organism opens the inspector with a sprite', async ({ page }) 
   await expect(page.locator('#portrait')).toBeVisible();
 });
 
+test('renaming shows a "You named…" chronicle line and the new name in the phylogeny', async ({
+  page,
+}) => {
+  test.setTimeout(30000);
+  await page.goto('/');
+  await waitForApp(page);
+
+  const box = await page.locator('#view').boundingBox();
+  let selected = false;
+  for (let attempt = 0; attempt < 400 && !selected; attempt++) {
+    const x = box.x + Math.random() * box.width;
+    const y = box.y + Math.random() * box.height;
+    await page.mouse.click(x, y);
+    selected = (await page.evaluate(() => window.__flatland.selectedId)) != null;
+  }
+  expect(selected).toBe(true);
+
+  const nameInput = page.locator('#specName');
+  await expect(nameInput).toBeEnabled();
+  await nameInput.fill('Renamed Test Lineage');
+  await nameInput.press('Enter');
+
+  await expect(page.locator('.chron-rows')).toContainText('You named the', { timeout: 10000 });
+  await expect(page.locator('.chron-rows')).toContainText('Renamed Test Lineage', {
+    timeout: 10000,
+  });
+
+  // On phone widths the inspector is a bottom sheet that overlaps the
+  // dock tabs (SPEC §5.2); close it first so the tab click isn't
+  // intercepted, matching how a user would actually get to the dock.
+  await page.locator('#unsel').click();
+  await page.locator('[data-pane="phylo"]').click();
+  await expect(page.locator('#phyloSvg')).toContainText('Renamed Test Lineage', {
+    timeout: 10000,
+  });
+});
+
 test('pixel-7: the rail is a horizontal strip and the inspector is hidden until selection', async ({
   page,
 }, testInfo) => {

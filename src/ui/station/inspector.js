@@ -1,9 +1,10 @@
 /**
  * The inspector (SPEC §5.2, §10): the selected organism's record — a
- * portrait sprite, diet/generation, current goal, energy/age bars, vision,
- * the 17 live brain inputs, the genome radial glyph over 8 traits, family
- * lines and Follow/Close. Markup and ids from `docs/mockup.html`'s
- * `#insp`. On phones this is the `#insp.open` bottom sheet (P2-08's CSS).
+ * portrait sprite, an editable lineage name (P4-04), diet/generation,
+ * current goal, energy/age bars, vision, the 17 live brain inputs, the
+ * genome radial glyph over 8 traits, family lines and Follow/Close.
+ * Markup and ids from `docs/mockup.html`'s `#insp`. On phones this is the
+ * `#insp.open` bottom sheet (P2-08's CSS).
  *
  * `update(snap)` is called every frame (like `idle.js`'s `tick`) with the
  * latest decoded snapshot; it reads `app.getSelectedId()`/`snap.selected`
@@ -47,6 +48,7 @@ const DIET_LABEL = { herbivore: 'grazer', omnivore: 'omnivore', carnivore: 'hunt
  *   setCamera: (next: import('../../render/camera.js').Camera) => void,
  *   getLastInteractionAt: () => number,
  *   root?: HTMLElement,
+ *   rename?: (speciesId: number, name: string) => void,
  * }, cfg: typeof import('../../core/config.js').DEFAULTS, speciesStore?: { name: (id: number) => string|undefined } }} opts
  * @returns {{ el: HTMLElement, update: (snap: *) => void, detach: () => void }}
  */
@@ -57,7 +59,7 @@ export function createInspector({ el, app, cfg, speciesStore }) {
       <div class="portrait">
         <canvas id="portrait" width="24" height="24"></canvas>
         <div class="who">
-          <div class="name"><input id="specName" aria-label="Lineage name" spellcheck="false" disabled title="naming arrives in Phase 4"></div>
+          <div class="name"><input id="specName" aria-label="Lineage name" spellcheck="false" maxlength="40"></div>
           <div class="sub"><span class="diet" id="diet">grazer</span> · <span id="gen">gen 1</span><br /><span id="goal"></span> · <span id="where"></span></div>
         </div>
       </div>
@@ -77,6 +79,7 @@ export function createInspector({ el, app, cfg, speciesStore }) {
 
   const inspEmpty = /** @type {HTMLElement} */ (el.querySelector('#inspEmpty'));
   const inspBody = /** @type {HTMLElement} */ (el.querySelector('#inspBody'));
+  const specNameInput = /** @type {HTMLInputElement} */ (el.querySelector('#specName'));
   const portrait = /** @type {HTMLCanvasElement} */ (el.querySelector('#portrait'));
   const dietEl = /** @type {HTMLElement} */ (el.querySelector('#diet'));
   const genEl = /** @type {HTMLElement} */ (el.querySelector('#gen'));
@@ -111,6 +114,8 @@ export function createInspector({ el, app, cfg, speciesStore }) {
   let deadSince = -1;
   let lastX = 0;
   let lastY = 0;
+  /** The selected organism's species, so the name input's `change` handler knows which lineage to rename. */
+  let selectedSpeciesId = -1;
 
   /** @returns {void} */
   function showEmptyText() {
@@ -152,6 +157,28 @@ export function createInspector({ el, app, cfg, speciesStore }) {
   closeBtn.addEventListener('click', () => {
     following = false;
     app.deselect();
+  });
+
+  // Enter commits like blur (SPEC §5.2 "editable lineage name"); the
+  // actual send happens on `change` so both paths go through one place.
+  specNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      specNameInput.blur();
+    }
+  });
+
+  // The UI never sets the name itself (SPEC §4.10): this only sends the
+  // intervention. `update()` keeps redrawing the input from
+  // `speciesStore` every frame, so the field snaps back to the
+  // still-current name until the `phylogeny` delta actually renames it
+  // (possibly unique-ified) -- never optimistically to what was typed.
+  specNameInput.addEventListener('change', () => {
+    const trimmed = specNameInput.value.trim();
+    const current = speciesStore?.name?.(selectedSpeciesId);
+    if (trimmed && trimmed !== current) {
+      app.rename?.(selectedSpeciesId, trimmed);
+    }
   });
 
   app.onSelectionChange((id) => {
@@ -238,7 +265,11 @@ export function createInspector({ el, app, cfg, speciesStore }) {
     dietEl.textContent = DIET_LABEL[cls];
     genEl.textContent = `gen ${generation}`;
 
+    selectedSpeciesId = speciesId;
     const name = speciesStore?.name?.(speciesId);
+    if (document.activeElement !== specNameInput) {
+      specNameInput.value = name ?? `lineage ${speciesId}`;
+    }
     if (familyEl) {
       const ancestorName = speciesStore?.name?.(speciesAncestor) ?? '—';
       const born = clock(speciesBorn, cfg).text;

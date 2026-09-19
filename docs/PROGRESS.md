@@ -54,7 +54,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P4-01 Save records, state snapshots, restore, and the restore determinism case
 - [x] P4-02 Interventions — every kind in core, replay determinism, ⚡ chronicle
 - [x] P4-03 Hand of God pane
-- [ ] P4-04 Lineage naming
+- [x] P4-04 Lineage naming
 - [ ] P4-05 Share links, replay-to-tick, platform adapter
 - [ ] P4-06 Auto-save, resume and background verification
 - [ ] P4-07 Trophic energy-flow chart
@@ -2027,3 +2027,34 @@ were required for this task's own acceptance test to pass reliably.
 Interpretation: `data-tool` values are the intervention kind strings
 (`river`/`meadow`, matching P4-02's `queueIntervention`), not the
 mockup's placeholder `water`/`grass` names.
+
+### P4-04 — pending sha
+Goal: enable renaming a lineage from the inspector as a logged
+`rename` intervention (core landed in P4-02).
+Tests: `test/ui/inspector.test.js` (+2: rename sends the intervention
+and the input/family text stay on the old name until the `phylogeny`
+delta updates `speciesStore`; typing 'l' in the now-enabled input
+doesn't reach a lens-toggle handler). `test/e2e/station.spec.js` (+1:
+rename produces a "You named…" chronicle line and the new name shows
+in the phylogeny SVG, both projects).
+Design: `#specName` is no longer `disabled`; `inspector.js`'s
+`update()` (called every frame) sets its `.value` from
+`speciesStore.name(speciesId)` whenever the input isn't focused, and
+never otherwise — so it always reflects the store, never a locally
+optimistic value. `change` (Enter blurs first, so both paths go
+through one handler) sends `app.rename(speciesId, trimmed)` when
+non-empty and different from the current stored name; `app.rename` is
+a new thin wrapper matching `fireGodTool`'s pattern
+(`sim.send('intervene', { event: { kind: 'rename', ... } })`).
+Interpretation: `src/ui/species-store.js` needed no change — its
+existing `name(id)` lookup already gives `update()` exactly the
+"wait for the phylogeny delta" behaviour for free, since nothing
+caches a locally-typed name anywhere. The P1-14 "keys never trigger
+shortcuts while an input has focus" rule needed no new code either:
+`app.js`'s existing global keydown guard already ignores any
+`tagName === 'input'` target, and `#specName` was already a real
+`<input>`, just a disabled one.
+Found and fixed (pixel-7 e2e only): the phone bottom-sheet inspector
+overlaps the dock tabs while open, intercepting the Phylogeny tab
+click — the new e2e test closes the inspector (`#unsel`) before
+switching tabs, matching how a phone user would actually reach the dock.
