@@ -110,11 +110,14 @@ export class Scheduler {
   }
 
   /**
-   * @param {{ seed: number, config?: *, interventions?: import('../core/interventions.js').InterventionEvent[], state?: ArrayBuffer }} msg
+   * @param {{ seed: number, config?: *, interventions?: import('../core/interventions.js').InterventionEvent[], state?: ArrayBuffer, replayTo?: number, speed?: number }} msg
    *   `state`, when given (SPEC §5.6), restores a cached snapshot instead
    *   of replaying from genesis; `interventions` is still the full,
    *   canonical log either way, and any entry with `tick > world.tick`
-   *   (i.e. not yet applied as of the snapshot) is (re)queued.
+   *   (i.e. not yet applied as of the snapshot) is (re)queued. `replayTo`
+   *   (a share link, SPEC §5.6) steps the freshly-loaded world forward to
+   *   that tick, ignoring `speed` and not throttled by wall-clock, before
+   *   `LOADED`/the first live `pump()` — see `_replayTo`.
    * @returns {void}
    */
   _load(msg) {
@@ -130,6 +133,11 @@ export class Scheduler {
       if (ev.tick > world.tick) queueIntervention(world, ev);
     }
     this.world = world;
+
+    if (msg.replayTo != null && msg.replayTo > world.tick) {
+      this._replayTo(msg.replayTo);
+    }
+    if (msg.speed != null) this.speed = msg.speed;
 
     this.acc = 0;
     this.lastNow = this._now();
@@ -153,6 +161,37 @@ export class Scheduler {
       hash: world.hash(),
     });
     this._sendPhylogeny(true); // the full table (force: always post right after load).
+  }
+
+  /**
+   * Step `this.world` forward to `replayTo`, in `batchBudgetMs`-sized
+   * chunks (never one giant synchronous loop, so a real Worker keeps
+   * posting progress throughout), ignoring `speed`/wall-clock pacing
+   * entirely (SPEC §5.6: replay runs as fast as it can, not at 1x). Each
+   * chunk posts `status { replaying: true, progress }`; a final `status
+   * { replaying: false, progress: 1 }` marks the handoff to live pump()s.
+   * @param {number} replayTo
+   * @returns {void}
+   */
+  _replayTo(replayTo) {
+    const world = this._requireWorld();
+    const budgetMs = this._budgetMsOverride ?? world.cfg.sim.batchBudgetMs;
+    const from = world.tick;
+    const span = replayTo - from;
+
+    while (world.tick < replayTo) {
+      const batchStart = this._now();
+      while (world.tick < replayTo && this._now() - batchStart < budgetMs) {
+        world.step();
+      }
+      this._flushChronicle();
+      this._post({
+        type: MSG.STATUS,
+        replaying: true,
+        progress: span > 0 ? (world.tick - from) / span : 1,
+      });
+    }
+    this._post({ type: MSG.STATUS, replaying: false, progress: 1 });
   }
 
   /**

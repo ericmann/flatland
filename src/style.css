@@ -137,6 +137,13 @@ body {
   border-color: var(--sun);
   background: var(--sun-soft);
 }
+.toast {
+  font: 12px var(--mono);
+  color: var(--sun);
+}
+.toast[hidden] {
+  display: none;
+}
 
 #rail {
   grid-area: rail;
@@ -559,6 +566,7 @@ body {
   #top {
     gap: 10px;
     padding: 0 10px;
+    overflow-x: auto;
   }
   #toIdle {
     margin-left: auto;

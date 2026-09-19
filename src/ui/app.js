@@ -16,6 +16,7 @@ import { zoomAt, fit, clamp } from '../render/camera.js';
 import { createHud, setActiveSpeed, setZoomLabel } from '../render/hud.js';
 import { pick } from '../render/renderer.js';
 import { createTooltip, tileTooltipText, organismTooltipText } from './station/tooltip.js';
+import * as defaultPlatform from '../platform/web.js';
 
 const ZOOM_KEY_FACTOR = 1.4;
 /** Picking radius, in tiles (PLAN.md P2-10). */
@@ -25,15 +26,16 @@ const PICK_RADIUS_TILES = 2.5;
  * @param {{
  *   root: HTMLElement,
  *   world?: HTMLElement,
- *   sim: { send: (type: string, payload?: *) => void },
+ *   sim: { send: (type: string, payload?: *) => void, on: (type: string, cb: (msg: *) => void) => (() => void) },
  *   renderer: { view: HTMLCanvasElement, width: number, height: number, px: number },
  *   camera: import('../render/camera.js').Camera,
  *   doc?: Document,
  *   win?: Window & typeof globalThis,
  *   getSnapshot?: () => * | null,
  *   speciesStore?: { name: (id: number) => string|undefined } | null,
+ *   platform?: { share: (opts: { url: string, title?: string }) => Promise<'shared'|'copied'|'unavailable'>, wakeLock: () => Promise<{ release: () => Promise<void> } | null>, haptic: () => void },
  * }} opts
- * @returns {{ root: HTMLElement, world: HTMLElement, setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, mode: () => 'idle'|'station', setCamera: (next: import('../render/camera.js').Camera) => void, getLastInteractionAt: () => number, getSelectedId: () => number | null, select: (id: number | null) => void, deselect: () => void, onSelectionChange: (cb: (id: number | null) => void) => (() => void), getHighlightSpecies: () => number | null, setHighlightSpecies: (id: number | null) => void, onHighlightChange: (cb: (id: number | null) => void) => (() => void), getLensState: () => { night: boolean, energy: boolean, scent: boolean[], colorMode: 'self'|'species'|'energy'|'age' }, toggleLens: (key: 'night'|'energy') => void, toggleScent: (channel: number) => void, setColorMode: (mode: 'self'|'species'|'energy'|'age') => void, onLensChange: (cb: (state: *) => void) => (() => void), getGodTool: () => string | null, setGodTool: (tool: string | null) => void, fireGodTool: (kind: string) => void, onGodToolChange: (cb: (tool: string | null) => void) => (() => void), rename: (speciesId: number, name: string) => void, detach: () => void }}
+ * @returns {{ root: HTMLElement, world: HTMLElement, setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, mode: () => 'idle'|'station', setCamera: (next: import('../render/camera.js').Camera) => void, getLastInteractionAt: () => number, getSelectedId: () => number | null, select: (id: number | null) => void, deselect: () => void, onSelectionChange: (cb: (id: number | null) => void) => (() => void), getHighlightSpecies: () => number | null, setHighlightSpecies: (id: number | null) => void, onHighlightChange: (cb: (id: number | null) => void) => (() => void), getLensState: () => { night: boolean, energy: boolean, scent: boolean[], colorMode: 'self'|'species'|'energy'|'age' }, toggleLens: (key: 'night'|'energy') => void, toggleScent: (channel: number) => void, setColorMode: (mode: 'self'|'species'|'energy'|'age') => void, onLensChange: (cb: (state: *) => void) => (() => void), getGodTool: () => string | null, setGodTool: (tool: string | null) => void, fireGodTool: (kind: string) => void, onGodToolChange: (cb: (tool: string | null) => void) => (() => void), rename: (speciesId: number, name: string) => void, requestRecord: (cb: (reply: { record: string, tick: number }) => void) => void, detach: () => void }}
  */
 export function createApp({
   root,
@@ -45,8 +47,25 @@ export function createApp({
   win = window,
   getSnapshot = () => null,
   speciesStore = null,
+  platform = defaultPlatform,
 }) {
   let mode = /** @type {'idle'|'station'} */ ('idle');
+  /** The idle-mode screen wake lock (SPEC §10, P4-05), or null when not held. @type {{ release: () => Promise<void> } | null} */
+  let wakeLockSentinel = null;
+
+  /** @returns {void} */
+  function releaseWakeLock() {
+    const sentinel = wakeLockSentinel;
+    wakeLockSentinel = null;
+    sentinel?.release().catch(() => {}); // already released (e.g. by the OS) — nothing to do.
+  }
+
+  /** @returns {void} */
+  function acquireWakeLock() {
+    platform.wakeLock().then((/** @type {{ release: () => Promise<void> } | null} */ sentinel) => {
+      wakeLockSentinel = sentinel;
+    });
+  }
   let speed = 1;
   let cam = { ...camera };
   /** Wall-clock ms of the last *user* pan/pinch/wheel gesture (SPEC §5.1: suspends the idle auto-camera for 10s). */
@@ -184,6 +203,22 @@ export function createApp({
     sim.send('intervene', { event: { kind: 'rename', speciesId, name } });
   }
 
+  /**
+   * Ask the sim for its current save record and tick (SPEC §5.6, the
+   * Share button, P4-05) — a thin relay over `snapshotState`/
+   * `stateSnapshot`, one-shot per call so repeated Share taps don't pile
+   * up stale listeners.
+   * @param {(reply: { record: string, tick: number }) => void} cb
+   * @returns {void}
+   */
+  function requestRecord(cb) {
+    const off = sim.on('stateSnapshot', (msg) => {
+      off();
+      cb({ record: msg.record, tick: msg.tick });
+    });
+    sim.send('snapshotState');
+  }
+
   const hud = createHud(doc);
   world.appendChild(hud.el);
 
@@ -206,6 +241,11 @@ export function createApp({
   function setMode(next) {
     mode = next;
     applyModeClass();
+    if (next === 'idle') {
+      if (!doc.hidden) acquireWakeLock();
+    } else {
+      releaseWakeLock();
+    }
   }
 
   /**
@@ -395,14 +435,19 @@ export function createApp({
   function onVisibilityChange() {
     if (doc.hidden) {
       sim.send('pause');
+      releaseWakeLock();
     } else {
       sim.send('resume');
+      if (mode === 'idle') acquireWakeLock();
     }
   }
   doc.addEventListener('visibilitychange', onVisibilityChange);
 
   applyModeClass();
   setActiveSpeed(hud, speed);
+  if (mode === 'idle' && !doc.hidden) {
+    acquireWakeLock();
+  }
 
   /** @type {*} */ (win).__flatland = {
     get mode() {
@@ -482,6 +527,7 @@ export function createApp({
     setGodTool,
     fireGodTool,
     rename,
+    requestRecord,
     /**
      * Subscribe to Hand of God tool arm/disarm changes (god-pane.js).
      * @param {(tool: string | null) => void} cb
@@ -495,6 +541,7 @@ export function createApp({
       detachInput();
       doc.removeEventListener('keydown', onKeyDown);
       doc.removeEventListener('visibilitychange', onVisibilityChange);
+      releaseWakeLock();
     },
   };
 }
