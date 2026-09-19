@@ -1622,7 +1622,7 @@ Uint16Array) clamps `durationTicks` to 65535 on infection rather than
 letting an oversized config override wrap silently, per the task's own
 note to "clamp the config to 65535".
 
-### P3-04 — pending sha (see commit)
+### P3-04 — 51f691e
 Tests: `test/unit/ecology.test.js` (+3: a grazed-to-zero tile regrows at
 `debtFactor × rate` for exactly `debtTicks`, then at the full rate —
 verified by predicting each of 5 ticks' growth from the same formula
