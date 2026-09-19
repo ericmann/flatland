@@ -138,4 +138,55 @@ describe('Scheduler', () => {
     scheduler.handle({ type: MSG.INTERVENE, event: { kind: 'rain', tick: 500 } });
     expect(scheduler.world.pending[1].tick).toBe(500);
   });
+
+  it('loaded is followed by a full phylogeny event; a split posts a delta with the new species only', () => {
+    const { scheduler, posts } = makeScheduler();
+    load(scheduler, 1);
+
+    const phylogenyPosts = () => posts.filter((p) => p.msg.type === MSG.PHYLOGENY);
+    const full = phylogenyPosts();
+    expect(full).toHaveLength(1);
+    expect(full[0].msg.species.length).toBe(scheduler.world.species.n);
+    expect(full[0].msg.species.length).toBeGreaterThan(0);
+
+    // A new species, without needing actual evolutionary drift.
+    const world = scheduler.world;
+    const gLen = world.store.genomeLength;
+    const newId = world.species.create(world, 0 * gLen, 0, 5, 5);
+
+    scheduler.pump();
+    const afterSplit = phylogenyPosts();
+    expect(afterSplit).toHaveLength(2);
+    expect(afterSplit[1].msg.species).toHaveLength(1);
+    expect(afterSplit[1].msg.species[0].id).toBe(newId);
+
+    // Pumping again with nothing new posts no further phylogeny event.
+    scheduler.pump();
+    expect(phylogenyPosts()).toHaveLength(2);
+  });
+
+  it('status carries population by class and species counts', () => {
+    const { scheduler, posts, advance } = makeScheduler();
+    load(scheduler, 1);
+    advance(1000);
+    scheduler.pump();
+
+    const status = posts.filter((p) => p.msg.type === MSG.STATUS).at(-1);
+    expect(status).toBeDefined();
+    const fields = [
+      'light',
+      'season',
+      'dayFraction',
+      'herb',
+      'omni',
+      'carn',
+      'plantsFraction',
+      'speciesLiving',
+      'speciesTotal',
+    ];
+    for (const field of fields) {
+      expect(status.msg[field]).toBeDefined();
+    }
+    expect(status.msg.speciesTotal).toBe(scheduler.world.species.n);
+  });
 });

@@ -15,6 +15,7 @@ function fakeApp() {
   let lastInteractionAt = -Infinity;
   return {
     root,
+    world: root,
     modeChanges: [],
     camera: () => cam,
     setCamera: (next) => {

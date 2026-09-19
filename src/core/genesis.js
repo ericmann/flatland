@@ -172,6 +172,7 @@ export function runGenesis(world) {
       store.parent[slot] = 0;
       store.sick[slot] = 0;
       store.flags[slot] = 0;
+      store.offspring[slot] = 0;
     }
   }
 

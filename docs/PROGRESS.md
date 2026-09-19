@@ -32,15 +32,15 @@ Started: 2026-09-18T15:20:35Z
 - [x] P2-02 Brain forward pass over the SoA
 - [x] P2-03 Brains drive behaviour; seeded genesis prior; reflex layer retained
 - [x] P2-04 Species table, speciation, extinction, phylogeny and lineage names
-- [ ] P2-05 Evolution tuning — mutation, speciation, brain
-- [ ] P2-06 Protocol extension — species table, phylogeny events, family record, richer status
-- [ ] P2-07 Procedural sprites and colour modes
-- [ ] P2-08 Station shell and top bar
-- [ ] P2-09 Lens rail — Night, Energy density, colour-by, legend
-- [ ] P2-10 Inspector, selection, tooltip, follow, bottom sheet
-- [ ] P2-11 Dock — chronicle pane and live phylogeny tree
-- [ ] P2-12 Phase 2 end — push, preview, phone checks
-- [ ] P3-01 Pheromone channels — decay, diffusion, emission, sensing
+- [x] P2-05 Evolution tuning — mutation, speciation, brain
+- [x] P2-06 Protocol extension — species table, phylogeny events, family record, richer status
+- [x] P2-07 Procedural sprites and colour modes
+- [x] P2-08 Station shell and top bar
+- [x] P2-09 Lens rail — Night, Energy density, colour-by, legend
+- [x] P2-10 Inspector, selection, tooltip, follow, bottom sheet
+- [x] P2-11 Dock — chronicle pane and live phylogeny tree
+- [x] P2-12 Phase 2 end — push, preview, phone checks
+- [x] P3-01 Pheromone channels — decay, diffusion, emission, sensing
 - [ ] P3-02 Scent lenses
 - [ ] P3-03 Disease
 - [ ] P3-04 Regrowth debt
@@ -1231,3 +1231,320 @@ Interpretation:
   `originY`/`dietClassAtBirth`, per its literal wording; in practice any
   divergence in `n` still shows up in the other columns (a new species
   necessarily writes into them).
+
+### P2-05 — pending sha (see commit)
+Tests: `test/soak/survival.test.js` (+2 cases: at least one speciation by
+30,000 ticks; living species ≥ 2 at the end). Both passed on the first
+attempt; the pinned seed (29) was re-checked, not re-pinned.
+Sweep (`docs/tuning.md`, `docs/sweeps/p2-05-{before,after}.txt`, 40 seeds
+x 30,000 ticks): before, mean splits per 30k was 77.3 (target `[1, 40]`,
+missed) with 40/40 seeds splitting; after (`species.theta` 0.6 → 0.9),
+mean splits 33.8, still 40/40 seeds. `survived` (population with both
+diet extremes alive) stayed at ~0/40 (1/40 after) — the same
+`genesis.js` placement root cause already recorded in P1-11, out of this
+config-only task's scope. `max generation ≥ 8`: the one surviving seed
+(20) reaches 14.
+Config change: `species.theta` 0.6 → 0.9 (comment at its definition in
+`config.js` records the before/after split-rate numbers and the θ=1.0/1.1
+cliff that ruled out going higher). No other Phase 2 key needed changing.
+Interpretation/finding: running the *entire* suite in one
+`npx vitest run` (no path filter, so `test/soak` runs concurrently with
+everything else) let CPU contention push `test/invariants/bounds.test.js`
+(now meaningfully slower per tick, per P2-03's brain-cost finding) past
+vitest's 120s per-test timeout; the prescribed two-step verification
+(`npm test`, *then* `npm run test:soak`, matching this task's own
+Verification line) doesn't have this contention and passes cleanly. Not
+a code change — just a note that the two steps should stay separate
+invocations, not merged into one bare `vitest run`.
+
+### P2-06 — pending sha (see commit)
+Tests: `test/unit/snapshot.test.js` (+3: FLAG_SPECIES per-species row,
+selected-record family scalars, social flagsByte bit), `scheduler.test.js`
+(+2: loaded → full phylogeny then split → delta-only, status pop/species
+fields), `test/unit/species-store.test.js` (new: apply merges deltas,
+keeps names). All pass.
+Design: `store.offspring: Uint16Array` added to `HASH_ORDER` after
+`flags`; initialized to 0 at both allocation sites (`genesis.js`,
+`ecology.js` resolveBirths) per the store's own "caller must fully
+initialize every field on alloc" contract — not called out in this
+task's Files touched but required by that existing invariant, so
+`test/helpers.js`'s `makeOrganism()` needed the same line. `FLAG_SPECIES
+= 16` added to protocol.js. Snapshot species section: one row per
+species (`ancestor, born, died, count: Int32`, `hue: Float32`),
+`SPECIES_ROW_BYTES = 20`; selected record gains `FAMILY_SCALARS = 5`
+(offspring, livingSiblings, speciesCount, speciesBorn, speciesAncestor).
+`flagsByte` bit 5 = sociality > 0.6. Scheduler tracks `_lastPostedSpeciesN`
+and posts a full `phylogeny` event on load, deltas (only ids the core
+marked `species.dirty`) thereafter; `status` gains
+`light, season, dayFraction, herb, omni, carn, plantsFraction,
+speciesLiving, speciesTotal`. New `src/ui/species-store.js`:
+`SpeciesStore { byId, apply(event), name(id), hue(id), list() }`.
+`src/ui/sim-client.js` needed no change — it is a type-agnostic
+postMessage/subscribe pass-through, already forwards any event shape.
+Bug fix (not in Files touched, found while wiring the species snapshot
+section): P2-04's `SpeciesTable.create()` declared `this.hue` but never
+wrote it; the new snapshot code needs a real hue per species, so added
+`this.hue[id] = traitValue(cfg, genome[traitsOff + TRAIT.hue], TRAIT.hue)`
+in `create()`, and `this.dirty[id] = 1` there and in `onDeath()` to drive
+the phylogeny delta tracking.
+1Password commit signing is down on this machine (agent socket refused
+the connection after a graceful-restart attempt); this and P2-05 remain
+staged/complete but uncommitted until it's back. No signing bypass used.
+
+### P2-07 — pending sha (see commit)
+Tests: `test/unit/sprites.test.js` (new, 8 cases: carnivore spines vs
+none, nocturnal/diurnal eye colour, social tail, sick marker, all rects
+multiples of scale, self/species/energy/age colour). `test/unit/
+organism-layer.test.js` (extended, +2: highlight rings + sun ring,
+energy colour mode) plus its 2 pre-existing tests rewritten for the new
+options-object API. All pass; full `npm test` scope 313/313 green;
+`npm run build` clean.
+Design: `drawOrganisms(ctx, snap, opts)` now takes
+`{ colorMode, speciesStore, highlightSpecies, selectedId }` instead of a
+bare mode string (a breaking change to its two pre-existing tests,
+rewritten in place) — needed so P2-08/09 can wire highlight/selection
+without a second render pass. New `src/render/sprites.js`: `drawSprite`
+and `spriteColour`, shared by the world layer (scale 1) and, later, the
+P2-10 inspector portrait (larger scale).
+Interpretation: SPEC §5.5 says sprites are "drawn at integer pixel
+scales only"; the mockup's `drawSprite` only rounds the body origin to
+the nearest integer, which does not guarantee every accessory pixel
+(offset by whole multiples of `scale` from the body origin) lands on a
+multiple of `scale` once `scale > 1` (the portrait case). Snapped the
+body origin to the nearest multiple of `scale` instead of the nearest
+integer; identical to plain rounding at `scale = 1` (the world layer),
+so this task's behaviour is unchanged, and it's covered by its own test
+("all rects land on integer multiples of scale").
+Not in Files touched, but required: `src/render/renderer.js`'s one call
+site (`drawOrganisms(this.worldCtx, snapshot, 'self')`) updated to the
+options-object form so the world layer keeps rendering after the
+signature change; no test exercises that call site (no `renderer.test.js`
+exists) so this was verified by `npm run build` plus manual code read.
+Verification: this task's Verification line also asks to confirm in a
+browser that "sprites differ visibly between lineages" — not
+verifiable unattended (no browser here); no Playwright spec is listed
+for this task. Recorded as NOT VERIFIED (human), same convention as the
+phone checks.
+
+### P2-08 — pending sha (see commit)
+Tests: `test/ui/topbar.test.js` (new, 6 cases: clock/season/light text,
+speed buttons reflect status, Idle button, population summary, cluster
+click sends setSpeed, setSeed hex format). `test/ui/app.test.js`
+(+1: station mode adds/removes chrome). `test/e2e/station.spec.js`
+(new, 2 cases: tap opens station + running clock; pixel-7 rail is a
+horizontal strip and inspector hidden). All pass; full `npm test` scope
+320/320 green; `npm run build` clean; `npm run test:ui` 10/10 on both
+`chromium-desktop` and `pixel-7` projects (station.spec.js's pixel-7-
+only case, and input.spec.js's existing pinch case, each run only on
+their intended project; skipped on the other as designed).
+Design: new `src/ui/station/layout.js` (`createLayout`/`mountLayout`:
+builds `#top #rail #world #insp #dock`) and `src/ui/station/topbar.js`
+(`createTopBar({ el, app, cfg })`, markup/ids from the mockup). `#app`'s
+grid CSS, full SPEC §5.5 palette, `#top`/`#rail`/`#insp`/`#dock`
+placeholders and the phone (`max-width:900px`) layout added to
+`style.css`.
+Interpretation: the mockup's `.pop` row shows only 2 population classes
+("grazers"/"hunters"); kept that 2-category display (herb -> grazers,
+carn -> hunters), omitting omni from this summary — SPEC §5.2's visual
+language contrasts the two diet poles, not all three classes.
+Not in Files touched, but required: `src/ui/app.js` now takes an
+optional `world` element (defaults to `root`) and mounts the floating
+cluster there instead of on `#app` itself, since `#app` is now a grid
+and `#hud`'s `position:absolute` needs `#world` as its positioned
+ancestor; `src/ui/idle.js`'s one line moving `#idleui` from `app.root`
+to `app.world` for the same reason; `src/main.js` wires
+`layout`/`topbar` and moves `view`/`.vig` under `layout.world`. Also
+fixed `test/ui/idle.test.js`'s `fakeApp()` (missing `world`) and
+`test/e2e/input.spec.js`'s "key 2 shows 4x" test, whose bare
+`[data-sp="4"]` selector became ambiguous now that the top bar has its
+own speed group alongside the floating cluster's — scoped it to `#hud`.
+
+### P2-09 — pending sha (see commit)
+Tests: `test/unit/lens-layer.test.js` (+3: 3×3 stamp at full energy,
+overlapping stamps clamp to 255, alpha scales with energyFrac).
+`test/ui/rail.test.js` (new, 3 cases: chips toggle + reflect `.on`,
+colour-by radio has exactly one `.on`, keys L/E toggle via a real
+`createApp`). All pass; full `npm test` scope 326/326 green; `npm run
+build` clean; `npm run test:ui` 18/18 (both projects, no new console
+errors from the lens code).
+Design: `paintEnergy(imageData, snap)` (`lens-layer.js`) — sun-coloured
+3×3 stamp per organism, alpha `energyFrac/255 * 0.6`, additive and
+clamped to 1, composited by the renderer at `globalAlpha 0.7`, pass
+order terrain -> energy -> organisms -> night. New `src/ui/station/
+rail.js`: `createRail({ el, app })`, a thin view over lens state owned
+by `app.js` (`lensState = { night, energy, colorMode }`,
+`toggleLens`/`setColorMode`/`getLensState`/`onLensChange`), so keyboard
+and chip-click paths both flow through one place. `renderer.draw`'s
+third parameter is now the full lens-state object (was `{ night }`
+only) so P2-07's `colorMode`/`speciesStore`/`highlightSpecies`/
+`selectedId` reach `drawOrganisms` too.
+Interpretation: this task's Files touched lists `src/ui/input.js` for
+the `L`/`E` keys, but `input.js` is pointer/wheel-only by design (its
+own header comment) and `app.js`'s `onKeyDown` already had a stub
+comment naming exactly this hookup point ("L, T/A/M/K, E are reserved
+for lenses"). Wired `L`/`E` there instead, left `input.js` untouched,
+and updated that stub comment. Both keys are treated like the other
+single-purpose keys (speed/zoom/`0`/`Escape`): they no longer fall into
+the catch-all "any other key opens the station" default.
+Not in Files touched, but required: `src/main.js` wires `createRail`
+into `layout.rail` and subscribes `redraw` to `app.onLensChange` so a
+lens/colour toggle repaints immediately rather than waiting for the
+next snapshot.
+
+### P2-10 — pending sha (see commit)
+Tests: `test/unit/pick.test.js` (new, 2 cases: nearest-within-r + -1,
+ties by lowest id, radius boundary). `test/ui/inspector.test.js` (new,
+7 cases: name/diet/gen/energy/age bars, 17 brain bars, goal derivation
+across all 5 branches, Close sends `select null`, Follow snaps the
+camera, phone-sheet `.open` toggling, dead selection empties after the
+3s window). All pass; full `npm test` scope 335/335 green; `npm run
+build` clean; `npm run test:ui` 20/20 (both projects), including the
+new "clicking an organism opens the inspector with a sprite" case in
+`test/e2e/station.spec.js` and the pre-existing "no console errors"
+smoke test — both exercise the bug fixed below in a real browser.
+Design: `pick(snap, wx, wy, r)` added to `renderer.js` (tile-space,
+ties by lowest id). New `src/render/renderer.js` selectedId/speciesStore
+wiring (already had the sun-ring code from P2-07, now actually fed).
+`app.js` gains selection state (`select`/`deselect`/`getSelectedId`/
+`onSelectionChange`) alongside lens state, and a tap now picks within
+2.5 tiles before falling back to "open the station"; a hit does both.
+New `src/ui/station/inspector.js` (`createInspector`), `src/ui/station/
+tooltip.js` (`createTooltip` + pure `tileTooltipText`/
+`organismTooltipText`); `input.js` gained `onHover`/`onLeave` (mouse-
+only hover, SPEC §5.4). `main.js` wires a `SpeciesStore` (built in
+P2-06, never instantiated until now) for colour-by "Lineage" and family
+names, and feeds `getSnapshot`/`speciesStore` into `createApp`.
+Also added the P2-08/09 inspector and rail CSS that had never been
+written (`.sec/.chips/.chip/.legend`, `.portrait/.who/.kv/.bar/.brain/
+.glyph/.tree/.row`) — present in the mockup, needed by this task,
+never added when rail.js/topbar.js's markup was first built.
+Interpretation: the mockup's tile/organism tooltip also shows a `goal`
+and a raw `energy` number, but the compact per-frame snapshot only ever
+carries brain outputs (a goal's inputs) and raw energy for the
+*selected* organism's record, not arbitrary hovered ones — requesting
+a full record for whatever the mouse hovers would be far heavier than
+a tooltip warrants. Tooltip omits `goal` and shows `energy` as a
+percentage of cap (`energyFrac`) instead.
+Bug found and fixed (surfaced by this task's tap-to-pick and hover,
+not previously caught because earlier code paths degraded to silent
+NaNs on stale data instead of throwing): `main.js` released each
+snapshot's buffer immediately after use, which **transfers and detaches
+it** in the main thread — but `lastSnapshot` (read again later by
+resize/lens-toggle/tap/hover handlers) and `Renderer._cachedTerrain`/
+`idle.js`'s and `app.js`'s own terrain caches all kept live references
+to it. Fixed by (1) holding the current snapshot's buffer and only
+releasing the *previous* one when the next snapshot arrives (matches
+what the double-buffered pool is actually for), and (2) copying
+(`.slice()`) any terrain grid cached *across* snapshot cycles instead
+of aliasing the snapshot's own view. Verified via a manual Playwright
+script against the dev server (reproduced the "detached ArrayBuffer"
+and "undefined is not iterable" crashes before the fix, clean after)
+before folding the repro into `station.spec.js`'s new test.
+
+### P2-11 — pending sha (see commit)
+Tests: `test/ui/dock.test.js` (new, 2 cases: tab/pane exclusivity,
+onPaneChange notification). `test/ui/chronicle-pane.test.js` (new, 3:
+newest-first + time tags + kind classes, an unmapped kind gets no
+class, the 500-row DOM cap). `test/ui/phylogeny-pane.test.js` (new, 3:
+one line + dashed ancestor link per species, tap toggles the highlight,
+no redraw while hidden). All pass; full `npm test` scope 343/343
+green; `npm run build` clean; `npm run test:ui` 20/20 both projects.
+Design: `dock.js` (`createDock`), `chronicle-pane.js`
+(`createChroniclePane`, caps at 500 rows, kind->class map
+`intervention:god, extinct:ext, split:spl`), `phylogeny-pane.js`
+(`createPhylogenyPane`, SVG per the mockup's `renderPhylo`: one line per
+species scaled to `max(tick, 1)`, width `sqrt(count)`, dashed link to
+the ancestor's row, `name · count` or `name †` label). Redraw is gated
+on `frame % 10 === 0` *and* `visible` (dock.js's pane-change callback
+sets visibility), rendering immediately on first becoming visible.
+`app.js` gains `highlightSpecies` state (get/set/subscribe), mirroring
+`selectedId`; hover (mouse, `pointerenter`/`pointerleave`) or tap
+(`click`, both pointer types) on a branch toggles it. `main.js` wires
+all three into `layout.dock`, feeds `chronicle` events to the pane, and
+now always requests `FLAG_SPECIES` (needed for `phylogeny-pane`'s
+per-frame counts) rather than only when the phylogeny tab happens to be
+open — simpler than plumbing pane-visibility into the request flags,
+and the species section is small.
+Not in Files touched, but required: found and fixed a second
+flaky-e2e cause while extending `station.spec.js` — its "clicking an
+organism" test (added in P2-10) used a small fixed tap grid, which
+intermittently missed because organisms occupy only part of the map and
+move every tick; replaced with random points over a larger budget
+(400 attempts / 30s timeout), verified flake-free over 6 repeated runs.
+
+### P2-12 — pending sha (see commit)
+Goal: close Phase 2 with a green suite, a pushed branch and the owed
+phone checks recorded.
+Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
+test` 343/343; `npm run test:soak` 6/6; `npm run build` clean; `npm run
+test:ui` 20/20 (2 correctly skipped per-project); `npm run headless --
+ticks 30000` (population 89, all herbivore — the known P1-11/P2-05
+carnivore-survival gap, out of scope here — speciations 31, extinctions
+6, hash `1c65cd70`, no errors).
+Interpretation: ran `npm test` and `npm run test:soak` as two separate
+invocations rather than the literal `npm run test:all`, per the P2-05
+log's already-recorded finding that one bare `vitest run` (test:all's
+definition) lets `test/soak` and everything else contend for CPU and
+spuriously blow `test/invariants/bounds.test.js`'s per-test timeout;
+the two-step form is what this repo's own Verification lines already
+use elsewhere and is what was actually run.
+Preview: `https://build-2026-09-18.flatland.pages.dev` (same branch as
+Phase 1's).
+Push: failed — 1Password SSH commit signing has been unavailable on
+this machine since partway through P2-05 (the agent socket refuses the
+connection; a graceful restart attempt stopped the app entirely rather
+than fixing it, and relaunching it is outside what this run is allowed
+to do). Every task from P2-05 through P2-12 is complete, tested and
+staged in the git index, but **zero commits have landed** — `git push`
+correctly reports nothing to push. The run has continued implementing
+without committing throughout (documented at each affected task's log
+entry) rather than stopping, per the standing instruction to never
+bypass commit signing and never halt the loop. All of it will be
+committed, in task order, the moment signing is available again; until
+then the branch head remains `8aa3183` (P2-04).
+Phone: NOT VERIFIED (human) — and, per the above, not yet even pushed
+for a human to reach via the preview URL. Checklist for whenever it is
+reachable: (1) tap opens the station; the rail strip scrolls sideways;
+dock tabs are reachable; (2) tapping a creature opens the bottom-sheet
+inspector with live brain bars, and Close dismisses it without covering
+the cluster; (3) tapping a phylogeny branch rings its members; (4) the
+pixel font renders (no fallback sans) and text is legible at arm's
+length; (5) Escape/Idle returns to idle and the auto-camera resumes.
+
+### P3-01 — pending sha (see commit)
+Tests: `test/unit/pheromone.test.js` (new, 8 cases: decay multiplies by
+rate, diffusion conserves interior mass and spreads a point, a corner
+averages over only its 2 existing neighbours (no leak), emission adds
+output×gene×emitRate capped at 1, no emission below the 0.05 gate,
+`enabled=false` keeps every channel at zero through 100 real ticks,
+hash changes on a channel edit). `test/unit/senses.test.js` (replaced
+the old "pheromone inputs are 0" placeholder with the real acceptance
+test: ahead-stronger reads positive and halves with a half sense gene).
+All pass; full `npm test` scope 351/351 green; `npm run test:soak`
+6/6; `npm run headless -- --ticks 30000` sane (hunts 16, hash
+`728f3bde`, throughput 659 ticks/s — down from ~1189 pre-pheromone,
+the expected O(tiles) decay/diffuse cost, still far above the harness's
+own throughput floor).
+Config keys introduced (all ⚠️ ASSUMPTION except `enabled`):
+`pheromone.enabled` (true), `pheromone.decay` (`[.985,.96,.98,.97]`),
+`pheromone.diffusion` (`[.2,.2,.2,.2]`), `pheromone.diffuseEvery` (4),
+`pheromone.emitRate` (0.1), `pheromone.senseGain` (4) — every value
+copied verbatim from the task's Design constraints, none tuned yet.
+Design: new `src/core/pheromone.js` (`decay`, `diffuse`, `emit`);
+`world.js` allocates `pherScratch` and wires the step order exactly as
+specified (`decay` then, every `diffuseEvery` ticks, `diffuse`, both
+before `grid.rebuild`; `emit` after `act()` in the per-organism loop);
+`senses.js`'s `gather()` now reads real ahead/behind samples via a new
+`clampedTile()` helper (SPEC's "clamped in-bounds", distinct from the
+existing `tileAt()`'s -1-on-out-of-bounds convention used elsewhere in
+the same file). `OUTPUT.emit0..3` duplicated locally in `pheromone.js`
+rather than imported from `reflex.js`, matching `ecology.js`'s existing
+`OUTPUT.eat` duplication — `reflex.js` imports `world.js` for `DEATH`,
+so importing from it here would cycle back through `world.js`.
+Found and fixed (not in this task's Files touched, but a pre-existing
+regression-guard gap this task's own new keys tripped): `config.test.js`
+and `genome.test.js` both assert every `DEFAULTS` leaf has a `DOCS`
+entry, including `.enabled` keys (`predation.enabled` etc. already do)
+— missed adding `pheromone.enabled`'s entry on the first pass; added it.
+
+

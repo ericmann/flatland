@@ -72,6 +72,21 @@ function tileAt(world, x, y) {
 }
 
 /**
+ * The flat tile index for a world position, clamped in-bounds (SPEC
+ * §4.8's pheromone ahead/behind sampling — unlike `tileAt`, this never
+ * returns -1).
+ * @param {import('./world.js').World} world
+ * @param {number} x
+ * @param {number} y
+ * @returns {number}
+ */
+function clampedTile(world, x, y) {
+  const ix = Math.max(0, Math.min(world.width - 1, Math.floor(x)));
+  const iy = Math.max(0, Math.min(world.height - 1, Math.floor(y)));
+  return iy * world.width + ix;
+}
+
+/**
  * Sample a scalar grid (plants or carcass) in 8 compass directions at a
  * fixed distance from (x, y), returning the weighted direction sum and
  * the single largest sample. Out-of-bounds samples (and, when
@@ -276,10 +291,24 @@ export function gather(world, i) {
   }
   inputs[off + INPUT.kin] = Math.min(1, kinCount / cfg.senses.kinNorm);
 
-  inputs[off + INPUT.pher0] = 0;
-  inputs[off + INPUT.pher1] = 0;
-  inputs[off + INPUT.pher2] = 0;
-  inputs[off + INPUT.pher3] = 0;
+  if (cfg.pheromone.enabled) {
+    const hx = cos(heading);
+    const hy = sin(heading);
+    const aheadTile = clampedTile(world, x + 2 * hx, y + 2 * hy);
+    const behindTile = clampedTile(world, x - 2 * hx, y - 2 * hy);
+    const senseGain = cfg.pheromone.senseGain;
+    for (let c = 0; c < 4; c++) {
+      const gene = store.pheno[pOff + TRAIT.sense0 + c];
+      const ahead = world.pher[c][aheadTile];
+      const behind = world.pher[c][behindTile];
+      inputs[off + INPUT.pher0 + c] = clamp(gene * (ahead - behind) * senseGain, -1, 1);
+    }
+  } else {
+    inputs[off + INPUT.pher0] = 0;
+    inputs[off + INPUT.pher1] = 0;
+    inputs[off + INPUT.pher2] = 0;
+    inputs[off + INPUT.pher3] = 0;
+  }
 
   const hereIdx = tileAt(world, x, y);
   const hereType = hereIdx === -1 ? TERRAIN.GRASS : world.terrain[hereIdx];

@@ -14,6 +14,7 @@ import { makeConfig } from '../core/config.js';
 import { World } from '../core/world.js';
 import { runGenesis } from '../core/genesis.js';
 import { queueIntervention } from '../core/interventions.js';
+import { season, dayFraction } from '../core/light.js';
 import { MSG } from './protocol.js';
 import { snapshotByteLength, encodeSnapshot, SnapshotPool } from './snapshot.js';
 
@@ -52,6 +53,8 @@ export class Scheduler {
     this._tpsTimeAccum = 0;
     this._lastStatusPostAt = -Infinity;
     this._lastStatsN = 0;
+    /** Species ids `< this` were included in a previous phylogeny post; new ids and dirty old ones are sent as a delta (P2-06). */
+    this._lastPostedSpeciesN = 0;
   }
 
   /**
@@ -129,6 +132,7 @@ export class Scheduler {
     this.achievedTps = 0;
     this._lastStatusPostAt = -Infinity;
     this._lastStatsN = world.stats.n;
+    this._lastPostedSpeciesN = 0;
     this.pool = new SnapshotPool(snapshotByteLength(cfg));
 
     this._post({
@@ -139,6 +143,56 @@ export class Scheduler {
       height: world.height,
       hash: world.hash(),
     });
+    this._sendPhylogeny(true); // the full table (force: always post right after load).
+  }
+
+  /**
+   * Post a phylogeny event: species new since `_lastPostedSpeciesN`, plus
+   * any earlier species the core marked `dirty` (e.g. went extinct) —
+   * SPEC §6.4. On `load` this is the whole table (`_lastPostedSpeciesN`
+   * starts at 0). Posts even when the delta is empty only when `force`
+   * is set (used right after `load`, so "loaded is followed by a
+   * phylogeny event" holds even for a world with no species yet).
+   * @param {boolean} [force]
+   * @returns {void}
+   */
+  _sendPhylogeny(force = false) {
+    const world = this._requireWorld();
+    const table = world.species;
+    const fromN = this._lastPostedSpeciesN;
+    /** @type {*[]} */
+    const rows = [];
+
+    for (let id = 0; id < fromN; id++) {
+      if (!table.dirty[id]) continue;
+      rows.push(this._phylogenyRow(table, id));
+      table.dirty[id] = 0;
+    }
+    for (let id = fromN; id < table.n; id++) {
+      rows.push(this._phylogenyRow(table, id));
+      table.dirty[id] = 0;
+    }
+    this._lastPostedSpeciesN = table.n;
+
+    if (rows.length === 0 && !force) return;
+    this._post({ type: MSG.PHYLOGENY, species: rows });
+  }
+
+  /**
+   * @param {import('../core/species.js').SpeciesTable} table
+   * @param {number} id
+   * @returns {*}
+   */
+  _phylogenyRow(table, id) {
+    return {
+      id,
+      name: table.names[id],
+      ancestor: table.ancestor[id],
+      born: table.born[id],
+      died: table.died[id],
+      hue: table.hue[id],
+      count: table.count[id],
+    };
   }
 
   /**
@@ -190,6 +244,7 @@ export class Scheduler {
 
     this._maybeSendSnapshot();
     this._flushChronicle();
+    this._sendPhylogeny();
     this._maybeSendStats();
     this._maybeSendStatus(now, behind);
 
@@ -265,6 +320,8 @@ export class Scheduler {
     this._tpsTimeAccum = 0;
 
     const world = this._requireWorld();
+    const stats = world.stats;
+    const idx = stats.n > 0 ? (stats.head - 1 + stats.capacity) % stats.capacity : -1;
     this._post({
       type: MSG.STATUS,
       tick: world.tick,
@@ -272,6 +329,15 @@ export class Scheduler {
       speed: this.speed,
       pop: world.store.count,
       behind,
+      light: world.light,
+      season: season(world.tick, world.cfg),
+      dayFraction: dayFraction(world.tick, world.cfg),
+      herb: idx === -1 ? 0 : stats.herb[idx],
+      omni: idx === -1 ? 0 : stats.omni[idx],
+      carn: idx === -1 ? 0 : stats.carn[idx],
+      plantsFraction: idx === -1 ? 0 : stats.plantsFraction[idx],
+      speciesLiving: idx === -1 ? 0 : stats.speciesLiving[idx],
+      speciesTotal: world.species.n,
     });
   }
 }

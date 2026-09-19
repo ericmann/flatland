@@ -39,6 +39,7 @@ export const HASH_ORDER = Object.freeze([
   'generation',
   'sick',
   'flags',
+  'offspring',
   'genome',
 ]);
 
@@ -68,6 +69,8 @@ export class OrganismStore {
     /** Disease timer in ticks; 0 = healthy. */
     this.sick = new Uint16Array(capacity);
     this.flags = new Uint8Array(capacity);
+    /** Lifetime count of surviving births this organism has parented (P2-06, SPEC §6.4's family record). */
+    this.offspring = new Uint16Array(capacity);
     this.genome = new Float32Array(capacity * genomeLength);
 
     // Filled by P1-02 (applyPhenotype); allocated here because the store

@@ -2,35 +2,135 @@
  * The app state machine (SPEC §5.4): idle <-> station mode, speed, the
  * camera, and the floating cluster. Every DOM/global is injectable so
  * jsdom tests can stub the renderer — `getContext` isn't available there.
- * Station chrome beyond the cluster arrives in P2-08; here it's just the
- * mode class, per this task's Out of scope.
+ * `world` (the station grid's `#world` container, P2-08's `layout.js`)
+ * is where the floating cluster and, later, the idle overlay mount — both
+ * are `position: absolute` against it, not against `#app` itself, since
+ * `#app` is now a grid with its own top/rail/insp/dock cells.
+ * Selection (P2-10): a tap picks the nearest organism (SPEC §5.4) within
+ * `PICK_RADIUS_TILES` of the tap in the caller's `getSnapshot()` (main.js
+ * supplies its latest decoded snapshot); a hit both opens the station (if
+ * idle) and selects, a miss from idle still opens the station alone.
  */
 import { attachInput } from './input.js';
 import { zoomAt, fit, clamp } from '../render/camera.js';
 import { createHud, setActiveSpeed, setZoomLabel } from '../render/hud.js';
+import { pick } from '../render/renderer.js';
+import { createTooltip, tileTooltipText, organismTooltipText } from './station/tooltip.js';
 
 const ZOOM_KEY_FACTOR = 1.4;
+/** Picking radius, in tiles (PLAN.md P2-10). */
+const PICK_RADIUS_TILES = 2.5;
 
 /**
  * @param {{
  *   root: HTMLElement,
+ *   world?: HTMLElement,
  *   sim: { send: (type: string, payload?: *) => void },
  *   renderer: { view: HTMLCanvasElement, width: number, height: number, px: number },
  *   camera: import('../render/camera.js').Camera,
  *   doc?: Document,
  *   win?: Window & typeof globalThis,
+ *   getSnapshot?: () => * | null,
+ *   speciesStore?: { name: (id: number) => string|undefined } | null,
  * }} opts
- * @returns {{ root: HTMLElement, setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, mode: () => 'idle'|'station', setCamera: (next: import('../render/camera.js').Camera) => void, getLastInteractionAt: () => number, detach: () => void }}
+ * @returns {{ root: HTMLElement, world: HTMLElement, setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, mode: () => 'idle'|'station', setCamera: (next: import('../render/camera.js').Camera) => void, getLastInteractionAt: () => number, getSelectedId: () => number | null, select: (id: number | null) => void, deselect: () => void, onSelectionChange: (cb: (id: number | null) => void) => (() => void), getHighlightSpecies: () => number | null, setHighlightSpecies: (id: number | null) => void, onHighlightChange: (cb: (id: number | null) => void) => (() => void), getLensState: () => { night: boolean, energy: boolean, colorMode: 'self'|'species'|'energy'|'age' }, toggleLens: (key: 'night'|'energy') => void, setColorMode: (mode: 'self'|'species'|'energy'|'age') => void, onLensChange: (cb: (state: *) => void) => (() => void), detach: () => void }}
  */
-export function createApp({ root, sim, renderer, camera, doc = document, win = window }) {
+export function createApp({
+  root,
+  world = root,
+  sim,
+  renderer,
+  camera,
+  doc = document,
+  win = window,
+  getSnapshot = () => null,
+  speciesStore = null,
+}) {
   let mode = /** @type {'idle'|'station'} */ ('idle');
   let speed = 1;
   let cam = { ...camera };
   /** Wall-clock ms of the last *user* pan/pinch/wheel gesture (SPEC §5.1: suspends the idle auto-camera for 10s). */
   let lastInteractionAt = -Infinity;
 
+  /** @type {number | null} */
+  let selectedId = null;
+  /** @type {Set<(id: number | null) => void>} */
+  const selectionListeners = new Set();
+
+  /**
+   * @param {number | null} id
+   * @returns {void}
+   */
+  function select(id) {
+    selectedId = id;
+    sim.send('select', { id });
+    for (const cb of selectionListeners) cb(selectedId);
+  }
+
+  /** @returns {void} */
+  function deselect() {
+    select(null);
+  }
+
+  /**
+   * The phylogeny pane's hover/tap highlight (SPEC §5.2, P2-11): rings the
+   * living members of one species on the map. Independent of `selectedId`.
+   * @type {number | null}
+   */
+  let highlightSpecies = null;
+  /** @type {Set<(id: number | null) => void>} */
+  const highlightListeners = new Set();
+
+  /**
+   * @param {number | null} id
+   * @returns {void}
+   */
+  function setHighlightSpecies(id) {
+    highlightSpecies = id;
+    for (const cb of highlightListeners) cb(highlightSpecies);
+  }
+
+  /**
+   * Lens rail state (SPEC §5.2, P2-09): Night defaults on, Energy density
+   * off; scent lens keys (T/A/M/K) arrive in P3-02. `colorMode` is the
+   * separate "Color by" radio (P2-07's four modes).
+   * @type {{ night: boolean, energy: boolean, colorMode: 'self'|'species'|'energy'|'age' }}
+   */
+  let lensState = { night: true, energy: false, colorMode: 'self' };
+  /** @type {Set<(state: typeof lensState) => void>} */
+  const lensListeners = new Set();
+
+  /** @returns {void} */
+  function notifyLensChange() {
+    for (const cb of lensListeners) cb(lensState);
+  }
+
+  /**
+   * @param {'night'|'energy'} key
+   * @returns {void}
+   */
+  function toggleLens(key) {
+    lensState = { ...lensState, [key]: !lensState[key] };
+    notifyLensChange();
+  }
+
+  /**
+   * @param {'self'|'species'|'energy'|'age'} mode_
+   * @returns {void}
+   */
+  function setColorMode(mode_) {
+    lensState = { ...lensState, colorMode: mode_ };
+    notifyLensChange();
+  }
+
   const hud = createHud(doc);
-  root.appendChild(hud.el);
+  world.appendChild(hud.el);
+
+  const tooltip = createTooltip(doc);
+  world.appendChild(tooltip.el);
+  /** Terrain grid, cached across snapshots that omit it (same pattern as idle.js's).
+   * @type {Uint8Array | null} */
+  let cachedTerrain = null;
 
   /** @returns {void} */
   function applyModeClass() {
@@ -105,11 +205,47 @@ export function createApp({ root, sim, renderer, camera, doc = document, win = w
       lastInteractionAt = performance.now();
       zoomBy(f, { x: ax, y: ay });
     },
-    onTap: () => {
-      // Selecting an organism arrives with the inspector (P2-10); for now
-      // a tap on the map, like any other input, opens the station.
+    onTap: (wx, wy) => {
+      const snap = getSnapshot();
+      const id = snap ? pick(snap, wx / renderer.px, wy / renderer.px, PICK_RADIUS_TILES) : -1;
+      if (id !== -1) {
+        if (mode === 'idle') setMode('station');
+        select(id);
+        return;
+      }
       if (mode === 'idle') setMode('station');
     },
+    onHover: (wx, wy, pointerType, localX, localY) => {
+      if (pointerType !== 'mouse') return;
+      const snap = getSnapshot();
+      if (!snap) {
+        tooltip.hide();
+        return;
+      }
+      if (snap.terrain) cachedTerrain = snap.terrain.slice();
+      tooltip.move(localX + 12, localY + 12);
+
+      const tileX = wx / renderer.px;
+      const tileY = wy / renderer.px;
+      const id = pick(snap, tileX, tileY, PICK_RADIUS_TILES);
+      if (id !== -1) {
+        const idx = snap.orgs.id.indexOf(id);
+        const name =
+          speciesStore?.name?.(snap.orgs.species[idx]) ?? `lineage ${snap.orgs.species[idx]}`;
+        tooltip.show(organismTooltipText(name, snap.orgs.energyFrac[idx]));
+        return;
+      }
+      if (!cachedTerrain) {
+        tooltip.hide();
+        return;
+      }
+      const tx = Math.max(0, Math.min(renderer.width - 1, Math.floor(tileX)));
+      const ty = Math.max(0, Math.min(renderer.height - 1, Math.floor(tileY)));
+      const terrainType = cachedTerrain[ty * renderer.width + tx];
+      const plantsFraction = snap.plants ? snap.plants[ty * renderer.width + tx] : 0;
+      tooltip.show(tileTooltipText(terrainType, plantsFraction));
+    },
+    onLeave: () => tooltip.hide(),
   });
 
   /**
@@ -150,8 +286,16 @@ export function createApp({ root, sim, renderer, camera, doc = document, win = w
       case 'Escape':
         setMode('idle');
         return;
+      case 'l':
+      case 'L':
+        toggleLens('night');
+        return;
+      case 'e':
+      case 'E':
+        toggleLens('energy');
+        return;
       default:
-        // L, T/A/M/K, E are reserved for lenses (P2-09/P3-02); do nothing yet.
+        // T/A/M/K (scent lenses) are reserved for P3-02; do nothing yet.
         if (mode === 'idle') setMode('station');
     }
   }
@@ -180,10 +324,14 @@ export function createApp({ root, sim, renderer, camera, doc = document, win = w
     get speed() {
       return speed;
     },
+    get selectedId() {
+      return selectedId;
+    },
   };
 
   return {
     root,
+    world,
     setMode,
     setSpeed,
     zoomBy,
@@ -202,6 +350,43 @@ export function createApp({ root, sim, renderer, camera, doc = document, win = w
       setZoomLabel(hud, cam.z);
     },
     getLastInteractionAt: () => lastInteractionAt,
+    getSelectedId: () => selectedId,
+    select,
+    deselect,
+    /**
+     * Subscribe to selection changes (rail.js-style: inspector.js's view
+     * over `app`'s state).
+     * @param {(id: number | null) => void} cb
+     * @returns {() => void} unsubscribe
+     */
+    onSelectionChange(cb) {
+      selectionListeners.add(cb);
+      return () => selectionListeners.delete(cb);
+    },
+    getHighlightSpecies: () => highlightSpecies,
+    setHighlightSpecies,
+    /**
+     * Subscribe to phylogeny highlight changes (phylogeny-pane.js and the
+     * renderer's ring).
+     * @param {(id: number | null) => void} cb
+     * @returns {() => void} unsubscribe
+     */
+    onHighlightChange(cb) {
+      highlightListeners.add(cb);
+      return () => highlightListeners.delete(cb);
+    },
+    getLensState: () => lensState,
+    toggleLens,
+    setColorMode,
+    /**
+     * Subscribe to lens/colour-mode changes (rail.js's chips).
+     * @param {(state: typeof lensState) => void} cb
+     * @returns {() => void} unsubscribe
+     */
+    onLensChange(cb) {
+      lensListeners.add(cb);
+      return () => lensListeners.delete(cb);
+    },
     detach() {
       detachInput();
       doc.removeEventListener('keydown', onKeyDown);

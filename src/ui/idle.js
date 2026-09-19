@@ -73,7 +73,7 @@ function dietCodeOf(flagsByte) {
  */
 export function createIdle({ app, camera, cfg, reduceMotion, random = Math.random }) {
   const ui = createIdleUI(app.root.ownerDocument);
-  app.root.appendChild(ui.el);
+  app.world.appendChild(ui.el);
   ui.openStation.addEventListener('click', () => app.setMode('station'));
 
   /** @type {Uint8Array | null} cached across snapshots that omit FLAG_TERRAIN. */
@@ -106,7 +106,7 @@ export function createIdle({ app, camera, cfg, reduceMotion, random = Math.rando
    * @returns {void}
    */
   function pickPOI(snapshot, now) {
-    if (snapshot.terrain) cachedTerrain = snapshot.terrain;
+    if (snapshot.terrain) cachedTerrain = snapshot.terrain.slice();
     const w = cfg.world.width;
     const h = cfg.world.height;
     /**
@@ -220,7 +220,7 @@ export function createIdle({ app, camera, cfg, reduceMotion, random = Math.rando
    * @returns {void}
    */
   function tick(snapshot, now) {
-    if (snapshot.terrain) cachedTerrain = snapshot.terrain;
+    if (snapshot.terrain) cachedTerrain = snapshot.terrain.slice();
 
     const suspended = now - app.getLastInteractionAt() < IDLE_OVERRIDE_MS;
     if (!suspended) {

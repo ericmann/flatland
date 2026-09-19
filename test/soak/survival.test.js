@@ -10,6 +10,13 @@ import { makeWorld } from '../helpers.js';
 // [250, 700] target range, 2 surviving species, 0 rerolls), rather than an
 // outlier seed (the same sweep ranges from full extinction to population
 // 1,510 depending on seed).
+//
+// Re-checked, not re-pinned, for P2-05 (docs/sweeps/p2-05-after.txt): seed
+// 29 still survives under the tuned genome/species defaults (population
+// 115, 8 living species, 14 splits, max generation 11 by 30,000 ticks) —
+// its population count moved (P1-11's "250" was under pre-brain
+// behaviour), but it still comfortably clears every soak assertion below,
+// so there was no reason to pick a different seed.
 const SEED = 29;
 
 // Interpretation (P1-11 log/tuning.md): the sweep's `survived` metric
@@ -49,6 +56,18 @@ describe('reduced soak: population survival to 30,000 ticks', () => {
 
   it('the energy identity holds within 1e-3 at the end', () => {
     expect(relativeError(world)).toBeLessThan(1e-3);
+  });
+
+  it('at least one speciation occurred by 30,000 ticks', () => {
+    expect(world.counters.splits).toBeGreaterThanOrEqual(1);
+  });
+
+  it('living species >= 2 at the end', () => {
+    let living = 0;
+    for (let id = 0; id < world.species.n; id++) {
+      if (world.species.died[id] === -1) living++;
+    }
+    expect(living).toBeGreaterThanOrEqual(2);
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { drawNight } from '../../src/render/lens-layer.js';
+import { drawNight, paintEnergy } from '../../src/render/lens-layer.js';
 
 function fakeCtx() {
   return {
@@ -36,5 +36,68 @@ describe('lens-layer: drawNight', () => {
     const ctxNoWarm = fakeCtx();
     drawNight(ctxNoWarm, 0.36, 10, 10);
     expect(ctxNoWarm.calls).toHaveLength(1); // night fill only, warm band is 0 so skipped
+  });
+});
+
+/** A plain `{ width, height, data }` ImageData-alike, node-testable. */
+function fakeImageData(width, height) {
+  return { width, height, data: new Uint8ClampedArray(width * height * 4) };
+}
+
+function pixel(imageData, x, y) {
+  const o = (y * imageData.width + x) * 4;
+  return Array.from(imageData.data.subarray(o, o + 4));
+}
+
+describe('lens-layer: paintEnergy', () => {
+  it('paintEnergy stamps 3×3 around each organism scaled by energyFrac and clamps alpha', () => {
+    const img = fakeImageData(5, 5);
+    const snap = {
+      orgs: {
+        n: 1,
+        x: Float32Array.from([2]),
+        y: Float32Array.from([2]),
+        energyFrac: Uint8Array.from([255]),
+      },
+    };
+    paintEnergy(img, snap);
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const [r, g, b, a] = pixel(img, 2 + dx, 2 + dy);
+        expect([r, g, b]).toEqual([227, 168, 58]);
+        expect(a).toBe(Math.round(255 * 0.6));
+      }
+    }
+    // Outside the 3x3 stamp, nothing is painted.
+    expect(pixel(img, 0, 0)[3]).toBe(0);
+  });
+
+  it('overlapping stamps add alpha but clamp to full opacity', () => {
+    const img = fakeImageData(5, 5);
+    const snap = {
+      orgs: {
+        n: 2,
+        x: Float32Array.from([2, 2]),
+        y: Float32Array.from([2, 2]),
+        energyFrac: Uint8Array.from([255, 255]),
+      },
+    };
+    paintEnergy(img, snap);
+    expect(pixel(img, 2, 2)[3]).toBe(255);
+  });
+
+  it('lower energyFrac produces proportionally lower alpha', () => {
+    const img = fakeImageData(5, 5);
+    const snap = {
+      orgs: {
+        n: 1,
+        x: Float32Array.from([2]),
+        y: Float32Array.from([2]),
+        energyFrac: Uint8Array.from([128]),
+      },
+    };
+    paintEnergy(img, snap);
+    expect(pixel(img, 2, 2)[3]).toBe(Math.round((128 / 255) * 0.6 * 255));
   });
 });

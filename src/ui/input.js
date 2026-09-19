@@ -13,6 +13,13 @@
  * wheel and pinch (pinch's absolute target zoom is converted to a factor
  * relative to the camera's current zoom), so the caller has one zoom
  * entry point (`app.js`'s `zoomBy(f, anchor)`).
+ *
+ * `onHover(worldX, worldY, pointerType)` (P2-10, optional): a `pointermove`
+ * that isn't part of an active drag/pinch — a plain hover, which only a
+ * mouse produces (touch never fires `pointermove` without an active
+ * touch), matching SPEC §5.4's "no hover dependence on touch". The tile
+ * tooltip filters on `pointerType === 'mouse'` itself rather than this
+ * module doing it, so a future pointer type isn't silently dropped here.
  */
 import { screenToWorld } from '../render/camera.js';
 
@@ -26,11 +33,13 @@ const WHEEL_ZOOM_RATE = 0.0015;
  *   onPan: (dx: number, dy: number) => void,
  *   onTap: (worldX: number, worldY: number) => void,
  *   onZoom: (factor: number, worldX: number, worldY: number) => void,
+ *   onHover?: (worldX: number, worldY: number, pointerType: string, localX: number, localY: number) => void,
+ *   onLeave?: () => void,
  * }} handlers
  * @returns {() => void} detach every listener this call added
  */
 export function attachInput(canvas, handlers) {
-  const { getCamera, onPan, onTap, onZoom } = handlers;
+  const { getCamera, onPan, onTap, onZoom, onHover, onLeave } = handlers;
 
   /** @type {Map<number, { x: number, y: number }>} */
   const pointers = new Map();
@@ -79,7 +88,14 @@ export function attachInput(canvas, handlers) {
 
   /** @param {PointerEvent} e */
   function onPointerMove(e) {
-    if (!pointers.has(e.pointerId)) return;
+    if (!pointers.has(e.pointerId)) {
+      if (onHover) {
+        const world = toWorld(e.clientX, e.clientY);
+        const rect = canvas.getBoundingClientRect();
+        onHover(world.x, world.y, e.pointerType, e.clientX - rect.left, e.clientY - rect.top);
+      }
+      return;
+    }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     const pts = twoPoints();
@@ -123,10 +139,16 @@ export function attachInput(canvas, handlers) {
     onZoom(Math.exp(-e.deltaY * WHEEL_ZOOM_RATE), anchor.x, anchor.y);
   }
 
+  /** @returns {void} */
+  function handlePointerLeave() {
+    onLeave?.();
+  }
+
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerUp);
+  canvas.addEventListener('pointerleave', handlePointerLeave);
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
   return function detach() {
@@ -134,6 +156,7 @@ export function attachInput(canvas, handlers) {
     canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', onPointerUp);
     canvas.removeEventListener('pointercancel', onPointerUp);
+    canvas.removeEventListener('pointerleave', handlePointerLeave);
     canvas.removeEventListener('wheel', onWheel);
   };
 }

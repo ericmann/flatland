@@ -104,7 +104,11 @@ export const DEFAULTS = Object.freeze({
     hueScale: 0.2,
   }),
   species: Object.freeze({
-    theta: 0.6,
+    // Tuned in P2-05 (docs/tuning.md): 0.6 gave a mean of 77 splits per
+    // 30k ticks across 40 seeds, far above the [1, 40] target; 1.1+
+    // collapses to near-zero splits (a steep cliff between 1.0 and 1.1).
+    // 0.9 lands comfortably inside the target with full seed coverage.
+    theta: 0.9,
     centroidRate: 0.02,
   }),
   // Phenotype ranges (SPEC §4.6): traitValue(cfg, gene, trait) = lo + gene*(hi-lo).
@@ -203,6 +207,14 @@ export const DEFAULTS = Object.freeze({
     // births to outpace the (widened, but still finite) old-age death rate.
     baseRate: 0.04,
     childEnergyFraction: 0.35,
+  }),
+  pheromone: Object.freeze({
+    enabled: true,
+    decay: Object.freeze([0.985, 0.96, 0.98, 0.97]),
+    diffusion: Object.freeze([0.2, 0.2, 0.2, 0.2]),
+    diffuseEvery: 4,
+    emitRate: 0.1,
+    senseGain: 4,
   }),
   stats: Object.freeze({
     sampleEvery: 30,
@@ -711,6 +723,54 @@ export const DOCS = new Map([
       units: 'fraction of parent energy',
       assumption: true,
       doc: "Energy given to a newborn, as a fraction of the parent's energy at the moment of birth (SPEC §4.5).",
+    },
+  ],
+  [
+    'pheromone.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for the 4 pheromone channels: decay, diffusion, emission and sensing (SPEC §9.1).',
+    },
+  ],
+  [
+    'pheromone.decay',
+    {
+      units: 'multiplier per tick, one per channel',
+      assumption: true,
+      doc: 'Per-tick decay multiplier for each of the 4 pheromone channels (SPEC §4.8).',
+    },
+  ],
+  [
+    'pheromone.diffusion',
+    {
+      units: 'rate toward the 4-neighbour mean, one per channel',
+      assumption: true,
+      doc: 'How much of the gap to the 4-neighbour mean each diffuse() step closes, per channel (SPEC §4.8).',
+    },
+  ],
+  [
+    'pheromone.diffuseEvery',
+    {
+      units: 'ticks',
+      assumption: true,
+      doc: 'How often diffuse() runs (SPEC §4.8, §6.3).',
+    },
+  ],
+  [
+    'pheromone.emitRate',
+    {
+      units: 'channel units per tick at output=1, gene=1',
+      assumption: true,
+      doc: 'Scales an organism emit output × its emit gene into channel deposit (SPEC §4.8).',
+    },
+  ],
+  [
+    'pheromone.senseGain',
+    {
+      units: 'multiplier',
+      assumption: true,
+      doc: 'Scales the ahead-minus-behind gradient × sense gene into the brain input, clamped to [-1, 1] (SPEC §4.8).',
     },
   ],
   [

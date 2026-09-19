@@ -114,6 +114,17 @@ batch rather than `sim.batchBudgetMs` (12 ms). Useful for verifying the
 fallback path some embedded WebViews need (SPEC §6.4, §10), and part of
 the phone checklist (`docs/PROGRESS.md`'s Phase 1 end log entry).
 
+## The station (Phase 2)
+
+Any key or a map tap opens the field station from idle (`Escape` returns).
+The rail's `L`/`E` keys toggle the Night and Energy density lenses; the
+"Color by" chips switch the sprite colour mode. Tapping/clicking an
+organism selects it and opens the inspector (a bottom sheet under 900px);
+Follow keeps the camera on it, Close (or its death) clears the selection.
+The dock's Phylogeny tab draws a live time-tree; tapping a branch (or
+hovering it with a mouse) rings that lineage's living members on the map.
+Part of the phone checklist (`docs/PROGRESS.md`'s Phase 2 end log entry).
+
 ## Module layout
 
 See CLAUDE.md → Module map. `docs/PLAN.md` is the task-by-task build plan;

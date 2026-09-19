@@ -435,6 +435,8 @@ export function resolveBirths(world) {
     store.parent[slot] = store.id[parent];
     store.sick[slot] = 0;
     store.flags[slot] = 0;
+    store.offspring[slot] = 0;
+    store.offspring[parent]++;
 
     const parentSpecies = store.species[parent];
     world.species.assignNewborn(world, slot);

@@ -108,6 +108,7 @@ describe('HASH_ORDER', () => {
       'generation',
       'sick',
       'flags',
+      'offspring',
       'genome',
     ]);
   });
