@@ -11,6 +11,7 @@ export const IDLE_OVERRIDE_MS = 10000;
 
 const EV_HUNT = 1;
 const EV_BIRTH = 2;
+const EV_IMMIGRATION = 4;
 const HUNT_MAX_AGE_TICKS = 400;
 const BIRTH_MAX_AGE_TICKS = 300;
 const HERD_SAMPLES = 12;
@@ -23,6 +24,51 @@ const HOLD_MS_MIN = 8000;
 const HOLD_MS_MAX = 12000;
 /** World pixels per tile (matches `Renderer`'s default `px`, SPEC §6.5). */
 const PX = 4;
+
+/** Bounded POI memory ring size (Decisions §12.2, P3-09). */
+const POI_MEMORY_SIZE = 16;
+/** Ordinal words up to "tenth" (PLAN.md P3-09); further repeats keep saying "tenth". */
+const ORDINALS = Object.freeze([
+  'first',
+  'second',
+  'third',
+  'fourth',
+  'fifth',
+  'sixth',
+  'seventh',
+  'eighth',
+  'ninth',
+  'tenth',
+]);
+
+/**
+ * @param {number} n 1-based
+ * @returns {string}
+ */
+function ordinalWord(n) {
+  return ORDINALS[Math.min(Math.max(n, 1), ORDINALS.length) - 1];
+}
+
+/**
+ * Which map edge `(x, y)` is nearest, for the Arrivals caption (P3-06's
+ * immigrants always land exactly on one).
+ * @param {number} x
+ * @param {number} y
+ * @param {number} w
+ * @param {number} h
+ * @returns {'west'|'east'|'north'|'south'}
+ */
+function edgeFromPosition(x, y, w, h) {
+  const distances = /** @type {['west'|'east'|'north'|'south', number][]} */ ([
+    ['west', x],
+    ['east', w - x],
+    ['north', y],
+    ['south', h - y],
+  ]);
+  let best = distances[0];
+  for (const d of distances) if (d[1] < best[1]) best = d;
+  return best[0];
+}
 
 /**
  * Every other rAF while idle (SPEC §8: 30fps snapshot cadence against a
@@ -86,6 +132,54 @@ export function createIdle({ app, camera, cfg, reduceMotion, random = Math.rando
   let targetZ = camera.z;
 
   /**
+   * The bounded POI memory ring (Decisions §12.2, P3-09): a fixed array
+   * of 16 reused record objects — never allocates per pick, only
+   * overwrites. `organismId`/`speciesId` are `null` when not applicable
+   * to that pick's kind.
+   * @type {{ kind: string, organismId: number|null, speciesId: number|null, tick: number }[]}
+   */
+  const poiMemory = Array.from({ length: POI_MEMORY_SIZE }, () => ({
+    kind: '',
+    organismId: null,
+    speciesId: null,
+    tick: 0,
+  }));
+  let poiMemoryHead = 0;
+  let poiMemoryCount = 0;
+
+  /**
+   * @param {string} kind
+   * @param {number|null} organismId
+   * @param {number|null} speciesId
+   * @param {number} tick
+   * @returns {void}
+   */
+  function rememberPOI(kind, organismId, speciesId, tick) {
+    const slot = poiMemory[poiMemoryHead];
+    slot.kind = kind;
+    slot.organismId = organismId;
+    slot.speciesId = speciesId;
+    slot.tick = tick;
+    poiMemoryHead = (poiMemoryHead + 1) % POI_MEMORY_SIZE;
+    if (poiMemoryCount < POI_MEMORY_SIZE) poiMemoryCount++;
+  }
+
+  /**
+   * Every remembered sighting matching `key`/`value`, most-recent-first.
+   * @param {'organismId'|'speciesId'} key
+   * @param {number} value
+   * @returns {{ kind: string, organismId: number|null, speciesId: number|null, tick: number }[]}
+   */
+  function priorSightingsBy(key, value) {
+    const out = [];
+    for (let i = 0; i < poiMemoryCount; i++) {
+      const idx = (poiMemoryHead - 1 - i + POI_MEMORY_SIZE) % POI_MEMORY_SIZE;
+      if (poiMemory[idx][key] === value) out.push(poiMemory[idx]);
+    }
+    return out;
+  }
+
+  /**
    * @param {*} snapshot
    * @param {number} id
    * @returns {number} slot index in the snapshot's compact SoA, or -1.
@@ -116,7 +210,7 @@ export function createIdle({ app, camera, cfg, reduceMotion, random = Math.rando
      */
     const region = (x, y) => (cachedTerrain ? regionName(x, y, cachedTerrain, w, h) : 'the world');
 
-    /** @type {{ k: string, t: string, x: number, y: number, z?: number, followId?: number, weight: number }[]} */
+    /** @type {{ k: string, t: string, x: number, y: number, z?: number, followId?: number, speciesId?: number, weight: number }[]} */
     const opts = [];
 
     for (let e = 0; e < snapshot.eventsCount; e++) {
@@ -127,9 +221,33 @@ export function createIdle({ app, camera, cfg, reduceMotion, random = Math.rando
       const y = snapshot.events[base + 3];
       const a = snapshot.events[base + 4];
       if (kind === EV_HUNT && snapshot.tick - evTick <= HUNT_MAX_AGE_TICKS) {
-        opts.push({ k: 'A hunt', t: `lineage ${a} closing in, ${region(x, y)}`, x, y, weight: 3 });
+        opts.push({
+          k: 'A hunt',
+          t: `lineage ${a} closing in, ${region(x, y)}`,
+          x,
+          y,
+          speciesId: a,
+          weight: 3,
+        });
       } else if (kind === EV_BIRTH && snapshot.tick - evTick <= BIRTH_MAX_AGE_TICKS) {
-        opts.push({ k: 'A birth', t: `new lineage ${a} in ${region(x, y)}`, x, y, weight: 2 });
+        opts.push({
+          k: 'A birth',
+          t: `new lineage ${a} in ${region(x, y)}`,
+          x,
+          y,
+          speciesId: a,
+          weight: 2,
+        });
+      } else if (kind === EV_IMMIGRATION && snapshot.tick - evTick <= BIRTH_MAX_AGE_TICKS) {
+        const edge = edgeFromPosition(x, y, w, h);
+        opts.push({
+          k: 'Arrivals',
+          t: `newcomers cross in from the ${edge} edge, ${region(x, y)}`,
+          x,
+          y,
+          speciesId: a,
+          weight: 2,
+        });
       }
     }
 
@@ -159,6 +277,7 @@ export function createIdle({ app, camera, cfg, reduceMotion, random = Math.rando
           x: ox[bestIdx],
           y: oy[bestIdx],
           followId: oid[bestIdx],
+          speciesId: osp[bestIdx],
           weight: 1,
         });
       }
@@ -175,6 +294,7 @@ export function createIdle({ app, camera, cfg, reduceMotion, random = Math.rando
           x: ox[idx],
           y: oy[idx],
           followId: oid[idx],
+          speciesId: osp[idx],
           weight: 2,
         });
       }
@@ -209,8 +329,34 @@ export function createIdle({ app, camera, cfg, reduceMotion, random = Math.rando
     targetZ = picked.z ?? POI_ZOOM;
     targetId = picked.followId ?? null;
     poiUntil = now + HOLD_MS_MIN + random() * (HOLD_MS_MAX - HOLD_MS_MIN);
+
+    // Narrative continuity (Decisions §12.2, P3-09): does this pick's
+    // subject repeat a remembered one? Checked against memory *before*
+    // this pick is itself recorded below.
+    let captionText = picked.t;
+    if (picked.k === 'Following' && picked.followId != null) {
+      const prior = priorSightingsBy('organismId', picked.followId);
+      if (prior.length > 0) {
+        const prevDay = Math.floor(prior[0].tick / cfg.time.ticksPerDay);
+        const thisDay = Math.floor(snapshot.tick / cfg.time.ticksPerDay);
+        captionText =
+          prevDay < thisDay
+            ? `the same hunter, ${ordinalWord(prior.length + 1)} night running.`
+            : `still following lineage ${picked.speciesId}.`;
+      }
+    } else if (picked.k === 'A hunt' && picked.speciesId != null) {
+      const prior = priorSightingsBy('speciesId', picked.speciesId).filter(
+        (s) => s.kind === 'A hunt',
+      );
+      if (prior.length > 0) {
+        captionText = `lineage ${picked.speciesId} again.`;
+      }
+    }
+
+    rememberPOI(picked.k, picked.followId ?? null, picked.speciesId ?? null, snapshot.tick);
+
     ui.capK.textContent = picked.k;
-    ui.capT.textContent = picked.t;
+    ui.capT.textContent = captionText;
   }
 
   /**

@@ -69,6 +69,7 @@ function fakeSnapshot({
 }
 
 const EV_HUNT = 1;
+const EV_IMMIGRATION = 4;
 
 describe('isSnapshotFrame', () => {
   it('is true on every other frame (idle runs at half the rAF rate)', () => {
@@ -185,5 +186,120 @@ describe('createIdle', () => {
     ]);
 
     expect(idle.ui.tickE.textContent).toBe('First hunt recorded.');
+  });
+
+  it("a repeated organism target on a later day says 'second night running'", () => {
+    const app = fakeApp();
+    // A single carnivore: with random() = 0.99, the weighted pick always
+    // lands on 'Following' (weight 2) over 'A herd' (weight 1) — see the
+    // comment in the next test for the arithmetic.
+    const idle = createIdle({
+      app,
+      camera: app.camera(),
+      cfg,
+      reduceMotion: false,
+      random: () => 0.99,
+    });
+    const carnivoreOrgs = { n: 1, x: [5], y: [5], id: [7], species: [3], flagsByte: [0b0100] };
+
+    const day0 = fakeSnapshot({ tick: 1000, orgs: carnivoreOrgs });
+    idle.tick(day0, 0);
+    expect(idle.caption().kind).toBe('Following');
+    expect(idle.caption().text).not.toContain('running');
+
+    // Advance past poiUntil (HOLD_MS_MAX = 12000) and past a day boundary
+    // (ticksPerDay = 1800) so the next pick both re-triggers and reads as
+    // a later world day.
+    const day1 = fakeSnapshot({ tick: 1000 + cfg.time.ticksPerDay, orgs: carnivoreOrgs });
+    idle.tick(day1, 13000);
+
+    expect(idle.caption().kind).toBe('Following');
+    expect(idle.caption().text).toBe('the same hunter, second night running.');
+  });
+
+  it("a repeated species hunt says 'again'", () => {
+    const app = fakeApp();
+    // Hunt events are pushed to `opts` before any organism-derived option,
+    // so random() = 0 always lands on the hunt (weight doesn't matter for
+    // the first-pushed candidate when r starts at 0).
+    const idle = createIdle({
+      app,
+      camera: app.camera(),
+      cfg,
+      reduceMotion: false,
+      random: () => 0,
+    });
+
+    const first = fakeSnapshot({
+      tick: 1000,
+      events: [{ kind: EV_HUNT, tick: 900, x: 5, y: 5, a: 42 }],
+    });
+    idle.tick(first, 0);
+    expect(idle.caption().kind).toBe('A hunt');
+    expect(idle.caption().text).not.toContain('again');
+
+    const second = fakeSnapshot({
+      tick: 2000,
+      events: [{ kind: EV_HUNT, tick: 1990, x: 6, y: 6, a: 42 }],
+    });
+    idle.tick(second, 9000); // past poiUntil (HOLD_MS_MIN = 8000)
+
+    expect(idle.caption().kind).toBe('A hunt');
+    expect(idle.caption().text).toBe('lineage 42 again.');
+  });
+
+  it('the ring never exceeds 16', () => {
+    const app = fakeApp();
+    const idle = createIdle({
+      app,
+      camera: app.camera(),
+      cfg,
+      reduceMotion: false,
+      random: () => 0,
+    });
+
+    let now = 0;
+    let tick = 1000;
+    function huntFrom(speciesId) {
+      now += 9000;
+      tick += 100;
+      idle.tick(
+        fakeSnapshot({
+          tick,
+          events: [{ kind: EV_HUNT, tick: tick - 10, x: 5, y: 5, a: speciesId }],
+        }),
+        now,
+      );
+    }
+
+    huntFrom(99); // remembered first.
+    for (let s = 1; s <= 16; s++) huntFrom(s); // 16 more: fills the ring past capacity.
+
+    // Species 99's memory should have been evicted by now (16 newer
+    // entries have since displaced it in the 16-slot ring), so it reads
+    // as a first-time sighting again, not "again".
+    huntFrom(99);
+    expect(idle.caption().text).not.toContain('again');
+  });
+
+  it('an immigration event yields an Arrivals POI', () => {
+    const app = fakeApp();
+    const idle = createIdle({
+      app,
+      camera: app.camera(),
+      cfg,
+      reduceMotion: false,
+      random: () => 0,
+    });
+
+    // Landed on the west edge (x = 0) of the 20x20 test world.
+    const snap = fakeSnapshot({
+      tick: 1000,
+      events: [{ kind: EV_IMMIGRATION, tick: 950, x: 0, y: 10, a: 5 }],
+    });
+    idle.tick(snap, 0);
+
+    expect(idle.caption().kind).toBe('Arrivals');
+    expect(idle.caption().text).toContain('west');
   });
 });
