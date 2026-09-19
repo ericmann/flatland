@@ -1644,7 +1644,7 @@ comment above `hash()` is updated to list it). `ecology.js`'s
 "debt[t]-- each tick in the growth loop" (the loop that runs, not every
 world tick). Debt is not an energy stock, so `ledger` is untouched.
 
-### P3-05 — pending sha (see commit)
+### P3-05 — da90af0
 Tests: `test/unit/ecology.test.js` (+1: total photosynthesis over a
 full mid-winter day is less than a full mid-summer day — both measured
 from the same reset, below-cap plant level, since with no consumption
