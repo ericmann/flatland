@@ -83,6 +83,13 @@ export function growPlants(world) {
       base *= regrowth.debtFactor;
       debt[i]--;
     }
+    // Rain's moisture pulse is a growth-RATE multiplier, not an energy
+    // injection (SPEC §4.3, Phase 5, P5-02): it scales `base` the same
+    // way the regrowth-debt factor above does, so the ledger accounting
+    // below (attributed from `baseAdj`/`fromSoilAdj`) is unaffected.
+    if (world.moisture > 0) {
+      base *= 1 + world.moisture;
+    }
     const fromSoil = Math.min(s * uptakeRate, base * soilBoost * s);
     let baseAdj = base;
     let fromSoilAdj = fromSoil;

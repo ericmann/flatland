@@ -272,6 +272,28 @@ export const DEFAULTS = Object.freeze({
     lag: 0.002,
     costGain: 1.0,
   }),
+  // Rare discrete weather events: rain (moisture pulse) and fog (vision
+  // penalty), SPEC §4.3, Phase 5. Rates are per-tick probabilities, not
+  // derived from `time.ticksPerDay` (1800 by default) so a config
+  // override to one doesn't silently retune the other — see
+  // `disease.chronicleCooldown`'s comment for the same reasoning.
+  weather: Object.freeze({
+    enabled: true,
+    // 1 / (3 * ticksPerDay) at the default ticksPerDay (1800): rain about
+    // once every 3 in-world days.
+    rainRate: 1 / 5400,
+    rainMoisture: 1.0,
+    moistureDecay: 0.995,
+    // Below this, moisture counts as "cleared" for the not-while-active
+    // gate and for the growth-rate multiplier (SPEC §3.1 determinism —
+    // a fixed, documented cutoff rather than an implicit `> 0`).
+    moistureThreshold: 1e-3,
+    // 1 / (6 * ticksPerDay) at the default ticksPerDay (1800): fog about
+    // once every 6 in-world days.
+    fogRate: 1 / 10800,
+    fogTicks: 600,
+    fogVision: 0.5,
+  }),
   stats: Object.freeze({
     sampleEvery: 30,
     historyLength: 1024,
@@ -1096,6 +1118,70 @@ export const DOCS = new Map([
       units: 'multiplier per unit of |prefTemp - ambient|',
       assumption: true,
       doc: "How much the gap between an organism's preferred temperature (the `prefTemp` gene) and `ambient` inflates its metabolic cost (SPEC §4.3).",
+    },
+  ],
+  [
+    'weather.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for rain and fog weather events (SPEC §9.1, §4.3).',
+    },
+  ],
+  [
+    'weather.rainRate',
+    {
+      units: 'probability per tick',
+      assumption: true,
+      doc: 'Chance each tick of a new rain event starting, rolled once per tick (SPEC §4.3); only rolled while no rain is already active.',
+    },
+  ],
+  [
+    'weather.rainMoisture',
+    {
+      units: 'unitless (moisture pulse)',
+      assumption: true,
+      doc: '`world.moisture` set by a rain event (SPEC §4.3); plant growth `base` is multiplied by `(1 + moisture)` while it is elevated.',
+    },
+  ],
+  [
+    'weather.moistureDecay',
+    {
+      units: 'fraction retained per tick',
+      assumption: true,
+      doc: '`world.moisture *= moistureDecay` every tick (SPEC §4.3), so a rain pulse fades out gradually rather than ending abruptly.',
+    },
+  ],
+  [
+    'weather.moistureThreshold',
+    {
+      units: 'unitless (moisture)',
+      assumption: true,
+      doc: 'Below this, `world.moisture` counts as cleared: it snaps to 0 and a new rain event may roll again (SPEC §3.1 determinism — a fixed, documented cutoff for "no longer active").',
+    },
+  ],
+  [
+    'weather.fogRate',
+    {
+      units: 'probability per tick',
+      assumption: true,
+      doc: 'Chance each tick of a new fog event starting, rolled once per tick (SPEC §4.3); only rolled while no fog is already active.',
+    },
+  ],
+  [
+    'weather.fogTicks',
+    {
+      units: 'ticks',
+      assumption: true,
+      doc: '`world.fogTicks` set by a fog event (SPEC §4.3); counts down to 0, one per tick, while fog is active.',
+    },
+  ],
+  [
+    'weather.fogVision',
+    {
+      units: 'multiplier on vision range',
+      assumption: true,
+      doc: 'Every vision range is multiplied by this while `world.fogTicks > 0` (SPEC §4.3).',
     },
   ],
   [

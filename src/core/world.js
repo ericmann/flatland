@@ -28,6 +28,7 @@ import {
   checkImmigration,
 } from './ecology.js';
 import { applyDue } from './interventions.js';
+import { weatherTick } from './weather.js';
 import { Grid } from './grid.js';
 import { gather } from './senses.js';
 import { policy, reflexLayer, act, metabolise, ageOrganism } from './reflex.js';
@@ -366,8 +367,12 @@ export class World {
     this.light = 0;
     /** Lagged ambient temperature in [0,1] (SPEC §4.3, Phase 5, P5-01), updated once per tick in `updateTemperature`; starts at `temperature.base` before the first tick moves it toward a tick-1 target. */
     this.ambient = Math.fround(cfg.temperature.base);
-    /** Scratch for hashing `ambient` (a fractional Float32, unlike every other hashed scalar) without allocating on every `hash()` call. */
+    /** Scratch for hashing `ambient`/`moisture` (fractional Float32s, unlike every other hashed scalar) without allocating on every `hash()` call. */
     this._hashF32 = new Float32Array(1);
+    /** Current rain moisture pulse in [0, rainMoisture] (SPEC §4.3, Phase 5, P5-02), decayed and possibly re-rolled once per tick in `weatherTick`; plant growth `base` is multiplied by `(1 + moisture)` while this is elevated. */
+    this.moisture = 0;
+    /** Ticks remaining in the current fog event (SPEC §4.3, Phase 5, P5-02), counted down and possibly re-rolled once per tick in `weatherTick`; every vision range is multiplied by `weather.fogVision` while this is > 0. */
+    this.fogTicks = 0;
     /** 1 = a famine chronicle entry may fire on the next below-threshold sample (P3-05); disarmed after firing, re-armed once plants recover above 2x the threshold. */
     this.famineArmed = 1;
     /** Tick of the last immigration event per diet class (P3-06), or `NEVER_IMMIGRATED` until the first. */
@@ -506,6 +511,7 @@ export class World {
     this.light = lightAt(this.tick, this.cfg);
     updateTemperature(this);
     applyDue(this);
+    weatherTick(this);
     growPlants(this);
     decayCarcasses(this);
     decayPheromone(this);
@@ -571,7 +577,8 @@ export class World {
   /**
    * A deterministic FNV-1a 32-bit hash of everything that defines world
    * state, as an 8-character lowercase hex string (SPEC §3.1, §6.3). Order:
-   * tick, rng state, next organism id, `ambient` (P5-01), `famineArmed` (P3-05),
+   * tick, rng state, next organism id, `ambient` (P5-01), `moisture` and
+   * `fogTicks` (P5-02), `famineArmed` (P3-05),
    * `lastImmigrationHerb`/`Carn` (P3-06), `firsts` (P3-07 — the kill
    * table itself is transient bookkeeping, like chronicle text, and is
    * not hashed); terrain, plants, carcass, soil,
@@ -590,6 +597,9 @@ export class World {
     h = hashUpdateU32(h, this.store.nextId >>> 0);
     this._hashF32[0] = this.ambient;
     h = hashUpdate(h, bytesOf(this._hashF32));
+    this._hashF32[0] = this.moisture;
+    h = hashUpdate(h, bytesOf(this._hashF32));
+    h = hashUpdateU32(h, this.fogTicks >>> 0);
     h = hashUpdateU32(h, this.famineArmed);
     h = hashUpdateU32(h, this.lastImmigrationHerb);
     h = hashUpdateU32(h, this.lastImmigrationCarn);
