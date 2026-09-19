@@ -25,6 +25,26 @@ describe('ledger', () => {
     for (let i = 0; i < 500; i++) world.step();
     expect(relativeError(world)).toBeLessThan(1e-3);
   });
+
+  it('immigration is an input term and the identity holds', () => {
+    // No genesis population: both diet-class floors are crossed
+    // immediately, so the first immigration.checkEvery boundary brings in
+    // both a herbivore and a carnivore group.
+    const world = makeWorld({
+      width: 64,
+      height: 40,
+      terrain: TERRAIN.GRASS,
+      organisms: [],
+    });
+    initGenesisLedger(world);
+    expect(world.ledger.immigration).toBe(0);
+
+    for (let i = 0; i < world.cfg.immigration.checkEvery; i++) world.step();
+
+    expect(world.counters.immigrations).toBeGreaterThanOrEqual(1);
+    expect(world.ledger.immigration).toBeGreaterThan(0);
+    expect(relativeError(world)).toBeLessThan(1e-3);
+  });
 });
 
 describe('queueIntervention', () => {

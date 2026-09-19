@@ -3,7 +3,7 @@
  * needed to check the conservation identity:
  *
  *   Σ plants + Σ organism energy + Σ carcass + Σ soil + dissipated
- *     == genesis + Σ sunlight input + hand
+ *     == genesis + Σ sunlight input + hand + immigration
  *
  * Rule for every task that touches a Float32 stock (plants, carcass, soil,
  * organism energy): account the realised change (`after - before`), never
@@ -16,6 +16,8 @@ export class Ledger {
     this.genesis = 0;
     this.sunlight = 0;
     this.hand = 0;
+    /** Energy + body mass of every immigrant arrival (P3-06), an input term like genesis/sunlight/hand. */
+    this.immigration = 0;
     this.dissipated = 0;
     /** Itemized per-mechanism totals, for the trophic-flow chart (P4-07). */
     this.flows = {
@@ -61,14 +63,14 @@ export function stocks(world) {
 
 /**
  * The relative error of the SPEC §4.4 conservation identity:
- * `|stocks.total + dissipated - (genesis + sunlight + hand)| / max(1, genesis + sunlight + hand)`.
+ * `|stocks.total + dissipated - (genesis + sunlight + hand + immigration)| / max(1, genesis + sunlight + hand + immigration)`.
  * @param {import('./world.js').World} world
  * @returns {number}
  */
 export function relativeError(world) {
   const s = stocks(world);
   const ledger = world.ledger;
-  const input = ledger.genesis + ledger.sunlight + ledger.hand;
+  const input = ledger.genesis + ledger.sunlight + ledger.hand + ledger.immigration;
   const denom = Math.max(1, input);
   return Math.abs(s.total + ledger.dissipated - input) / denom;
 }

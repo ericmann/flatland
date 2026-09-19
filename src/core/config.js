@@ -239,6 +239,14 @@ export const DEFAULTS = Object.freeze({
   famine: Object.freeze({
     plantFraction: 0.1,
   }),
+  immigration: Object.freeze({
+    enabled: true,
+    checkEvery: 600,
+    floorHerbivores: 20,
+    floorCarnivores: 4,
+    cooldownTicks: 1800,
+    groupSize: 8,
+  }),
   stats: Object.freeze({
     sampleEvery: 30,
     historyLength: 1024,
@@ -914,6 +922,54 @@ export const DOCS = new Map([
       units: 'fraction of total plant carrying capacity',
       assumption: true,
       doc: 'Global plants fraction below which a famine chronicle entry fires; re-arms above 2x this (SPEC §4.9).',
+    },
+  ],
+  [
+    'immigration.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for immigration when a diet class falls below its floor (SPEC §9.1).',
+    },
+  ],
+  [
+    'immigration.checkEvery',
+    {
+      units: 'ticks',
+      assumption: true,
+      doc: 'How often the herbivore/carnivore floor is checked (SPEC §4.9).',
+    },
+  ],
+  [
+    'immigration.floorHerbivores',
+    {
+      units: 'count',
+      assumption: true,
+      doc: 'Herbivore population floor; below this, a group immigrates (SPEC §4.9).',
+    },
+  ],
+  [
+    'immigration.floorCarnivores',
+    {
+      units: 'count',
+      assumption: true,
+      doc: 'Carnivore population floor; below this, a group immigrates (SPEC §4.9).',
+    },
+  ],
+  [
+    'immigration.cooldownTicks',
+    {
+      units: 'ticks',
+      assumption: true,
+      doc: 'Minimum ticks between immigration events for the same diet class (SPEC §4.9).',
+    },
+  ],
+  [
+    'immigration.groupSize',
+    {
+      units: 'count',
+      assumption: true,
+      doc: 'Number of organisms in one immigrating group (SPEC §4.9).',
     },
   ],
   [
