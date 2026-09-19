@@ -1961,7 +1961,7 @@ P3-10/P3-11's log (this machine's ongoing CPU contention). `npm run
 headless -- --ticks 5000` run twice: identical hash `37b7b48c` both
 times.
 
-### P4-02 — pending sha
+### P4-02 — 2cb7557
 Goal: all 8 Hand-of-God/config/rename intervention kinds in core, with
 replay determinism and ⚡ chronicle logging.
 Tests: `test/unit/interventions.test.js` (new, 11 cases — one per kind
