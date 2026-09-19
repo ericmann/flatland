@@ -189,4 +189,21 @@ describe('Scheduler', () => {
     }
     expect(status.msg.speciesTotal).toBe(scheduler.world.species.n);
   });
+
+  it('stats events carry species counts', () => {
+    const { scheduler, posts, advance } = makeScheduler();
+    load(scheduler, 1);
+    advance(1000);
+    scheduler.pump();
+
+    const stats = posts.filter((p) => p.msg.type === MSG.STATS).at(-1);
+    expect(stats).toBeDefined();
+    expect(Array.isArray(stats.msg.species)).toBe(true);
+    expect(stats.msg.species.length).toBe(scheduler.world.species.n);
+    expect(stats.msg.species.length).toBeGreaterThan(0);
+    for (const [id, count] of stats.msg.species) {
+      expect(typeof id).toBe('number');
+      expect(count).toBe(scheduler.world.species.count[id]);
+    }
+  });
 });

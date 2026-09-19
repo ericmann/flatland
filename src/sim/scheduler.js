@@ -292,6 +292,11 @@ export class Scheduler {
     this._lastStatsN = stats.n;
 
     const idx = (stats.head - 1 + stats.capacity) % stats.capacity;
+    /** @type {[number, number][]} every species ever created, [id, current count] (0 for extinct — P3-08's Charts pane draws those thinner). */
+    const species = [];
+    for (let id = 0; id < world.species.n; id++) {
+      species.push([id, world.species.count[id]]);
+    }
     this._post({
       type: MSG.STATS,
       tick: stats.tick[idx],
@@ -303,6 +308,7 @@ export class Scheduler {
       plantsFraction: stats.plantsFraction[idx],
       diversity: stats.diversity[idx],
       speciesLiving: stats.speciesLiving[idx],
+      species,
     });
   }
 
