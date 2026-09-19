@@ -58,7 +58,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P4-05 Share links, replay-to-tick, platform adapter
 - [x] P4-06 Auto-save, resume and background verification
 - [x] P4-07 Trophic energy-flow chart
-- [ ] P4-08 PWA — manifest, icons, service worker, bundle budget
+- [x] P4-08 PWA — manifest, icons, service worker, bundle budget
 - [ ] P4-09 E2E completeness pass on desktop and Pixel 7
 - [ ] P4-10 Phase 4 end — push, preview, phone checks
 - [ ] P5-01 Temperature
@@ -2172,3 +2172,56 @@ Verification: typecheck/lint clean; `npm test` 431/432 (only the
 pre-existing throughput/CPU-contention flake, same as every prior
 Phase 4 task); `npm run build` clean; `npm run headless` sane.
 Phone: n/a (Verification line for this task has no test:ui/browser step).
+
+### P4-08 — pending sha
+Goal: make Flatland installable and offline (SPEC §2, §6.6, §10) with
+generated icons and a size budget test.
+Tests: `test/unit/make-icons.test.js` (new: PNG signature + IHDR
+dimensions for all three icons, byte-identical on rerun, `icon.svg`
+written). `test/unit/bundle-size.test.js` (new: builds, sums gzip of
+`dist/**/*.{js,css,woff2}` + `index.html`, asserts ≤ 400 kB, prints the
+breakdown). `test/e2e/pwa.spec.js` (new: manifest link + fields fetched
+from the built page; a service worker registration appears after load).
+Design: `scripts/make-icons.mjs` builds one 16×16 RGBA source (SPEC
+§5.5 palette: "good" green tile, "sun accent" orange creature, a
+"critical" shading ring, one eye pixel) via a plain distance formula —
+no hand-typed pixel grid — then nearest-neighbour scales it into
+icon-192/icon-512 (bordered tile, purpose `any`) and maskable-512
+(flat background, creature scaled into a centred 80% safe zone,
+purpose `maskable`), plus `icon.svg` (one `<rect>` per source pixel).
+PNGs are hand-encoded (IHDR/IDAT/IEND, filter-None scanlines,
+`zlib.deflateSync`, a local CRC32 table) — deflate carries no
+timestamp, so output is byte-identical across runs. `vite.config.js`
+adds `VitePWA({ strategies: 'generateSW', registerType: 'autoUpdate',
+injectRegister: false, manifest: {...}, workbox: { globPatterns,
+navigateFallback: 'index.html' } })`, no `devOptions`; `injectRegister:
+false` because `src/main.js` registers the SW itself via `import {
+registerSW } from 'virtual:pwa-register'` (`immediate: true`, matching
+`autoUpdate`). `tsconfig.json` adds `"vite-plugin-pwa/client"` to
+`types` so that virtual-module import type-checks (`skipLibCheck`
+keeps its unused React/Vue/etc. variants from being checked).
+`index.html` gets `theme-color`, an SVG favicon and an
+`apple-touch-icon`; the `<link rel="manifest">` tag itself is injected
+by the plugin at build time, confirmed present in `dist/index.html`.
+Bundle stays at ~173 kB gzip (well under the 400 kB budget), so Plex
+Sans 500 was not dropped.
+Interpretation: `manifest.description` reuses `package.json`'s
+description verbatim rather than drafting new copy. The maskable
+safe-zone padding is implemented as a literal 80%-content/20%-padding
+square (not a circular safe zone), which is the simplest reading of
+the task's "20% safe padding" wording and satisfies Android's maskable
+guidelines in practice. Manual Chrome DevTools Application → Manifest
+installability check is deferred, as instructed. Phone: NOT VERIFIED
+(human).
+Verification: typecheck/lint clean; `node scripts/make-icons.mjs &&
+npm run build && npm run test:ui && npm test` all green except the
+same pre-existing throughput-invariant flake (198 ticks/s this run,
+reproduced identically under `git stash` before this task's changes —
+see P3-10's log). `npm run test:ui` was additionally flaky across
+repeated full-suite runs on `station.spec.js`/`share.spec.js`/
+`smoke.spec.js`'s timing- and random-click-based specs (none of them
+touched by this task); every failure reproduced identically with this
+task's changes `git stash`ed and disappeared when the same spec ran
+alone with `--workers=1`, confirming it is this session's CPU
+contention, not a regression — `test/e2e/pwa.spec.js`'s two new specs
+passed on every run, on both projects, with no retries needed.

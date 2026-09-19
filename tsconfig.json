@@ -14,7 +14,7 @@
     // it does not affect eslint's core/sim global denylist (P0-01), which
     // still fails the lint (not the typecheck) on any actual use of a
     // banned global inside src/core or src/sim.
-    "types": ["node"],
+    "types": ["node", "vite-plugin-pwa/client"],
     "skipLibCheck": true
   },
   "include": ["src/**/*.js", "src/**/*.d.ts", "scripts/**/*.mjs"]
