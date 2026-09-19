@@ -348,6 +348,15 @@ export class World {
     /** Tick of the last immigration event per diet class (P3-06), or `NEVER_IMMIGRATED` until the first. */
     this.lastImmigrationHerb = NEVER_IMMIGRATED;
     this.lastImmigrationCarn = NEVER_IMMIGRATED;
+    /**
+     * 1 once a `meteor` or `river` intervention (P4-02) has repainted
+     * terrain since the scheduler last consumed this flag. Pure
+     * notify-once signaling state, not simulation state: nothing in
+     * `step()` reads it, so it is intentionally excluded from `hash()`
+     * and from `save.js`'s state buffer (same reason the scheduler's own
+     * `_terrainDirty` flag is never persisted).
+     */
+    this.terrainDirty = 0;
 
     this.width = cfg.world.width;
     this.height = cfg.world.height;

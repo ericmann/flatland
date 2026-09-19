@@ -81,6 +81,22 @@ export const DEFAULTS = Object.freeze({
     rain: Object.freeze({
       amount: 0.3,
     }),
+    fire: Object.freeze({
+      radius: 6,
+    }),
+    meteor: Object.freeze({
+      radius: 5,
+    }),
+    plague: Object.freeze({
+      radius: 4,
+    }),
+    river: Object.freeze({
+      radius: 2,
+    }),
+    meadow: Object.freeze({
+      radius: 2.5,
+      plants: 0.5,
+    }),
   }),
   organisms: Object.freeze({
     energyMaxBase: 150,
@@ -482,6 +498,54 @@ export const DOCS = new Map([
       units: 'plant units',
       assumption: false,
       doc: 'Plant boost per tile from the rain intervention (SPEC §5.3).',
+    },
+  ],
+  [
+    'interventions.fire.radius',
+    {
+      units: 'tiles',
+      assumption: false,
+      doc: 'Radius of the fire intervention: plants destroyed and organisms killed within it (SPEC §5.3).',
+    },
+  ],
+  [
+    'interventions.meteor.radius',
+    {
+      units: 'tiles',
+      assumption: false,
+      doc: 'Radius of the meteor intervention: terrain turned to rock, plants destroyed and organisms killed within it (SPEC §5.3).',
+    },
+  ],
+  [
+    'interventions.plague.radius',
+    {
+      units: 'tiles',
+      assumption: false,
+      doc: 'Radius of the plague intervention: living organisms within it are infected (SPEC §5.3).',
+    },
+  ],
+  [
+    'interventions.river.radius',
+    {
+      units: 'tiles',
+      assumption: false,
+      doc: 'Radius of the river intervention: terrain turned to water within it, standers displaced to the nearest land (SPEC §5.3).',
+    },
+  ],
+  [
+    'interventions.meadow.radius',
+    {
+      units: 'tiles',
+      assumption: false,
+      doc: 'Radius of the meadow intervention: non-water terrain turned to grass within it (SPEC §5.3).',
+    },
+  ],
+  [
+    'interventions.meadow.plants',
+    {
+      units: 'plant units [0,1]',
+      assumption: false,
+      doc: 'Minimum plant level set on each tile the meadow intervention touches; the created mass is counted as ledger.hand (SPEC §5.3).',
     },
   ],
   [

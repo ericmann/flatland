@@ -271,6 +271,11 @@ export class Scheduler {
     this._tpsTickAccum += ticks;
     this._tpsTimeAccum += dt / 1000;
 
+    if (world.terrainDirty) {
+      this._terrainDirty = true;
+      world.terrainDirty = 0;
+    }
+
     this._maybeSendSnapshot();
     this._flushChronicle();
     this._sendPhylogeny();

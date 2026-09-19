@@ -96,6 +96,7 @@ const LEDGER_FIELDS = [
   ['flows.metabolism', (w) => w.ledger.flows.metabolism, (w, v) => (w.ledger.flows.metabolism = v)],
   ['flows.births', (w) => w.ledger.flows.births, (w, v) => (w.ledger.flows.births = v)],
   ['flows.deaths', (w) => w.ledger.flows.deaths, (w, v) => (w.ledger.flows.deaths = v)],
+  ['flows.fire', (w) => w.ledger.flows.fire, (w, v) => (w.ledger.flows.fire = v)],
 ];
 
 /**
