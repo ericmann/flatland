@@ -43,7 +43,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P3-01 Pheromone channels — decay, diffusion, emission, sensing
 - [x] P3-02 Scent lenses
 - [x] P3-03 Disease
-- [ ] P3-04 Regrowth debt
+- [x] P3-04 Regrowth debt
 - [ ] P3-05 Seasons on plants and the famine entry
 - [ ] P3-06 Immigration
 - [ ] P3-07 Kill aggregation, `first` events, every chronicle sentence, chronicle filter
@@ -1621,5 +1621,27 @@ Interpretation: `DEATH.DISEASE`'s code (6) is duplicated locally in
 Uint16Array) clamps `durationTicks` to 65535 on infection rather than
 letting an oversized config override wrap silently, per the task's own
 note to "clamp the config to 65535".
+
+### P3-04 — pending sha (see commit)
+Tests: `test/unit/ecology.test.js` (+3: a grazed-to-zero tile regrows at
+`debtFactor × rate` for exactly `debtTicks`, then at the full rate —
+verified by predicting each of 5 ticks' growth from the same formula
+`growPlants` uses and comparing to the actual result;
+`regrowth.enabled = false` never sets debt even when grazing crosses
+`zeroThreshold`; a `debt` edit changes `world.hash()`). All pass; full
+`npm test` scope 366/366 green; `npm run test:soak` 6/6.
+Config keys introduced (all ⚠️ ASSUMPTION except `enabled`):
+`regrowth.enabled` (true), `zeroThreshold` (0.01), `debtTicks` (3600,
+clamped to 65535 like `disease.durationTicks`), `debtFactor` (0.3).
+Design: `world.js` allocates `debt: Uint16Array(w·h)` and hashes it
+(new line in `hash()`, alongside plants/carcass/soil/pher — the doc
+comment above `hash()` is updated to list it). `ecology.js`'s
+`eatMeal()` sets `debt[tile]` when grazing takes a tile below
+`zeroThreshold`; `growPlants()` multiplies its `base` growth term by
+`debtFactor` and decrements `debt[i]` once per growth-loop pass while
+`debt[i] > 0` — since `growPlants()` returns early when `L <= 0`
+(night), debt only counts down on lit ticks, a literal reading of
+"debt[t]-- each tick in the growth loop" (the loop that runs, not every
+world tick). Debt is not an energy stock, so `ledger` is untouched.
 
 

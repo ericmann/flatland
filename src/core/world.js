@@ -231,6 +231,8 @@ export class World {
     this.plants = new Float32Array(total);
     this.carcass = new Float32Array(total);
     this.soil = new Float32Array(total);
+    /** Regrowth debt, in remaining ticks (P3-04): a tile grazed to `regrowth.zeroThreshold` regrows at `regrowth.debtFactor × base` until this hits 0. */
+    this.debt = new Uint16Array(total);
     /** Four pheromone channels (SPEC §4.8): decay/diffuse/emit in `pheromone.js`. */
     this.pher = [
       new Float32Array(total),
@@ -380,7 +382,8 @@ export class World {
    * A deterministic FNV-1a 32-bit hash of everything that defines world
    * state, as an 8-character lowercase hex string (SPEC §3.1, §6.3). Order:
    * tick, rng state, next organism id; terrain, plants, carcass, soil,
-   * the four pheromone channels; then the organism store's arrays in
+   * the regrowth debt grid (P3-04), the four pheromone channels; then the
+   * organism store's arrays in
    * `HASH_ORDER`; then the species table's `ancestor, born, died, count,
    * centroid` columns (P2-04). Names are strings and are not hashed —
    * they are a function of hashed state plus renames, which are logged
@@ -396,6 +399,7 @@ export class World {
     h = hashUpdate(h, bytesOf(this.plants));
     h = hashUpdate(h, bytesOf(this.carcass));
     h = hashUpdate(h, bytesOf(this.soil));
+    h = hashUpdate(h, bytesOf(this.debt));
     for (const p of this.pher) {
       h = hashUpdate(h, bytesOf(p));
     }
