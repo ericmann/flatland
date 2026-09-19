@@ -1891,7 +1891,7 @@ with this task's changes `git stash`ed — a shared-desktop CPU
 contention artifact (this session ran several hour-long background
 sweeps), not a regression from `regrowth.debtFactor`/`debtTicks`.
 
-### P3-11 — pending sha
+### P3-11 — 304c90c
 Goal: close Phase 3 with a green suite, a pushed branch and the owed
 phone checks recorded.
 Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
