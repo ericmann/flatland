@@ -1,10 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { Chronicle, KIND, sentence, deathVerb } from '../../src/core/chronicle.js';
 import { checkFamine } from '../../src/core/ecology.js';
-import { recordKill, flushKillTable, FIRST_HUNTERS, FIRST_NIGHT } from '../../src/core/world.js';
-import { TRAIT, TRAIT_COUNT } from '../../src/core/genome.js';
+import {
+  recordKill,
+  flushKillTable,
+  FIRST_HUNTERS,
+  FIRST_NIGHT,
+  FIRST_SWIM,
+} from '../../src/core/world.js';
+import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS } from '../../src/core/genome.js';
+import { act, OUTPUT } from '../../src/core/reflex.js';
 import { TERRAIN } from '../../src/core/terrain.js';
-import { makeWorld } from '../helpers.js';
+import { makeWorld, makeOrganism } from '../helpers.js';
 
 describe('genesis chronicle entry', () => {
   // Found by kind, not by index 0 (P3-07): a genesis founder can already
@@ -242,5 +249,43 @@ describe('first entries (P3-07)', () => {
     setGenome(world, 4 * gLen, { diet: 0.1, visionPeak: 0.05 });
     world.species.create(world, 4 * gLen, -1, 6, 6);
     expect((world.chronicle.flush() ?? []).filter((e) => e.kind === KIND.FIRST)).toHaveLength(0);
+  });
+
+  it('the first water crossing fires once', () => {
+    const world = makeWorld({
+      width: 20,
+      height: 20,
+      terrain: (x) => (x >= 12 ? TERRAIN.WATER : TERRAIN.GRASS),
+      organisms: [],
+    });
+    // A named species for the swimmer to belong to (`store.species[slot]`
+    // defaults to 0, and this is the first species created, so it also
+    // gets id 0 — no extra assignment needed).
+    world.species.create(world, 0, -1, 2, 2);
+    world.chronicle.flush();
+
+    const startX = 11.9;
+    const swimmer = makeOrganism(world, { x: startX, y: 10, traits: { speed: 1, swim: 1 } });
+    world.store.heading[swimmer] = 0; // +x, straight into the water
+    const outOff = swimmer * BRAIN_OUTPUTS;
+    world.outputs[outOff + OUTPUT.turn] = 0;
+    world.outputs[outOff + OUTPUT.throttle] = 1;
+
+    act(world, swimmer);
+
+    expect(world.firsts & FIRST_SWIM).toBeTruthy();
+    let entries = (world.chronicle.flush() ?? []).filter((e) => e.kind === KIND.FIRST);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].text).toBe(`The ${world.species.names[0]} are the first to cross water.`);
+
+    // A second swimmer crossing does not re-fire.
+    const other = makeOrganism(world, { x: startX, y: 15, traits: { speed: 1, swim: 1 } });
+    world.store.heading[other] = 0;
+    const otherOff = other * BRAIN_OUTPUTS;
+    world.outputs[otherOff + OUTPUT.turn] = 0;
+    world.outputs[otherOff + OUTPUT.throttle] = 1;
+    act(world, other);
+    entries = (world.chronicle.flush() ?? []).filter((e) => e.kind === KIND.FIRST);
+    expect(entries).toHaveLength(0);
   });
 });

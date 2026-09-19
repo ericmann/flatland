@@ -11,7 +11,9 @@ import { sin, cos, wrapAngle, clamp, TAU } from './fmath.js';
 import { TRAIT, TRAIT_COUNT, BRAIN_INPUTS, BRAIN_OUTPUTS } from './genome.js';
 import { INPUT } from './senses.js';
 import { TERRAIN } from './terrain.js';
-import { DEATH } from './world.js';
+import { DEATH, FIRST_SWIM } from './world.js';
+import { KIND, sentence } from './chronicle.js';
+import { regionName } from './names.js';
 
 /** Output vector layout (= genome.js's BRAIN_OUTPUTS = 8). */
 export const OUTPUT = Object.freeze({
@@ -99,8 +101,12 @@ export function reflexLayer(world, i) {
 /**
  * Move the organism per its outputs (SPEC §4.1, §4.7): turn, then step
  * forward at speed*throttle/moveCost. Hard walls stop movement and turn
- * the organism around; water stops movement and turns it a quarter-turn
- * (swimming is P5-03).
+ * the organism around. Water stops movement and turns it a quarter-turn
+ * for a non-swimmer (`pheno.swim < swim.threshold`); a swimmer crosses it
+ * instead, paying `swim.moveCost` on the water tile in place of
+ * `terrain.moveCost[WATER]` (SPEC §4.2, Phase 5, P5-03). The first
+ * organism ever to land on water fires a one-time `first` chronicle entry
+ * (SPEC §4.11), following the P3-07 `firsts` bitfield pattern.
  * @param {import('./world.js').World} world
  * @param {number} i
  * @returns {void}
@@ -109,14 +115,16 @@ export function act(world, i) {
   if (!world.cfg.movement.enabled) return;
 
   const store = world.store;
+  const cfg = world.cfg;
   const outputs = world.outputs;
   const outOff = i * BRAIN_OUTPUTS;
   const turn = outputs[outOff + OUTPUT.turn];
   const throttle = outputs[outOff + OUTPUT.throttle];
 
-  const heading = wrapAngle(store.heading[i] + turn * world.cfg.organisms.turnRate);
+  const heading = wrapAngle(store.heading[i] + turn * cfg.organisms.turnRate);
   const hereTile = Math.floor(store.y[i]) * world.width + Math.floor(store.x[i]);
-  const moveCost = world.cfg.terrain.moveCost[world.terrain[hereTile]];
+  const hereType = world.terrain[hereTile];
+  const moveCost = hereType === TERRAIN.WATER ? cfg.swim.moveCost : cfg.terrain.moveCost[hereType];
   const speed = store.pheno[i * TRAIT_COUNT + TRAIT.speed];
   const v = (speed * throttle) / moveCost;
 
@@ -135,14 +143,28 @@ export function act(world, i) {
   }
 
   const destTile = Math.floor(ny) * world.width + Math.floor(nx);
-  if (world.terrain[destTile] === TERRAIN.WATER) {
-    store.heading[i] = wrapAngle(heading + TAU / 4);
-    return;
+  const destIsWater = world.terrain[destTile] === TERRAIN.WATER;
+  if (destIsWater) {
+    const swim = store.pheno[i * TRAIT_COUNT + TRAIT.swim];
+    if (swim < cfg.swim.threshold) {
+      store.heading[i] = wrapAngle(heading + TAU / 4);
+      return;
+    }
   }
 
   store.x[i] = nx;
   store.y[i] = ny;
   store.heading[i] = heading;
+
+  if (destIsWater && !(world.firsts & FIRST_SWIM)) {
+    world.firsts |= FIRST_SWIM;
+    const place = regionName(nx, ny, world.terrain, world.width, world.height);
+    const text = sentence(KIND.FIRST, {
+      variant: 'swim',
+      name: world.species.names[store.species[i]],
+    });
+    world.chronicle.add(world.tick, KIND.FIRST, text, place, [store.species[i]]);
+  }
 }
 
 /**

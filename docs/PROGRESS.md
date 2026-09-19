@@ -63,7 +63,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P4-10 Phase 4 end — push, preview, phone checks
 - [x] P5-01 Temperature
 - [x] P5-02 Weather events — rain and fog
-- [ ] P5-03 Swimming
+- [x] P5-03 Swimming
 - [ ] P5-04 Mating with crossover
 - [ ] P5-05 Phase 5 tuning
 - [ ] P5-06 Performance pass and `docs/performance.md`
@@ -2361,4 +2361,29 @@ failure — ~175-216 ticks/s vs. the required 2000 — this machine's
 ongoing CPU contention, see P3-10 onward's log, not a regression);
 `npm run test:soak` 20/20. `npm run headless -- --ticks 5000` hash
 identical across two runs.
+Phone: n/a.
+
+### P5-03 — pending sha
+Goal: let organisms with a high swim gene cross water at a cost, and
+chronicle the first crossing (SPEC §4.2, §4.11). `act()` gates the
+P1-06 water block on `pheno.swim >= swim.threshold`; a swimmer standing
+on water pays `swim.moveCost` (2.5) instead of `terrain.moveCost[WATER]`
+(3), since moveCost is always the tile *under* the organism, not the
+destination. `FIRST_SWIM` (new `firsts` bit, 4) fires once, in `act()`,
+the first tick any organism's tile is water after a move. Non-swimmers'
+directional food samples (`senses.js`) now count water tiles as 0;
+swimmers sample them normally.
+Tests: `test/unit/movement.test.js` "a swimmer enters water at the
+swim cost and a non-swimmer does not"; `test/unit/chronicle.test.js`
+"the first water crossing fires once".
+Interpretation: `TRAIT.swim` and `phenotype.swim` already existed
+(pre-dating this task); only `swim.threshold`/`swim.moveCost` were new
+config. No `save.js` change — `firsts` was already a hashed scalar.
+For P5-04 (mating/crossover, touching genome.js/ecology.js/
+organisms.js): unaffected by this task, no shared state to build on.
+Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
+test` 446/447 (same pre-existing throughput-invariant flake — 217
+ticks/s vs. the required 2000 — this machine's ongoing CPU contention,
+see P3-10 onward's log, not a regression); `npm run test:soak` 20/20.
+`npm run headless -- --ticks 5000` hash identical across two runs.
 Phone: n/a.

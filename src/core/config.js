@@ -294,6 +294,12 @@ export const DEFAULTS = Object.freeze({
     fogTicks: 600,
     fogVision: 0.5,
   }),
+  // Swimming (SPEC §4.2, §4.11, Phase 5): the `swim` gene lets an organism
+  // cross water, which otherwise remains the P1-06 hard barrier.
+  swim: Object.freeze({
+    threshold: 0.6,
+    moveCost: 2.5,
+  }),
   stats: Object.freeze({
     sampleEvery: 30,
     historyLength: 1024,
@@ -1182,6 +1188,22 @@ export const DOCS = new Map([
       units: 'multiplier on vision range',
       assumption: true,
       doc: 'Every vision range is multiplied by this while `world.fogTicks > 0` (SPEC §4.3).',
+    },
+  ],
+  [
+    'swim.threshold',
+    {
+      units: 'gene [0,1]',
+      assumption: true,
+      doc: "Minimum `pheno.swim` for water to be passable rather than the P1-06 hard barrier (SPEC §4.2). Below this, an organism's own carcass/plant water samples also count as 0 (SPEC §4.2).",
+    },
+  ],
+  [
+    'swim.moveCost',
+    {
+      units: 'multiplier (same units as `terrain.moveCost`)',
+      assumption: true,
+      doc: "A swimmer's move cost while on water, overriding `terrain.moveCost[WATER]` (3) for organisms whose `pheno.swim` meets `swim.threshold` (SPEC §4.2).",
     },
   ],
   [

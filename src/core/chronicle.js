@@ -89,9 +89,13 @@ export function sentence(kind, ctx) {
     case KIND.NAMING:
       return `You named the ${ctx.old} ${ctx.new}.`;
     case KIND.FIRST:
-      return ctx.variant === 'hunters'
-        ? `The ${ctx.name} are the first hunters to rise from the ${ctx.ancestor}.`
-        : `The ${ctx.name} have taken to the night.`;
+      if (ctx.variant === 'hunters') {
+        return `The ${ctx.name} are the first hunters to rise from the ${ctx.ancestor}.`;
+      }
+      if (ctx.variant === 'swim') {
+        return `The ${ctx.name} are the first to cross water.`;
+      }
+      return `The ${ctx.name} have taken to the night.`;
     case KIND.WEATHER:
       return `${ctx.text}`;
     default:

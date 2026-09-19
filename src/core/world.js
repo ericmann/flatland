@@ -136,9 +136,10 @@ const KILL_ROWS = 256;
 /** Once `KILL_ROWS` is full, further pairs count toward their prey species here (predator identity lost). */
 const KILL_OVERFLOW = 64;
 
-/** `world.firsts` bitfield bits (P3-07). */
+/** `world.firsts` bitfield bits (P3-07, P5-03). */
 export const FIRST_HUNTERS = 1;
 export const FIRST_NIGHT = 2;
+export const FIRST_SWIM = 4;
 
 /** Sentinel for `lastImmigrationHerb`/`Carn`: "no immigration yet" (P3-06), a large negative value since tick 0 is real. */
 const NEVER_IMMIGRATED = -1_000_000_000;
