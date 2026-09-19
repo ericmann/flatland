@@ -105,6 +105,7 @@ describe('HASH_ORDER', () => {
       'age',
       'species',
       'parent',
+      'parent2',
       'generation',
       'sick',
       'flags',

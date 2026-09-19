@@ -36,6 +36,7 @@ export const HASH_ORDER = Object.freeze([
   'age',
   'species',
   'parent',
+  'parent2',
   'generation',
   'sick',
   'flags',
@@ -65,6 +66,8 @@ export class OrganismStore {
     this.species = new Int32Array(capacity);
     /** Parent id (0 = genesis). */
     this.parent = new Uint32Array(capacity);
+    /** Second parent's id from crossover (P5-04, Decisions §12.1); 0 = asexual (no second parent). */
+    this.parent2 = new Uint32Array(capacity);
     this.generation = new Uint16Array(capacity);
     /** Disease timer in ticks; 0 = healthy. */
     this.sick = new Uint16Array(capacity);

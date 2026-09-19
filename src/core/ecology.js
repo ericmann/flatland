@@ -6,7 +6,15 @@
  */
 import { TERRAIN } from './terrain.js';
 import { TAU } from './fmath.js';
-import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS, applyPhenotype, mutate, dietClass } from './genome.js';
+import {
+  TRAIT,
+  TRAIT_COUNT,
+  BRAIN_OUTPUTS,
+  applyPhenotype,
+  mutate,
+  crossover,
+  dietClass,
+} from './genome.js';
 import { DEATH, EV_HUNT, EV_BIRTH, EV_IMMIGRATION, recordEvent, recordKill } from './world.js';
 import { regionName } from './names.js';
 import { season } from './light.js';
@@ -341,6 +349,56 @@ export function resolvePredationKills(world) {
 }
 
 /**
+ * Find this organism's nearest eligible mate for crossover (SPEC §4.5,
+ * Decisions §12.1, P5-04): the nearest living organism of the same
+ * species, within `breeding.crossover.mateRadius`, with
+ * `age > maturityTicks` and `pheno.sociality >= breeding.crossover.socialityMin`.
+ * Ties resolve to the lowest slot. Writes `world.mateOf[i]` (-1 if none).
+ * Whether *this* organism is itself social enough, and whether crossover
+ * actually fires, is decided later in `resolveBirths` — this only records
+ * the nearest candidate. Called only when `breeding.crossover.enabled`
+ * (mirrors `huntTarget`/`predation.enabled`, world.js's `step()`).
+ * @param {import('./world.js').World} world
+ * @param {number} i
+ * @returns {void}
+ */
+export function findMate(world, i) {
+  const store = world.store;
+  const cfg = world.cfg.breeding.crossover;
+
+  world.mateOf[i] = -1;
+
+  const x = store.x[i];
+  const y = store.y[i];
+  const mySpecies = store.species[i];
+  const radius = cfg.mateRadius;
+  const socialityMin = cfg.socialityMin;
+
+  const n = world.grid.queryRange(x, y, radius, world.queryOut);
+  const queryOut = world.queryOut;
+  let bestSlot = -1;
+  let bestDist = Infinity;
+
+  for (let k = 0; k < n; k++) {
+    const j = queryOut[k];
+    if (j === i || store.species[j] !== mySpecies) continue;
+    if (store.age[j] <= store.maturityTicks[j]) continue;
+    if (store.pheno[j * TRAIT_COUNT + TRAIT.sociality] < socialityMin) continue;
+    const dx = store.x[j] - x;
+    const dy = store.y[j] - y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > radius * radius) continue;
+    const dist = Math.sqrt(d2);
+    if (dist < bestDist || (dist === bestDist && j < bestSlot)) {
+      bestDist = dist;
+      bestSlot = j;
+    }
+  }
+
+  world.mateOf[i] = bestSlot;
+}
+
+/**
  * Check breeding eligibility for one organism and, if it passes the
  * density-dependent roll, queue it in `world.birthQueue` (SPEC §4.5).
  * Eligible when `breeding.enabled`, `outputs.breed >= 0.5`,
@@ -385,12 +443,17 @@ export function checkBreeding(world, i) {
  * Resolve every queued birth, in queue order (= slot order), after kills
  * and deaths have already freed this tick's dead slots (SPEC §4.5, §6.3):
  * a parent that died this tick is skipped, since `resolve()` (world.js)
- * has already freed it by the time this runs. The child's genome is a
- * mutated copy of the parent's (SPEC §4.6; crossover is P5-04). The parent pays the
- * child's starting energy plus its body mass; the sum of realised changes
- * (parent's loss vs. child's energy + body) must be zero, with any
- * Float32 rounding gap going to `dissipated` — the same realised-vs-
- * intended rule used throughout `src/core`.
+ * has already freed it by the time this runs. The child's genome is
+ * either a mutated copy of the parent's alone (asexual, the default), or
+ * (SPEC §4.6, Decisions §12.1, P5-04) a per-gene crossover of the parent
+ * and its `findMate`-found mate, then mutated the same way, when
+ * `breeding.crossover.enabled`, the parent's own `pheno.sociality` clears
+ * `breeding.crossover.socialityMin`, and that mate is still alive. Either
+ * way only the birthing parent pays the child's starting energy plus its
+ * body mass; the mate pays nothing. The sum of realised changes (parent's
+ * loss vs. child's energy + body) must be zero, with any Float32 rounding
+ * gap going to `dissipated` — the same realised-vs-intended rule used
+ * throughout `src/core`.
  * @param {import('./world.js').World} world
  * @returns {void}
  */
@@ -414,8 +477,23 @@ export function resolveBirths(world) {
     const gLen = store.genomeLength;
     const pGOff = parent * gLen;
     const cGOff = slot * gLen;
-    for (let k = 0; k < gLen; k++) {
-      store.genome[cGOff + k] = store.genome[pGOff + k];
+
+    const mate = world.mateOf[parent];
+    const parentSociality = store.pheno[parent * TRAIT_COUNT + TRAIT.sociality];
+    const useCrossover =
+      cfg.breeding.crossover.enabled &&
+      parentSociality >= cfg.breeding.crossover.socialityMin &&
+      mate !== -1 &&
+      store.alive[mate];
+
+    let parent2Id = 0; // 0 = sentinel, "no second parent" (asexual)
+    if (useCrossover) {
+      crossover(world.rng, store.genome, pGOff, mate * gLen, cGOff, cfg);
+      parent2Id = store.id[mate];
+    } else {
+      for (let k = 0; k < gLen; k++) {
+        store.genome[cGOff + k] = store.genome[pGOff + k];
+      }
     }
     mutate(world.rng, store.genome, cGOff, cfg);
     applyPhenotype(cfg, store, slot);
@@ -456,6 +534,7 @@ export function resolveBirths(world) {
     store.species[slot] = store.species[parent]; // inherited by default; assignNewborn may override below
     store.generation[slot] = store.generation[parent] + 1;
     store.parent[slot] = store.id[parent];
+    store.parent2[slot] = parent2Id;
     store.sick[slot] = 0;
     store.flags[slot] = 0;
     store.offspring[slot] = 0;
@@ -653,6 +732,7 @@ function maybeImmigrate(world, className, floor) {
     store.age[slot] = 0;
     store.generation[slot] = 1;
     store.parent[slot] = 0;
+    store.parent2[slot] = 0;
     store.sick[slot] = 0;
     store.flags[slot] = 0;
     store.offspring[slot] = 0;

@@ -147,6 +147,7 @@ export function makeOrganism(world, { x = 0, y = 0, energy, traits = {} } = {}) 
   store.species[slot] = 0;
   store.generation[slot] = 1;
   store.parent[slot] = 0;
+  store.parent2[slot] = 0;
   store.sick[slot] = 0;
   store.flags[slot] = 0;
   store.offspring[slot] = 0;

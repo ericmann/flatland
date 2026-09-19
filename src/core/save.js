@@ -189,6 +189,7 @@ function typedFields(world) {
     world.killLastY,
     world.killOverflowPrey,
     world.killOverflowCount,
+    s.parent2,
   ];
 }
 

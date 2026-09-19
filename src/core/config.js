@@ -223,6 +223,15 @@ export const DEFAULTS = Object.freeze({
     // births to outpace the (widened, but still finite) old-age death rate.
     baseRate: 0.04,
     childEnergyFraction: 0.35,
+    // Mating with crossover (SPEC §4.5, Decisions §12.1, Phase 5): optional
+    // sexual reproduction gated by sociality and kin proximity, on top of
+    // the asexual reproduction above. `enabled` may flip to `false` by
+    // P5-05's sweep if crossover collapses diversity (Decisions §12.1).
+    crossover: Object.freeze({
+      enabled: true,
+      mateRadius: 3,
+      socialityMin: 0.5,
+    }),
   }),
   pheromone: Object.freeze({
     enabled: true,
@@ -860,6 +869,30 @@ export const DOCS = new Map([
       units: 'fraction of parent energy',
       assumption: true,
       doc: "Energy given to a newborn, as a fraction of the parent's energy at the moment of birth (SPEC §4.5).",
+    },
+  ],
+  [
+    'breeding.crossover.enabled',
+    {
+      units: 'boolean',
+      assumption: true,
+      doc: 'Master switch for sexual reproduction with crossover, on top of the asexual default (SPEC §4.5, Decisions §12.1). May default to `false` after the P5-05 sweep if it collapses diversity.',
+    },
+  ],
+  [
+    'breeding.crossover.mateRadius',
+    {
+      units: 'tiles',
+      assumption: true,
+      doc: 'Search radius for the nearest eligible mate (same species, mature, social) considered for crossover (Decisions §12.1).',
+    },
+  ],
+  [
+    'breeding.crossover.socialityMin',
+    {
+      units: 'gene [0,1]',
+      assumption: true,
+      doc: 'Minimum `pheno.sociality`, for both the birthing parent and the candidate mate, for crossover to be considered (Decisions §12.1).',
     },
   ],
   [

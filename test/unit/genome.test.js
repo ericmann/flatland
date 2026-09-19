@@ -14,6 +14,7 @@ import {
   visionClass,
   applyPhenotype,
   mutate,
+  crossover,
   distance,
   distanceTo,
   MAX_TRAIT_DISTANCE,
@@ -250,6 +251,58 @@ describe('mutate', () => {
     mutate(new Rng(42), a, 0, cfg);
     mutate(new Rng(42), b, 0, cfg);
     expect(a).toEqual(b);
+  });
+});
+
+describe('crossover', () => {
+  it('takes every gene from one of the two parents', () => {
+    const gLen = genomeLength(cfg);
+    const a = makeGenome(0); // parent A: every gene 0
+    const b = new Float32Array(gLen).fill(1); // parent B: every gene 1
+    const combined = new Float32Array(gLen * 3);
+    combined.set(a, 0);
+    combined.set(b, gLen);
+    const outOff = gLen * 2;
+
+    const rng = new Rng(7);
+    crossover(rng, combined, 0, gLen, outOff, cfg);
+
+    for (let k = 0; k < gLen; k++) {
+      const g = combined[outOff + k];
+      expect(g === 0 || g === 1).toBe(true);
+    }
+    // With distinct parents (0 vs 1) over this many genes, both alleles
+    // should appear at least once (a uniform-coin-flip sanity check, not
+    // a strict per-gene assertion).
+    const values = new Set();
+    for (let k = 0; k < gLen; k++) values.add(combined[outOff + k]);
+    expect(values.has(0)).toBe(true);
+    expect(values.has(1)).toBe(true);
+  });
+
+  it('is deterministic for a given rng state', () => {
+    const gLen = genomeLength(cfg);
+    const a = makeGenome(0.2);
+    const b = makeGenome(0.8);
+    const combined = new Float32Array(gLen * 2);
+    combined.set(a, 0);
+    combined.set(b, gLen);
+
+    const out1 = new Float32Array(gLen);
+    const out2 = new Float32Array(gLen);
+    const scratch1 = new Float32Array(gLen * 3);
+    scratch1.set(a, 0);
+    scratch1.set(b, gLen);
+    crossover(new Rng(99), scratch1, 0, gLen, gLen * 2, cfg);
+    out1.set(scratch1.subarray(gLen * 2, gLen * 3));
+
+    const scratch2 = new Float32Array(gLen * 3);
+    scratch2.set(a, 0);
+    scratch2.set(b, gLen);
+    crossover(new Rng(99), scratch2, 0, gLen, gLen * 2, cfg);
+    out2.set(scratch2.subarray(gLen * 2, gLen * 3));
+
+    expect(out1).toEqual(out2);
   });
 });
 

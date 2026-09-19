@@ -22,6 +22,7 @@ import {
   eatMeal,
   huntTarget,
   resolvePredationKills,
+  findMate,
   checkBreeding,
   resolveBirths,
   checkFamine,
@@ -451,6 +452,8 @@ export class World {
     /** Infections queued this tick, applied after the per-organism loop (P3-03, `disease.js`). */
     this.newlySick = new Uint8Array(cap);
     this.attackTarget = new Int32Array(cap);
+    /** Per-organism nearest-eligible-mate scratch, set by `ecology.findMate` (P5-04, -1 = none); consumed by `resolveBirths`. */
+    this.mateOf = new Int32Array(cap);
     this.birthQueue = new Int32Array(cap);
     /** Number of valid entries currently in `birthQueue` (reset each tick by `resolveBirths`). */
     this.birthQueueLength = 0;
@@ -493,6 +496,7 @@ export class World {
 
     /** Per-organism predation target, set by `ecology.huntTarget` (-1 = none). */
     this.attackTarget.fill(-1);
+    this.mateOf.fill(-1);
 
     /** The append-only chronicle (SPEC §4.11). */
     this.chronicle = new Chronicle();
@@ -552,6 +556,9 @@ export class World {
       metabolise(this, i);
       ageOrganism(this, i);
       diseaseTick(this, i);
+      if (this.cfg.breeding.crossover.enabled) {
+        findMate(this, i);
+      }
       checkBreeding(this, i);
     }
     applyNewlySick(this);

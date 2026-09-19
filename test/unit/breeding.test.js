@@ -202,3 +202,142 @@ describe('checkBreeding + resolvePredationKills-style resolution (birth mechanic
     expect(childOfDeadParent).toBe(false);
   });
 });
+
+describe('mating with crossover (SPEC §4.5, Decisions §12.1, P5-04)', () => {
+  // Markers: trait genes safe to diverge between parent and mate without
+  // perturbing eligibility/behaviour. `size` is deliberately excluded: it
+  // drives both `body` (the child's birth cost) and `energyMax`, so an
+  // extreme value inherited from the "wrong" side of the coin flip could
+  // make the child unaffordable and turn this into a flaky test. diet,
+  // metabolism, lifespan, maturity, breedThreshold and sociality are also
+  // left at their default 0.5 so eligibility math stays exactly as the
+  // other tests in this file exercise it (0.5 already clears the default
+  // socialityMin 0.5).
+  const MARKER_TRAITS = [
+    'speed',
+    'visionPeak',
+    'visionWidth',
+    'visionRange',
+    'boldness',
+    'prefTemp',
+    'swim',
+    'resistance',
+    'hue',
+    'emit0',
+    'emit1',
+    'emit2',
+    'emit3',
+    'sense0',
+    'sense1',
+    'sense2',
+    'sense3',
+  ];
+
+  function traitsAt(value) {
+    const traits = {};
+    for (const name of MARKER_TRAITS) traits[name] = value;
+    return traits;
+  }
+
+  /**
+   * A mate: eligible as a crossover *candidate* (mature, social, in
+   * range) but given too little energy to independently pass
+   * `checkBreeding`'s own `energy > breedEnergy` gate (so it does not
+   * also queue its own, unrelated birth this tick) and just enough to
+   * survive one tick's metabolism without starving.
+   */
+  function socialMate(world, opts = {}) {
+    const mate = makeOrganism(world, { x: 11, y: 10, traits: traitsAt(1), ...opts });
+    world.store.age[mate] = world.store.maturityTicks[mate] + 1;
+    world.store.energy[mate] = 1;
+    return mate;
+  }
+
+  it('with a social mate in range the child mixes both genomes and records parent2', () => {
+    const world = bareWorld({
+      // radius: 0 keeps checkBreeding's own density-dependent term at
+      // exactly 1 despite the nearby mate (SPEC §4.5: p = baseRate *
+      // max(0, 1 - N/localK), and N counts any neighbour within
+      // `breeding.radius`, mate included) -- a real neighbour there would
+      // otherwise make the birth itself a non-1 probability, unrelated to
+      // what this test exercises.
+      config: { breeding: { baseRate: 1, radius: 0 }, genome: { pMut: 0, pBig: 0 } },
+    });
+    const parent = eligible(world, { x: 10, y: 10, traits: traitsAt(0) });
+    const mate = socialMate(world);
+    const mateId = world.store.id[mate];
+    const parentId = world.store.id[parent];
+
+    world.step();
+
+    const child = alive(world).find((s) => world.store.parent[s] === parentId);
+    expect(child).toBeDefined();
+    expect(world.store.parent2[child]).toBe(mateId);
+
+    const gLen = world.store.genomeLength;
+    const cOff = child * gLen;
+    const pOff = parent * gLen;
+    const mOff = mate * gLen;
+    let fromParent = 0;
+    let fromMate = 0;
+    for (let k = 0; k < gLen; k++) {
+      if (world.store.genome[cOff + k] === world.store.genome[pOff + k]) fromParent++;
+      if (world.store.genome[cOff + k] === world.store.genome[mOff + k]) fromMate++;
+    }
+    // Every gene equals one parent's or the other's exactly (pMut = pBig =
+    // 0, so no mutation noise); a real mix shows up as both counts being
+    // positive, rather than one of them covering the whole genome.
+    expect(fromParent).toBeGreaterThan(0);
+    expect(fromMate).toBeGreaterThan(0);
+    expect(fromParent + fromMate).toBeGreaterThanOrEqual(gLen);
+  });
+
+  it('an asocial parent breeds asexually', () => {
+    const world = bareWorld({
+      config: { breeding: { baseRate: 1, radius: 0 }, genome: { pMut: 0, pBig: 0 } },
+    });
+    // The parent's own sociality is below socialityMin (0.5); a fully
+    // eligible mate is still in range, but the parent's own gate fails.
+    const parent = eligible(world, {
+      x: 10,
+      y: 10,
+      traits: { ...traitsAt(0), sociality: 0 },
+    });
+    socialMate(world);
+    const parentId = world.store.id[parent];
+
+    world.step();
+
+    const child = alive(world).find((s) => world.store.parent[s] === parentId);
+    expect(child).toBeDefined();
+    expect(world.store.parent2[child]).toBe(0);
+
+    const gLen = world.store.genomeLength;
+    const childGenome = world.store.genome.slice(child * gLen, child * gLen + gLen);
+    const parentGenome = world.store.genome.slice(parent * gLen, parent * gLen + gLen);
+    expect(Array.from(childGenome)).toEqual(Array.from(parentGenome));
+  });
+
+  it('crossover.enabled = false never sets parent2', () => {
+    const world = bareWorld({
+      config: {
+        breeding: { baseRate: 1, radius: 0, crossover: { enabled: false } },
+        genome: { pMut: 0, pBig: 0 },
+      },
+    });
+    const parent = eligible(world, { x: 10, y: 10, traits: traitsAt(0) });
+    socialMate(world);
+    const parentId = world.store.id[parent];
+
+    world.step();
+
+    const child = alive(world).find((s) => world.store.parent[s] === parentId);
+    expect(child).toBeDefined();
+    expect(world.store.parent2[child]).toBe(0);
+
+    const gLen = world.store.genomeLength;
+    const childGenome = world.store.genome.slice(child * gLen, child * gLen + gLen);
+    const parentGenome = world.store.genome.slice(parent * gLen, parent * gLen + gLen);
+    expect(Array.from(childGenome)).toEqual(Array.from(parentGenome));
+  });
+});

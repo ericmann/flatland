@@ -64,7 +64,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P5-01 Temperature
 - [x] P5-02 Weather events — rain and fog
 - [x] P5-03 Swimming
-- [ ] P5-04 Mating with crossover
+- [x] P5-04 Mating with crossover
 - [ ] P5-05 Phase 5 tuning
 - [ ] P5-06 Performance pass and `docs/performance.md`
 - [ ] P5-07 Blog post draft
@@ -2383,6 +2383,38 @@ For P5-04 (mating/crossover, touching genome.js/ecology.js/
 organisms.js): unaffected by this task, no shared state to build on.
 Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
 test` 446/447 (same pre-existing throughput-invariant flake — 217
+ticks/s vs. the required 2000 — this machine's ongoing CPU contention,
+see P3-10 onward's log, not a regression); `npm run test:soak` 20/20.
+`npm run headless -- --ticks 5000` hash identical across two runs.
+Phone: n/a.
+
+### P5-04 — pending sha
+Goal: add optional sexual reproduction gated by sociality and kin
+proximity (Decisions §12.1). New `ecology.findMate` writes
+`world.mateOf[i]` (-1 = none) during the per-organism loop: nearest
+living same-species organism within `breeding.crossover.mateRadius`,
+mature, `pheno.sociality >= socialityMin`, ties lowest slot. In
+`resolveBirths`, if `crossover.enabled` and the parent's own sociality
+clears the threshold and the mate is still alive: `genome.crossover`
+(per-gene coin flip) replaces the asexual copy, then `mutate` runs as
+before; `parent2 = mate id` (new hashed `Uint32Array` column, 0 =
+asexual); the mate pays nothing.
+Tests: `test/unit/genome.test.js` "crossover takes every gene from one
+of the two parents"; `test/unit/breeding.test.js` "with a social mate
+in range the child mixes both genomes and records parent2", "an
+asocial parent breeds asexually", "crossover.enabled = false never
+sets parent2".
+Interpretation: skipped the inspector `parents #a × #b` display —
+showing `parent2` requires plumbing it through `src/sim/snapshot.js`'s
+selected-record wire format (encode length/loop + decode), which isn't
+in this task's files and isn't a small delta; `parent2` is fully
+tracked in core (hashed, saved) for a later task to surface.
+`breeding.crossover.enabled` defaults `true` per this task's own
+design constraint; P5-05's sweep may flip it to `false` if diversity
+regresses. New ⚠️ keys for P5-05: `breeding.crossover.enabled`,
+`breeding.crossover.mateRadius`, `breeding.crossover.socialityMin`.
+Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
+test` 451/452 (same pre-existing throughput-invariant flake — ~172-193
 ticks/s vs. the required 2000 — this machine's ongoing CPU contention,
 see P3-10 onward's log, not a regression); `npm run test:soak` 20/20.
 `npm run headless -- --ticks 5000` hash identical across two runs.

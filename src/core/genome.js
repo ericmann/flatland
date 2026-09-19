@@ -142,6 +142,30 @@ export function mutate(rng, genome, offset, cfg, opts = {}) {
   }
 }
 
+/**
+ * Per-gene uniform crossover of two parent genomes into a third (output)
+ * offset (SPEC §4.6, Decisions §12.1, P5-04): for each gene, in gene-index
+ * order, `rng.chance(0.5)` picks parent A's gene or parent B's gene. The
+ * output offset may safely equal `aOff` or `bOff` since each gene is read
+ * from both sources before being written (a single assignment per index,
+ * no in-place aliasing hazard). Callers `mutate` the result exactly as
+ * asexual reproduction already does.
+ * @param {import('./rng.js').Rng} rng
+ * @param {Float32Array} genome
+ * @param {number} aOff parent A's genome start index
+ * @param {number} bOff parent B's genome start index
+ * @param {number} outOff output genome start index
+ * @param {typeof import('./config.js').DEFAULTS} cfg
+ * @returns {void}
+ */
+export function crossover(rng, genome, aOff, bOff, outOff, cfg) {
+  const len = genomeLength(cfg);
+  for (let k = 0; k < len; k++) {
+    const g = rng.chance(0.5) ? genome[aOff + k] : genome[bOff + k];
+    genome[outOff + k] = g;
+  }
+}
+
 /** Euclidean trait-block distance if every trait gene differed maximally. */
 export const MAX_TRAIT_DISTANCE = Math.sqrt(TRAIT_COUNT);
 
