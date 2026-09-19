@@ -70,6 +70,8 @@ export function sentence(kind, ctx) {
       return `${ctx.name} are extinct. The last one ${ctx.verb} in ${ctx.place}.`;
     case KIND.PLAGUE:
       return `Plague among the ${ctx.name} in ${ctx.place}: ${ctx.n} sick.`;
+    case KIND.FAMINE:
+      return `Famine. The plants are down to ${ctx.pct}% in ${ctx.season}.`;
     default:
       throw new Error(`sentence: unsupported kind "${kind}"`);
   }

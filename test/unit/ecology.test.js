@@ -188,6 +188,40 @@ describe('regrowth debt', () => {
   });
 });
 
+describe('seasons on plant growth', () => {
+  it('plant growth summed over a mid-winter day is less than over a mid-summer day', () => {
+    /** Total photosynthesis over one full day starting at `yearFrac`. */
+    function growthOverDayAt(yearFrac) {
+      const world = makeWorld({
+        width: 8,
+        height: 8,
+        terrain: TERRAIN.GRASS,
+        organisms: [],
+        config: isolate('plants'),
+      });
+      const DAY = world.cfg.time.ticksPerDay;
+      const YEAR = world.cfg.time.daysPerYear;
+      const targetTick = Math.round(yearFrac * YEAR) * DAY;
+      while (world.tick < targetTick) world.step();
+
+      // With no consumption (no organisms), plants saturate to cap well
+      // before a distant target tick, leaving no headroom to measure a
+      // seasonal difference; reset to a fixed, well-below-cap level right
+      // before the measured day so both seasons start from the same place.
+      const cap = world.cfg.terrain.plantCap[TERRAIN.GRASS];
+      world.plants.fill(0.3 * cap);
+
+      const before = world.ledger.flows.photosynthesis;
+      for (let t = 0; t < DAY; t++) world.step();
+      return world.ledger.flows.photosynthesis - before;
+    }
+
+    const summer = growthOverDayAt(0.375); // dayFraction peaks here (SPEC §4.3)
+    const winter = growthOverDayAt(0.875); // dayFraction troughs here
+    expect(winter).toBeLessThan(summer);
+  });
+});
+
 describe('carcass decay', () => {
   it('decays to soil, slower on mud than on grass', () => {
     const grass = makeWorld({

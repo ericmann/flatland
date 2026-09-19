@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Chronicle, KIND, sentence, deathVerb } from '../../src/core/chronicle.js';
+import { checkFamine } from '../../src/core/ecology.js';
+import { TERRAIN } from '../../src/core/terrain.js';
 import { makeWorld } from '../helpers.js';
 
 describe('genesis chronicle entry', () => {
@@ -81,5 +83,42 @@ describe('Chronicle', () => {
     const c = new Chronicle();
     c.add(0, KIND.GENESIS, 'a', 'x');
     expect(c.entries[0].subjects).toEqual([]);
+  });
+});
+
+describe('famine (P3-05)', () => {
+  it('fires once on crossing below the threshold and re-arms above twice the threshold', () => {
+    const world = makeWorld({ width: 8, height: 8, terrain: TERRAIN.GRASS, organisms: [] });
+    world.chronicle.flush(); // discard the genesis entry.
+    const threshold = world.cfg.famine.plantFraction;
+
+    function sampleAt(fraction) {
+      world.stats.sample(world);
+      const idx = (world.stats.head - 1 + world.stats.capacity) % world.stats.capacity;
+      world.stats.plantsFraction[idx] = fraction;
+      checkFamine(world);
+    }
+    function famineEntries() {
+      return (world.chronicle.flush() ?? []).filter((e) => e.kind === KIND.FAMINE);
+    }
+
+    expect(world.famineArmed).toBe(1);
+
+    sampleAt(threshold - 0.01);
+    expect(famineEntries()).toHaveLength(1);
+    expect(world.famineArmed).toBe(0);
+
+    // Still below threshold, but disarmed: no re-fire.
+    sampleAt(threshold - 0.01);
+    expect(famineEntries()).toHaveLength(0);
+
+    // Recovers above 2x the threshold: re-arms, no entry.
+    sampleAt(2.1 * threshold);
+    expect(world.famineArmed).toBe(1);
+    expect(famineEntries()).toHaveLength(0);
+
+    // Crosses below again: fires again.
+    sampleAt(threshold - 0.01);
+    expect(famineEntries()).toHaveLength(1);
   });
 });

@@ -8,6 +8,9 @@ import { TERRAIN } from './terrain.js';
 import { TAU } from './fmath.js';
 import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS, applyPhenotype, mutate } from './genome.js';
 import { DEATH, EV_HUNT, EV_BIRTH, recordEvent } from './world.js';
+import { regionName } from './names.js';
+import { season } from './light.js';
+import { KIND, sentence } from './chronicle.js';
 
 /**
  * reflex.js's OUTPUT.eat and OUTPUT.breed indices, duplicated here as
@@ -456,4 +459,48 @@ export function resolveBirths(world) {
   }
 
   world.birthQueueLength = 0;
+}
+
+/**
+ * Check the stats sample this tick just took for a famine crossing (SPEC
+ * §4.9): below `famine.plantFraction` while armed fires a `famine`
+ * chronicle entry (place = the region of the tile with the most plants
+ * remaining, i.e. the best place left to be) and disarms; recovering
+ * above `2 × famine.plantFraction` re-arms. Called only on tick
+ * `stats.sampleEvery` boundaries, right after `stats.sample()`.
+ * @param {import('./world.js').World} world
+ * @returns {void}
+ */
+export function checkFamine(world) {
+  const cfg = world.cfg.famine;
+  const stats = world.stats;
+  const idx = (stats.head - 1 + stats.capacity) % stats.capacity;
+  const fraction = stats.plantsFraction[idx];
+
+  if (world.famineArmed && fraction < cfg.plantFraction) {
+    world.famineArmed = 0;
+
+    let bestI = 0;
+    let bestV = -1;
+    const plants = world.plants;
+    for (let i = 0; i < plants.length; i++) {
+      if (plants[i] > bestV) {
+        bestV = plants[i];
+        bestI = i;
+      }
+    }
+    const place = regionName(
+      bestI % world.width,
+      Math.floor(bestI / world.width),
+      world.terrain,
+      world.width,
+      world.height,
+    );
+    const pct = Math.round(fraction * 100);
+    const seasonName = season(world.tick, world.cfg);
+    const text = sentence(KIND.FAMINE, { pct, season: seasonName });
+    world.chronicle.add(world.tick, KIND.FAMINE, text, place, []);
+  } else if (!world.famineArmed && fraction > 2 * cfg.plantFraction) {
+    world.famineArmed = 1;
+  }
 }

@@ -44,7 +44,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P3-02 Scent lenses
 - [x] P3-03 Disease
 - [x] P3-04 Regrowth debt
-- [ ] P3-05 Seasons on plants and the famine entry
+- [x] P3-05 Seasons on plants and the famine entry
 - [ ] P3-06 Immigration
 - [ ] P3-07 Kill aggregation, `first` events, every chronicle sentence, chronicle filter
 - [ ] P3-08 Charts — population by lineage, diversity with light
@@ -1643,5 +1643,42 @@ comment above `hash()` is updated to list it). `ecology.js`'s
 (night), debt only counts down on lit ticks, a literal reading of
 "debt[t]-- each tick in the growth loop" (the loop that runs, not every
 world tick). Debt is not an energy stock, so `ledger` is untouched.
+
+### P3-05 — pending sha (see commit)
+Tests: `test/unit/ecology.test.js` (+1: total photosynthesis over a
+full mid-winter day is less than a full mid-summer day — both measured
+from the same reset, below-cap plant level, since with no consumption
+plants otherwise saturate to cap long before either target tick and
+the comparison would read 0/0). `test/unit/chronicle.test.js` (+1:
+famine fires once on crossing below the threshold, stays silent while
+already disarmed, re-arms above 2x the threshold with no entry, then
+fires again on the next crossing — driven directly through
+`checkFamine`/`world.stats.plantsFraction`/`world.famineArmed` rather
+than waiting out a real depletion). All pass; full `npm test` scope
+368/368 green.
+Config key introduced: `famine.plantFraction` (0.1, ⚠️ ASSUMPTION).
+Design: `checkFamine(world)` (new, in `ecology.js`, since this task's
+Files touched doesn't include `stats.js`) reads the sample
+`stats.sample()` just took and, on a below-threshold crossing while
+armed, scans `world.plants` row-major for the tile with the most
+plants remaining (the best place left to be) for the chronicle's
+place, then disarms; recovering above `2 × plantFraction` re-arms.
+`world.js` gains a `famineArmed` flag (starts armed), hashed as a
+32-bit value alongside tick/rng-state/next-id, and calls `checkFamine`
+right after `stats.sample()` inside the existing `sampleEvery`
+boundary check. `chronicle.js` gains the `KIND.FAMINE` sentence,
+`"Famine. The plants are down to ${pct}% in ${season}."`, exactly as
+specified. No new growth mechanic — seasons already act entirely
+through `L` (SPEC §4.3), confirmed by the growth-comparison test
+rather than assumed.
+Interpretation: `ecology.js` importing `regionName` (`names.js`),
+`season` (`light.js`) and `KIND`/`sentence` (`chronicle.js`) is safe —
+none of those modules import back into `ecology.js` or `world.js`.
+`ecology.js` already imports `DEATH`/`recordEvent` etc. from `world.js`
+despite `world.js` importing back from `ecology.js` for `growPlants`
+and friends; that pre-existing cycle already works (neither module
+touches the other's exports at top-level evaluation time), confirming
+this task's new imports don't need the "duplicate the constant locally"
+workaround used elsewhere in this codebase for a *tighter* cycle.
 
 

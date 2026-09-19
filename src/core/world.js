@@ -23,6 +23,7 @@ import {
   resolvePredationKills,
   checkBreeding,
   resolveBirths,
+  checkFamine,
 } from './ecology.js';
 import { applyDue } from './interventions.js';
 import { Grid } from './grid.js';
@@ -214,6 +215,8 @@ export class World {
     this.rng = new Rng(this.seed);
     this.tick = 0;
     this.light = 0;
+    /** 1 = a famine chronicle entry may fire on the next below-threshold sample (P3-05); disarmed after firing, re-armed once plants recover above 2x the threshold. */
+    this.famineArmed = 1;
 
     this.width = cfg.world.width;
     this.height = cfg.world.height;
@@ -375,13 +378,14 @@ export class World {
 
     if (this.tick % this.cfg.stats.sampleEvery === 0) {
       this.stats.sample(this);
+      checkFamine(this);
     }
   }
 
   /**
    * A deterministic FNV-1a 32-bit hash of everything that defines world
    * state, as an 8-character lowercase hex string (SPEC §3.1, §6.3). Order:
-   * tick, rng state, next organism id; terrain, plants, carcass, soil,
+   * tick, rng state, next organism id, `famineArmed` (P3-05); terrain, plants, carcass, soil,
    * the regrowth debt grid (P3-04), the four pheromone channels; then the
    * organism store's arrays in
    * `HASH_ORDER`; then the species table's `ancestor, born, died, count,
@@ -395,6 +399,7 @@ export class World {
     h = hashUpdateU32(h, this.tick >>> 0);
     h = hashUpdateU32(h, this.rng.state >>> 0);
     h = hashUpdateU32(h, this.store.nextId >>> 0);
+    h = hashUpdateU32(h, this.famineArmed);
     h = hashUpdate(h, bytesOf(this.terrain));
     h = hashUpdate(h, bytesOf(this.plants));
     h = hashUpdate(h, bytesOf(this.carcass));
