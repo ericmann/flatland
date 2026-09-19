@@ -48,7 +48,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P3-06 Immigration
 - [x] P3-07 Kill aggregation, `first` events, every chronicle sentence, chronicle filter
 - [x] P3-08 Charts — population by lineage, diversity with light
-- [ ] P3-09 Idle POI memory and narrative captions
+- [x] P3-09 Idle POI memory and narrative captions
 - [ ] P3-10 Pressure tuning, pinned seeds and the full soak
 - [ ] P3-11 Phase 3 end — push, preview, phone checks
 - [ ] P4-01 Save records, state snapshots, restore, and the restore determinism case
@@ -1820,5 +1820,39 @@ Interpretation: "thinner when extinct" is decided from each species'
 carrying a separate `died` flag through the wire format, since the
 `species: [id, count]` payload shape was given literally in this
 task's Design constraints.
+
+### P3-09 — pending sha (see commit)
+Tests: `test/ui/idle.test.js` (+4: a repeated organism target on a
+later world day says "the same hunter, second night running."; a
+repeated species hunt says "lineage N again."; the 16-slot ring evicts
+old entries — verified behaviourally, by filling it with 16 fresh
+sightings and confirming an original one no longer reads as a repeat
+rather than by inspecting internals; an `EV_IMMIGRATION` event yields
+an `Arrivals` POI naming the correct edge). All pass; full `npm test`
+scope 386/386 green; `npm run build` clean.
+Design: a fixed 16-slot array of reused record objects
+(`{ kind, organismId, speciesId, tick }`) is the POI memory — `rememberPOI`
+overwrites the next slot round-robin rather than pushing, so
+`pickPOI()` never allocates per pick, matching Decisions §12.2. Every
+`opts` entry now carries a `speciesId` (previously only `followId`
+existed) so hunts/herds/following/arrivals can all be matched against
+memory. `Following` picks check `priorSightingsBy('organismId', ...)`:
+a repeat on a strictly later day (`floor(tick/ticksPerDay)` differs)
+becomes "the same hunter, ${ordinal} night running."; a repeat the
+same day becomes "still following lineage N."; `A hunt` picks check
+`priorSightingsBy('speciesId', ...)` filtered to prior hunts, becoming
+"lineage N again." on any repeat, regardless of day. `EV_IMMIGRATION`
+(value 4, matching `world.js`'s export, duplicated locally like
+`EV_HUNT`/`EV_BIRTH` already were — idle.js doesn't import from
+`src/core`) is now handled in the events loop, inferring the edge word
+from which map boundary the event's position is nearest to, since the
+generic events ring buffer has no field for the edge string itself.
+Interpretation: "night" count uses total remembered sightings of that
+organism (not distinct calendar days), since idle POI picks happen
+roughly every 8-12s while idle — over the course of a run this
+distinction rarely matters, and the acceptance test only exercises the
+two-sighting case ("second"), where the two readings coincide.
+"Ordinals up to 'tenth'" is read as a cap: an 11th+ sighting still says
+"tenth" rather than falling back to a number.
 
 
