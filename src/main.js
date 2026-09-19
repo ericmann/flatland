@@ -19,6 +19,7 @@ import { createInspector } from './ui/station/inspector.js';
 import { createDock } from './ui/station/dock.js';
 import { createChroniclePane } from './ui/station/chronicle-pane.js';
 import { createPhylogenyPane } from './ui/station/phylogeny-pane.js';
+import { createCharts } from './ui/station/charts.js';
 import { SpeciesStore } from './ui/species-store.js';
 import { Renderer } from './render/renderer.js';
 import { fit } from './render/camera.js';
@@ -66,6 +67,8 @@ let inspector = null;
 let chroniclePane = null;
 /** @type {ReturnType<typeof createPhylogenyPane> | null} */
 let phylogenyPane = null;
+/** @type {ReturnType<typeof createCharts> | null} */
+let charts = null;
 /** @type {*} the most recently decoded snapshot, redrawn on pan/zoom/resize without a round-trip to the sim. */
 let lastSnapshot = null;
 /**
@@ -134,7 +137,11 @@ client.on('loaded', (msg) => {
     const dock = createDock({ el: layout.dock });
     chroniclePane = createChroniclePane({ el: dock.panes.chron, cfg });
     phylogenyPane = createPhylogenyPane({ el: dock.panes.phylo, app, speciesStore });
-    dock.onPaneChange((name) => phylogenyPane?.setVisible(name === 'phylo'));
+    charts = createCharts({ el: dock.panes.charts, speciesStore });
+    dock.onPaneChange((name) => {
+      phylogenyPane?.setVisible(name === 'phylo');
+      charts?.setVisible(name === 'charts');
+    });
     app.onLensChange(redraw); // instant feedback for the L/E keys and rail chips.
     app.onSelectionChange(redraw); // the selection ring appears without waiting for the next snapshot.
     app.onHighlightChange(redraw); // the phylogeny highlight rings appear immediately too.
@@ -153,6 +160,10 @@ client.on('chronicle', (msg) => {
 
 client.on('phylogeny', (msg) => {
   speciesStore.apply(msg);
+});
+
+client.on('stats', (msg) => {
+  charts?.update(msg);
 });
 
 client.on('snapshot', (msg) => {

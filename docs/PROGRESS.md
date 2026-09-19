@@ -47,7 +47,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P3-05 Seasons on plants and the famine entry
 - [x] P3-06 Immigration
 - [x] P3-07 Kill aggregation, `first` events, every chronicle sentence, chronicle filter
-- [ ] P3-08 Charts — population by lineage, diversity with light
+- [x] P3-08 Charts — population by lineage, diversity with light
 - [ ] P3-09 Idle POI memory and narrative captions
 - [ ] P3-10 Pressure tuning, pinned seeds and the full soak
 - [ ] P3-11 Phase 3 end — push, preview, phone checks
@@ -1788,5 +1788,37 @@ appended at the end — pushing genesis to a later index for that seed.
 Fixed by finding the genesis entry by `kind` instead of assuming index
 0; the wider suite's other chronicle-entry-order assumptions (searched
 for `chronicle.entries[0]` project-wide) had no other occurrences.
+
+### P3-08 — pending sha (see commit)
+Tests: `test/unit/scheduler.test.js` (+1: a `stats` event's `species`
+array is `[id, count]` pairs matching `world.species.count` exactly,
+one entry per species ever created). `test/ui/charts.test.js` (new, 3
+cases: `paintPopulation` draws one hued polyline per species, thinner
+once its latest count is 0; `paintDiversity` draws the sun-coloured
+light-area fill under the good-coloured diversity line plus the
+`H = x.xx` label; `createCharts` doesn't touch a canvas context while
+hidden or when `update()` is called again with the same `tick`, but
+does on first becoming visible and on a genuinely new tick). All pass;
+full `npm test` scope 382/382 green; `npm run build` clean.
+Design: `scheduler.js`'s pre-existing `_maybeSendStats()` (already
+sending `tick/light/pop/herb/omni/carn/plantsFraction/diversity/
+speciesLiving` from an earlier phase — this task only needed to add the
+new field) now also includes `species: [id, count][]`, one entry per
+species ever created (0 for extinct, same as the live table). New
+`src/ui/station/charts.js`: `paintPopulation`/`paintDiversity` are pure
+drawing functions (node-testable with a fake ctx, mirroring `lens-
+layer.js`'s `paintEnergy`/`paintScent` split), formulas copied exactly
+from the mockup's `chart()`/`renderCharts()`; `createCharts` is the
+thin stateful wrapper owning the last 240 samples, visibility, and
+change-detection by `tick`, sizing real canvases DPR-aware. `dock.js`'s
+`#charts` placeholder text is gone — `main.js` now builds the pane for
+real and feeds it `stats` events, alongside `phylogenyPane`'s existing
+pane-visibility wiring.
+Interpretation: "thinner when extinct" is decided from each species'
+*latest* count in the window (0 iff extinct — count only ever reaches
+0 at the moment of extinction, per `SpeciesTable.onDeath`), rather than
+carrying a separate `died` flag through the wire format, since the
+`species: [id, count]` payload shape was given literally in this
+task's Design constraints.
 
 
