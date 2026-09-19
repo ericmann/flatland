@@ -65,8 +65,13 @@ before/after tables into a tuning task's commit message. `--ticks 0` (the
 default) prints terrain-only columns; `--ticks N > 0` also steps a `World`
 through genesis for `N` ticks per seed (stopping early on extinction) and
 appends ecology columns: `pop herb omni carn species H plants% born starved
-hunted old extinctAt tps`, plus a summary row with means and
-`survived = count(pop > 0 ∧ herb > 0 ∧ carn > 0)`.
+hunted old splits extinct gen extinctAt tps immig plagues maxShare%
+noct/crep/diur avgH`, plus a summary row with means and
+`survived = count(pop > 0 ∧ herb > 0 ∧ carn > 0)`. `plagues` counts
+chronicle `KIND.PLAGUE` entries so far; `maxShare%` is the largest single
+species' share of the end-state population; `noct/crep/diur` is the
+vision-class histogram; `avgH` is Shannon diversity averaged over
+`world.stats`'s sample history.
 
 ```
 npm run sweep -- --seeds 1..40 --ticks 0            # terrain only
@@ -124,6 +129,19 @@ Follow keeps the camera on it, Close (or its death) clears the selection.
 The dock's Phylogeny tab draws a live time-tree; tapping a branch (or
 hovering it with a mouse) rings that lineage's living members on the map.
 Part of the phone checklist (`docs/PROGRESS.md`'s Phase 2 end log entry).
+
+## Living systems (Phase 3)
+
+Pheromone lenses (heat maps for the four scent channels) toggle from the
+rail strip's `T`/`A`/`M`/`K` keys. A sick organism (contact-transmitted
+disease, SPEC §4.9) shows a marker on its sprite. The dock's Charts tab
+draws live population-by-lineage and Shannon-diversity-with-light charts.
+Idle POI narration remembers the last 16 points of interest, so a
+returning hunter or hunt lineage reads as a continuation ("the same
+hunter, second night running.") rather than a fresh sighting; famine,
+plague and migration/immigration events surface in the chronicle ticker
+during idle. Part of the phone checklist (`docs/PROGRESS.md`'s Phase 3
+end log entry).
 
 ## Module layout
 
