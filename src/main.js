@@ -26,11 +26,34 @@ import { Renderer } from './render/renderer.js';
 import { fit } from './render/camera.js';
 import { decodeSnapshot } from './sim/snapshot.js';
 import { FLAG_TERRAIN, FLAG_SELECTED, FLAG_SPECIES, FLAG_PHEROMONE } from './sim/protocol.js';
-import { makeConfig } from './core/config.js';
+import { makeConfig, applyDiff } from './core/config.js';
+import { decodeShare } from './persist/share.js';
 
 const params = new URLSearchParams(window.location.search);
+
+/**
+ * A share link's `?w=` payload (SPEC §5.6), decoded once at boot, or
+ * `null` for an ordinary `?seed=`/default load. `?w=` takes precedence
+ * over `?seed=` (P4-06's auto-save, not yet implemented, would slot in
+ * below both: `?w=` > `?seed=` > auto-save > seed 1).
+ * @type {{ seed: number, configDiff: *, interventions: *[], tick: number } | null}
+ */
+let sharedWorld = null;
+const wParam = params.get('w');
+if (wParam) {
+  try {
+    sharedWorld = decodeShare(wParam);
+  } catch (err) {
+    console.error('Flatland: could not decode the ?w= share link', err);
+  }
+}
+
 const seedParam = Number(params.get('seed'));
-const seed = Number.isFinite(seedParam) && seedParam > 0 ? Math.floor(seedParam) : 1;
+const seed = sharedWorld
+  ? sharedWorld.seed
+  : Number.isFinite(seedParam) && seedParam > 0
+    ? Math.floor(seedParam)
+    : 1;
 
 const root = document.getElementById('app');
 const layout = createLayout(document);
@@ -42,13 +65,13 @@ const vignette = document.createElement('div');
 vignette.className = 'vig';
 layout.world.append(view, vignette);
 
-// Interpretation (P1-15 log): main.js sends `load` with no config override,
-// so the sim runs against exactly `makeConfig({})` — computing the same
-// object locally is the only way idle.js (UI-side) gets `cfg` without
-// changing the protocol/scheduler (out of this task's Files touched). If a
-// later task lets the UI choose a config override, that override must be
-// applied identically on both sides.
-const cfg = makeConfig({});
+// Interpretation (P1-15 log, resolved by P4-05): main.js sends `load` with
+// no config override for an ordinary boot, so the sim runs against exactly
+// `makeConfig({})` — computing the same object locally is the only way
+// idle.js (UI-side) gets `cfg` without changing the protocol/scheduler. A
+// `?w=` share link's `configDiff` is the one case with a real override, so
+// it is applied identically on both sides here.
+const cfg = sharedWorld ? applyDiff(sharedWorld.configDiff) : makeConfig({});
 const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 const client = new SimClient(createSim());
@@ -167,6 +190,15 @@ client.on('loaded', (msg) => {
 });
 
 client.on('status', (msg) => {
+  // A share link's replay (P4-05) posts a distinct, partial `status`
+  // shape (`{replaying, progress}` only, SPEC §5.6) while fast-forwarding
+  // to the link's tick — forwarding that to `topbar.update` (which reads
+  // `tick`/`light`/`season`/…) would render garbage, so it's handled
+  // separately until the replay finishes and regular status events resume.
+  if (msg.replaying !== undefined) {
+    document.documentElement.dataset.replaying = msg.replaying ? '1' : '0';
+    return;
+  }
   document.documentElement.dataset.tick = String(msg.tick);
   topbar?.update(msg);
 });
@@ -200,7 +232,18 @@ client.on('snapshot', (msg) => {
   snapshotOutstanding = false;
 });
 
-client.send('load', { seed });
+client.send(
+  'load',
+  sharedWorld
+    ? {
+        seed: sharedWorld.seed,
+        config: applyDiff(sharedWorld.configDiff),
+        interventions: sharedWorld.interventions,
+        replayTo: sharedWorld.tick,
+        speed: 0, // loads paused, so the viewer sees the exact replayed state before it resumes ticking.
+      }
+    : { seed },
+);
 
 /**
  * Request the next snapshot. Once per animation frame in station mode;

@@ -55,7 +55,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P4-02 Interventions — every kind in core, replay determinism, ⚡ chronicle
 - [x] P4-03 Hand of God pane
 - [x] P4-04 Lineage naming
-- [ ] P4-05 Share links, replay-to-tick, platform adapter
+- [x] P4-05 Share links, replay-to-tick, platform adapter
 - [ ] P4-06 Auto-save, resume and background verification
 - [ ] P4-07 Trophic energy-flow chart
 - [ ] P4-08 PWA — manifest, icons, service worker, bundle budget
@@ -2058,3 +2058,40 @@ Found and fixed (pixel-7 e2e only): the phone bottom-sheet inspector
 overlaps the dock tabs while open, intercepting the Phylogeny tab
 click — the new e2e test closes the inspector (`#unsel`) before
 switching tabs, matching how a phone user would actually reach the dock.
+
+### P4-05 — pending sha
+Goal: encode a world as `?w=` (SPEC §5.6), load one by replaying to its
+tick and continuing live, and add the Share button through the platform
+adapter.
+Tests: `test/unit/share.test.js` (new, 4 cases incl. the 3 named),
+`test/unit/scheduler.test.js` (+1: `replayTo`, using a fake clock that
+advances per-read rather than per-`advance()` so chunking is
+observable), `test/ui/topbar.test.js` (+2: builds a `?w=` URL and calls
+the platform adapter; shows the matching toast), `test/e2e/share.spec.js`
+(new, both projects).
+Design: `share.js`'s ops format duplicates `interventions.js`'s
+kind->field-order table locally (that module isn't in this task's Files
+touched); `encodeShare`/`decodeShare` never import `core/config.js` —
+`configDiff` passes through opaque. `scheduler._replayTo` runs inside
+`_load`, budget-chunked and posting `status {replaying,progress}`
+through the *existing* `STATUS` message type (not a new one) between
+chunks; `LOADED`/phylogeny post only after replay finishes.
+Interpretation: a share link loads **paused** (`load({speed:0})`, a new
+optional `_load` field) — otherwise the replayed tick starts ticking
+live again before a human (or an e2e test) can compare it, since nothing
+in the design text specifies this and the scheduler has no other way to
+land on a stable, inspectable tick. `platform/web.js`'s `wakeLock()` is
+requested on entering/being in idle mode and released on entering
+station, on `visibilitychange` hidden and on `detach()`. Touched
+`src/sim/protocol.js` (outside Files touched) only to keep `LoadPayload`/
+`StatusEvent`'s JSDoc typedefs accurate for the new fields — no behaviour
+there. `main.js`'s `#top` phone media query gained `overflow-x: auto`
+(P4-03's fork already fixed the rail; the topbar itself, with the new
+Share button plus its speed cluster, still overflowed at pixel-7 width,
+found via this task's own e2e run) — an unrelated real bug, not a
+Hand-of-God/inspector one, so recorded separately from that fork's fix.
+Phone: NOT VERIFIED (human) — `npm run test:ui` covers pixel-7 in CI,
+but a real phone should still confirm the Share button doesn't scroll
+under other topbar chrome (this task's fix uses overflow-x, not a
+redesign) and that the OS share sheet (not just clipboard fallback)
+actually appears on a real mobile browser.

@@ -259,4 +259,42 @@ describe('Scheduler', () => {
 
     expect(resumed.scheduler.world.pending).toEqual([{ tick: restoredTick + 50, kind: 'rain' }]);
   });
+
+  it('replayTo runs to the tick regardless of speed and then continues live', () => {
+    // A fake clock that advances 1ms per read (not just per `advance()`),
+    // so `_replayTo`'s own budget check sees elapsed time even though
+    // nothing in this test calls `advance()` — a static clock would let
+    // one chunk finish the whole replay in a single iteration, which is
+    // still correct but would make chunking unobservable here.
+    let calls = 0;
+    const posts = [];
+    const scheduler = new Scheduler({
+      now: () => calls++,
+      post: (msg, transfer = []) => posts.push({ msg, transfer }),
+      budgetMs: 5,
+    });
+    scheduler.handle({
+      type: MSG.LOAD,
+      seed: 5,
+      config: { world: { width: 16, height: 12 } },
+      replayTo: 300,
+    });
+
+    expect(scheduler.world.tick).toBe(300);
+    // speed was never consulted by replay (default 1, untouched).
+    expect(scheduler.speed).toBe(1);
+
+    const replayStatuses = posts.filter(
+      (p) => p.msg.type === MSG.STATUS && p.msg.replaying !== undefined,
+    );
+    expect(replayStatuses.length).toBeGreaterThan(1); // more than one chunk, given the 1ms-per-read clock.
+    expect(replayStatuses.every((p) => p.msg.progress >= 0 && p.msg.progress <= 1)).toBe(true);
+    expect(replayStatuses.at(-1).msg).toEqual({ type: MSG.STATUS, replaying: false, progress: 1 });
+
+    // Post-replay, live pump()s behave normally: speed 0 truly pauses.
+    scheduler.handle({ type: MSG.SET_SPEED, speed: 0 });
+    const { ticks } = scheduler.pump();
+    expect(ticks).toBe(0);
+    expect(scheduler.world.tick).toBe(300);
+  });
 });
