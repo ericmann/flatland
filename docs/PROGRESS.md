@@ -1681,7 +1681,7 @@ touches the other's exports at top-level evaluation time), confirming
 this task's new imports don't need the "duplicate the constant locally"
 workaround used elsewhere in this codebase for a *tighter* cycle.
 
-### P3-06 — pending sha (see commit)
+### P3-06 — 9cb489b
 Tests: `test/unit/ecology.test.js` (+4: an immigration fires at the
 floor with `groupSize` members landed on the chosen edge and a
 `migration` chronicle entry; a second below-floor check inside
