@@ -9,6 +9,12 @@ import '@fontsource/ibm-plex-mono/latin-500.css';
 import '@fontsource/ibm-plex-sans/latin-400.css';
 import '@fontsource/ibm-plex-sans/latin-500.css';
 
+// P4-08 (SPEC §2, §6.6, §10): register the generated service worker
+// ourselves (`vite.config.js` sets `injectRegister: false`) so failures are
+// visible in the console instead of a silently-injected script; `immediate:
+// true` matches `registerType: 'autoUpdate'` — no update prompt to wire up.
+import { registerSW } from 'virtual:pwa-register';
+
 import { createSim, SimClient } from './ui/sim-client.js';
 import { createApp } from './ui/app.js';
 import { createIdle, isSnapshotFrame } from './ui/idle.js';
@@ -31,6 +37,11 @@ import { decodeShare } from './persist/share.js';
 import { decodeRecord } from './core/save.js';
 import { openStore } from './persist/db.js';
 import { startAutosave } from './persist/autosave.js';
+
+registerSW({
+  immediate: true,
+  onRegisterError: (err) => console.error('Flatland: service worker registration failed', err),
+});
 
 const params = new URLSearchParams(window.location.search);
 
