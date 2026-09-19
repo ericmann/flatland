@@ -2028,7 +2028,7 @@ Interpretation: `data-tool` values are the intervention kind strings
 (`river`/`meadow`, matching P4-02's `queueIntervention`), not the
 mockup's placeholder `water`/`grass` names.
 
-### P4-04 — pending sha
+### P4-04 — 651d1f9
 Goal: enable renaming a lineage from the inspector as a logged
 `rename` intervention (core landed in P4-02).
 Tests: `test/ui/inspector.test.js` (+2: rename sends the intervention
