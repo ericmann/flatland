@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { createCharts, paintPopulation, paintDiversity } from '../../src/ui/station/charts.js';
+import {
+  createCharts,
+  paintPopulation,
+  paintDiversity,
+  paintFlows,
+} from '../../src/ui/station/charts.js';
 
 /** A recording fake 2D context: only the calls charts.js needs. */
 function fakeCtx() {
@@ -27,6 +32,9 @@ function fakeCtx() {
     },
     fill() {
       this.calls.push({ op: 'fill', fillStyle: this.fillStyle });
+    },
+    fillRect(x, y, w, h) {
+      this.calls.push({ op: 'fillRect', x, y, w, h, fillStyle: this.fillStyle });
     },
     fillText(text, x, y) {
       this.calls.push({ op: 'fillText', text, x, y });
@@ -90,6 +98,66 @@ describe('paintDiversity', () => {
 
     const label = ctx.calls.find((c) => c.op === 'fillText');
     expect(label.text).toBe('H = 1.50');
+  });
+});
+
+describe('paintFlows', () => {
+  it('draws six stacked areas with a legend', () => {
+    const ctx = fakeCtx();
+    const history = [
+      {
+        flows: {
+          photosynthesis: 10,
+          grazing: 4,
+          predation: 2,
+          scavenging: 1,
+          decay: 3,
+          metabolism: 5,
+        },
+      },
+      {
+        flows: {
+          photosynthesis: 8,
+          grazing: 5,
+          predation: 1,
+          scavenging: 2,
+          decay: 2,
+          metabolism: 6,
+        },
+      },
+    ];
+
+    paintFlows(ctx, 100, 50, history);
+
+    const fills = ctx.calls.filter((c) => c.op === 'fill');
+    // One stacked area per flow key (6).
+    expect(fills).toHaveLength(6);
+    const fillColors = new Set(fills.map((f) => f.fillStyle));
+    expect(fillColors.size).toBe(6);
+
+    const swatches = ctx.calls.filter((c) => c.op === 'fillRect');
+    expect(swatches).toHaveLength(6);
+    const swatchColors = new Set(swatches.map((s) => s.fillStyle));
+    expect(swatchColors).toEqual(fillColors);
+
+    const labels = ctx.calls.filter((c) => c.op === 'fillText').map((c) => c.text);
+    for (const name of [
+      'Photosynthesis',
+      'Grazing',
+      'Predation',
+      'Scavenging',
+      'Decay',
+      'Metabolism',
+    ]) {
+      expect(labels).toContain(name);
+    }
+  });
+
+  it('draws nothing but the grid for an empty history', () => {
+    const ctx = fakeCtx();
+    paintFlows(ctx, 100, 50, []);
+    expect(ctx.calls.some((c) => c.op === 'fill')).toBe(false);
+    expect(ctx.calls.some((c) => c.op === 'fillRect')).toBe(false);
   });
 });
 
