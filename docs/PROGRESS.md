@@ -62,7 +62,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P4-09 E2E completeness pass on desktop and Pixel 7
 - [x] P4-10 Phase 4 end — push, preview, phone checks
 - [x] P5-01 Temperature
-- [ ] P5-02 Weather events — rain and fog
+- [x] P5-02 Weather events — rain and fog
 - [ ] P5-03 Swimming
 - [ ] P5-04 Mating with crossover
 - [ ] P5-05 Phase 5 tuning
@@ -2332,4 +2332,33 @@ failure — 209 ticks/s vs. the required 2000 — this machine's ongoing
 CPU contention, see P3-10 onward's log, not a regression); `npm run
 test:soak` 20/20. `npm run headless -- --ticks 5000` hash identical
 across two runs.
+Phone: n/a.
+
+### P5-02 — pending sha
+Goal: rare discrete rain (moisture pulse boosting plant growth-rate) and
+fog (global vision penalty) events, each a chronicle entry (SPEC §4.3).
+`weatherTick` rolls rain then fog, one `rng.chance` each, right after
+`applyDue`; `world.moisture`/`fogTicks` hashed after `ambient`.
+Tests: `test/unit/weather.test.js` (new, 4 cases matching the task's
+acceptance list).
+Interpretation: `chronicle.js` needed no change — `KIND.WEATHER` and
+its `sentence()` case were already wired (pre-dating this task).
+Added `weather.moistureThreshold` (⚠️, not in the task's named key
+list) as the documented "cleared" cutoff for the not-while-active gate,
+since an implicit `> 0` would fight Float32 rounding at the tail of the
+decay. Found and fixed a latent alignment bug in `save.js`: adding
+`fogTicks` as a 17th `SCALAR_FIELDS` (Int32) entry left the Float64
+`SEC_LEDGER` section's payload at a non-8-aligned byte offset, which
+`new Float64Array(buffer, byteOffset, …)` throws on; fixed by copying
+Float64 section payloads into a freshly allocated array on restore
+(`readFloat64Payload`) instead of viewing them in place — no format/
+VERSION change, since encode-side bytes are unaffected. For P5-03:
+`world.moisture`/`fogTicks`, `cfg.weather.*` and the fixed vision-range
+multiplication point in `senses.js` are now available to build on.
+Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
+test` 444/445 (same pre-existing, unrelated throughput-invariant
+failure — ~175-216 ticks/s vs. the required 2000 — this machine's
+ongoing CPU contention, see P3-10 onward's log, not a regression);
+`npm run test:soak` 20/20. `npm run headless -- --ticks 5000` hash
+identical across two runs.
 Phone: n/a.

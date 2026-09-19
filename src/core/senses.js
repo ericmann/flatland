@@ -147,7 +147,11 @@ export function gather(world, i) {
   const L = world.light;
   const dAcuity = (L - lambda) / sigma;
   const acuity = exp(-(dAcuity * dAcuity));
-  const range = R * (0.25 + 0.75 * acuity);
+  // Fog (SPEC §4.3, Phase 5, P5-02) multiplies every vision range while
+  // active; folded in here so every downstream use (the grid query
+  // radius, threat/prey proximity normalization) sees the fogged range.
+  const fogMul = world.fogTicks > 0 ? cfg.weather.fogVision : 1;
+  const range = R * (0.25 + 0.75 * acuity) * fogMul;
 
   inputs[off + INPUT.L] = L;
   inputs[off + INPUT.hunger] = 1 - store.energy[i] / store.energyMax[i];

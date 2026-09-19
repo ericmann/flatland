@@ -57,6 +57,7 @@ const SEC_TYPED_BASE = 1000;
 const SCALAR_FIELDS = [
   ['rng.state', (w) => w.rng.state, (w, v) => (w.rng.state = v >>> 0)],
   ['famineArmed', (w) => w.famineArmed, (w, v) => (w.famineArmed = v)],
+  ['fogTicks', (w) => w.fogTicks, (w, v) => (w.fogTicks = v)],
   ['lastImmigrationHerb', (w) => w.lastImmigrationHerb, (w, v) => (w.lastImmigrationHerb = v)],
   ['lastImmigrationCarn', (w) => w.lastImmigrationCarn, (w, v) => (w.lastImmigrationCarn = v)],
   ['firsts', (w) => w.firsts, (w, v) => (w.firsts = v)],
@@ -103,13 +104,17 @@ const LEDGER_FIELDS = [
 
 /**
  * Float64 scalar `World` fields that don't belong to the ledger, in a
- * fixed order matching `SEC_FLOAT_SCALARS`'s Float64Array. `ambient`
- * lives here (not `SCALAR_FIELDS`, whose Int32Array truncates fractional
- * values) since it is a fractional scalar with history a source world
- * could read (P5-01, SPEC §4.3).
+ * fixed order matching `SEC_FLOAT_SCALARS`'s Float64Array. `ambient` and
+ * `moisture` live here (not `SCALAR_FIELDS`, whose Int32Array truncates
+ * fractional values) since both are fractional scalars with history a
+ * source world could read (`ambient`: P5-01, SPEC §4.3; `moisture`:
+ * P5-02, SPEC §4.3).
  * @type {[string, (w: import('./world.js').World) => number, (w: import('./world.js').World, v: number) => void][]}
  */
-const FLOAT_SCALAR_FIELDS = [['ambient', (w) => w.ambient, (w, v) => (w.ambient = v)]];
+const FLOAT_SCALAR_FIELDS = [
+  ['ambient', (w) => w.ambient, (w, v) => (w.ambient = v)],
+  ['moisture', (w) => w.moisture, (w, v) => (w.moisture = v)],
+];
 
 /**
  * Every typed-array field the state must carry, freshly resolved against
@@ -365,6 +370,24 @@ function readSection(view, bytes, offset) {
 }
 
 /**
+ * A section's payload as a `Float64Array`, copied into a freshly
+ * allocated typed array rather than viewed in place: sections are only
+ * 4-byte aligned (`align4`, SPEC §5.6), but a preceding Int32 (4-byte)
+ * section can leave a Float64 section's payload at a byte offset that
+ * isn't a multiple of 8, which `new Float64Array(buffer, byteOffset,
+ * …)` requires and throws on otherwise (surfaced by P5-02 adding
+ * `fogTicks`, a 17th Int32 `SCALAR_FIELDS` entry, ahead of the Float64
+ * `SEC_LEDGER` section). A copy has no such requirement.
+ * @param {Uint8Array} payload
+ * @returns {Float64Array}
+ */
+function readFloat64Payload(payload) {
+  const scratch = new Float64Array(payload.byteLength / 8);
+  new Uint8Array(scratch.buffer).set(payload);
+  return scratch;
+}
+
+/**
  * Restore `world` in place from a state buffer produced by `encodeState`
  * (SPEC §3.1, §3.4: the result hashes identically to the source at the
  * same tick and steps identically afterwards). `world` must already be
@@ -406,10 +429,10 @@ export function restoreState(world, buffer) {
       const scratch = new Int32Array(payload.buffer, payload.byteOffset, payload.byteLength / 4);
       for (let i = 0; i < SCALAR_FIELDS.length; i++) SCALAR_FIELDS[i][2](world, scratch[i]);
     } else if (id === SEC_LEDGER) {
-      const scratch = new Float64Array(payload.buffer, payload.byteOffset, payload.byteLength / 8);
+      const scratch = readFloat64Payload(payload);
       for (let i = 0; i < LEDGER_FIELDS.length; i++) LEDGER_FIELDS[i][2](world, scratch[i]);
     } else if (id === SEC_FLOAT_SCALARS) {
-      const scratch = new Float64Array(payload.buffer, payload.byteOffset, payload.byteLength / 8);
+      const scratch = readFloat64Payload(payload);
       for (let i = 0; i < FLOAT_SCALAR_FIELDS.length; i++)
         FLOAT_SCALAR_FIELDS[i][2](world, scratch[i]);
     } else if (id === SEC_COUNTERS) {
