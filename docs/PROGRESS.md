@@ -2265,7 +2265,7 @@ Verification: `npm run build && npx playwright test --repeat-each 3`:
 consecutive full runs. typecheck/lint clean.
 Phone: n/a (headless test-only task).
 
-### P4-10 — pending sha
+### P4-10 — 0575840
 Goal: close Phase 4 with a green suite, a pushed branch and the owed
 phone checks recorded.
 Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
