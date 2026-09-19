@@ -236,6 +236,9 @@ export const DEFAULTS = Object.freeze({
     debtTicks: 3600,
     debtFactor: 0.3,
   }),
+  famine: Object.freeze({
+    plantFraction: 0.1,
+  }),
   stats: Object.freeze({
     sampleEvery: 30,
     historyLength: 1024,
@@ -903,6 +906,14 @@ export const DOCS = new Map([
       units: 'multiplier on the growth rate',
       assumption: true,
       doc: 'Growth rate multiplier while a tile is in regrowth debt (SPEC §4.9).',
+    },
+  ],
+  [
+    'famine.plantFraction',
+    {
+      units: 'fraction of total plant carrying capacity',
+      assumption: true,
+      doc: 'Global plants fraction below which a famine chronicle entry fires; re-arms above 2x this (SPEC §4.9).',
     },
   ],
   [
