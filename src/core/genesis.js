@@ -43,12 +43,14 @@ function findLineageCentre(world) {
 /**
  * If (x, y)'s tile is water, find the nearest non-water tile by scanning
  * rings of increasing Chebyshev radius, each ring in row-major order.
+ * Exported for `ecology.js`'s immigration (P3-06), which reuses the same
+ * ring scan to land arrivals on the map edge.
  * @param {import('./world.js').World} world
  * @param {number} x
  * @param {number} y
  * @returns {{ x: number, y: number }}
  */
-function nearestLand(world, x, y) {
+export function nearestLand(world, x, y) {
   const { terrain, width, height } = world;
   const ix = Math.min(width - 1, Math.max(0, Math.floor(x)));
   const iy = Math.min(height - 1, Math.max(0, Math.floor(y)));

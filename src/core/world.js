@@ -24,6 +24,7 @@ import {
   checkBreeding,
   resolveBirths,
   checkFamine,
+  checkImmigration,
 } from './ecology.js';
 import { applyDue } from './interventions.js';
 import { Grid } from './grid.js';
@@ -122,8 +123,12 @@ export const DEATH = Object.freeze({
 export const EV_HUNT = 1;
 export const EV_BIRTH = 2;
 export const EV_DEATH = 3;
+export const EV_IMMIGRATION = 4;
 
 const EVENTS_CAPACITY = 64;
+
+/** Sentinel for `lastImmigrationHerb`/`Carn`: "no immigration yet" (P3-06), a large negative value since tick 0 is real. */
+const NEVER_IMMIGRATED = -1_000_000_000;
 
 /**
  * Append an event to `world.events`, overwriting the oldest entry once the
@@ -217,6 +222,9 @@ export class World {
     this.light = 0;
     /** 1 = a famine chronicle entry may fire on the next below-threshold sample (P3-05); disarmed after firing, re-armed once plants recover above 2x the threshold. */
     this.famineArmed = 1;
+    /** Tick of the last immigration event per diet class (P3-06), or `NEVER_IMMIGRATED` until the first. */
+    this.lastImmigrationHerb = NEVER_IMMIGRATED;
+    this.lastImmigrationCarn = NEVER_IMMIGRATED;
 
     this.width = cfg.world.width;
     this.height = cfg.world.height;
@@ -375,6 +383,7 @@ export class World {
     // parent that died this tick (already freed by resolve() above) does
     // not breed.
     resolveBirths(this);
+    checkImmigration(this);
 
     if (this.tick % this.cfg.stats.sampleEvery === 0) {
       this.stats.sample(this);
@@ -385,7 +394,8 @@ export class World {
   /**
    * A deterministic FNV-1a 32-bit hash of everything that defines world
    * state, as an 8-character lowercase hex string (SPEC §3.1, §6.3). Order:
-   * tick, rng state, next organism id, `famineArmed` (P3-05); terrain, plants, carcass, soil,
+   * tick, rng state, next organism id, `famineArmed` (P3-05),
+   * `lastImmigrationHerb`/`Carn` (P3-06); terrain, plants, carcass, soil,
    * the regrowth debt grid (P3-04), the four pheromone channels; then the
    * organism store's arrays in
    * `HASH_ORDER`; then the species table's `ancestor, born, died, count,
@@ -400,6 +410,8 @@ export class World {
     h = hashUpdateU32(h, this.rng.state >>> 0);
     h = hashUpdateU32(h, this.store.nextId >>> 0);
     h = hashUpdateU32(h, this.famineArmed);
+    h = hashUpdateU32(h, this.lastImmigrationHerb);
+    h = hashUpdateU32(h, this.lastImmigrationCarn);
     h = hashUpdate(h, bytesOf(this.terrain));
     h = hashUpdate(h, bytesOf(this.plants));
     h = hashUpdate(h, bytesOf(this.carcass));

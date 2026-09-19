@@ -6,11 +6,13 @@
  */
 import { TERRAIN } from './terrain.js';
 import { TAU } from './fmath.js';
-import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS, applyPhenotype, mutate } from './genome.js';
-import { DEATH, EV_HUNT, EV_BIRTH, recordEvent } from './world.js';
+import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS, applyPhenotype, mutate, dietClass } from './genome.js';
+import { DEATH, EV_HUNT, EV_BIRTH, EV_IMMIGRATION, recordEvent } from './world.js';
 import { regionName } from './names.js';
 import { season } from './light.js';
 import { KIND, sentence } from './chronicle.js';
+import { nearestLand } from './genesis.js';
+import { writePrior } from './brain.js';
 
 /**
  * reflex.js's OUTPUT.eat and OUTPUT.breed indices, duplicated here as
@@ -503,4 +505,188 @@ export function checkFamine(world) {
   } else if (!world.famineArmed && fraction > 2 * cfg.plantFraction) {
     world.famineArmed = 1;
   }
+}
+
+/** `dietClassAtBirth`/immigration diet codes, local (species.js's own copy isn't exported). */
+const DIET_CODE = Object.freeze({ herbivore: 0, carnivore: 2 });
+/** `rng.int(4)`-indexed edge names (SPEC §4.9). */
+const EDGE_NAMES = Object.freeze(['west', 'east', 'north', 'south']);
+
+/**
+ * A position on `edgeIndex`'s edge, the `index`-th of `count` evenly
+ * spread along it, pushed inward to the first land tile via the same
+ * ring scan `genesis.js` uses for founders (P3-06).
+ * @param {import('./world.js').World} world
+ * @param {number} edgeIndex 0=west, 1=east, 2=north, 3=south
+ * @param {number} index
+ * @param {number} count
+ * @returns {{ x: number, y: number }}
+ */
+function immigrationEdgePosition(world, edgeIndex, index, count) {
+  const frac = (index + 0.5) / count;
+  let x;
+  let y;
+  if (edgeIndex === 0) {
+    x = 0.5;
+    y = frac * world.height;
+  } else if (edgeIndex === 1) {
+    x = world.width - 0.5;
+    y = frac * world.height;
+  } else if (edgeIndex === 2) {
+    x = frac * world.width;
+    y = 0.5;
+  } else {
+    x = frac * world.width;
+    y = world.height - 0.5;
+  }
+  return nearestLand(world, x, y);
+}
+
+/**
+ * Check one diet class's floor and, if crossed (and its cooldown has
+ * passed), bring in one immigrant group (SPEC §4.9).
+ * @param {import('./world.js').World} world
+ * @param {'herbivore'|'carnivore'} className
+ * @param {number} floor
+ * @returns {void}
+ */
+function maybeImmigrate(world, className, floor) {
+  const cfg = world.cfg.immigration;
+  const store = world.store;
+
+  let count = 0;
+  for (let i = 0; i < store.highWater; i++) {
+    if (!store.alive[i]) continue;
+    if (dietClass(store.pheno[i * TRAIT_COUNT + TRAIT.diet]) === className) count++;
+  }
+  if (count >= floor) return;
+
+  const lastKey = className === 'herbivore' ? 'lastImmigrationHerb' : 'lastImmigrationCarn';
+  if (world.tick - world[lastKey] < cfg.cooldownTicks) return;
+  world[lastKey] = world.tick;
+
+  const dietCode = DIET_CODE[className];
+  const species = world.species;
+
+  // Source species: the most recently extinct of this class...
+  let sourceId = -1;
+  let bestDied = -1;
+  for (let id = 0; id < species.n; id++) {
+    if (species.dietClassAtBirth[id] !== dietCode || species.died[id] === -1) continue;
+    if (species.died[id] > bestDied) {
+      bestDied = species.died[id];
+      sourceId = id;
+    }
+  }
+  // ...else the living one with the largest count.
+  if (sourceId === -1) {
+    let bestCount = -1;
+    for (let id = 0; id < species.n; id++) {
+      if (species.dietClassAtBirth[id] !== dietCode || species.died[id] !== -1) continue;
+      if (species.count[id] > bestCount) {
+        bestCount = species.count[id];
+        sourceId = id;
+      }
+    }
+  }
+
+  const gLen = store.genomeLength;
+  const traits = new Float32Array(TRAIT_COUNT);
+  if (sourceId !== -1) {
+    for (let t = 0; t < TRAIT_COUNT; t++) traits[t] = species.centroid[sourceId * TRAIT_COUNT + t];
+  } else {
+    // No species of this class has ever existed: a fresh founder genome,
+    // as in genesis.
+    for (let t = 0; t < TRAIT_COUNT; t++) traits[t] = world.rng.float();
+    const [lo, hi] =
+      className === 'herbivore' ? world.cfg.genesis.dietHerbivore : world.cfg.genesis.dietCarnivore;
+    traits[TRAIT.diet] = world.rng.range(lo, hi);
+  }
+
+  // Weight block: the living organism of this class with the lowest
+  // slot, else the seeded prior.
+  let weightsSlot = -1;
+  for (let i = 0; i < store.highWater; i++) {
+    if (store.alive[i] && dietClass(store.pheno[i * TRAIT_COUNT + TRAIT.diet]) === className) {
+      weightsSlot = i;
+      break;
+    }
+  }
+
+  const edge = world.rng.int(4);
+  const groupSize = cfg.groupSize;
+  let newSpeciesId = -1;
+
+  for (let m = 0; m < groupSize; m++) {
+    const slot = store.alloc();
+    if (slot === -1) {
+      world.counters.capacityRefused++;
+      continue;
+    }
+    const gOff = slot * gLen;
+    for (let t = 0; t < TRAIT_COUNT; t++) store.genome[gOff + t] = traits[t];
+    if (weightsSlot !== -1) {
+      for (let k = TRAIT_COUNT; k < gLen; k++) {
+        store.genome[gOff + k] = store.genome[weightsSlot * gLen + k];
+      }
+    } else {
+      writePrior(store.genome, gOff, world.cfg);
+    }
+    mutate(world.rng, store.genome, gOff, world.cfg, { forceBig: true });
+    applyPhenotype(world.cfg, store, slot);
+
+    const pos = immigrationEdgePosition(world, edge, m, groupSize);
+    store.x[slot] = pos.x;
+    store.y[slot] = pos.y;
+    store.heading[slot] = TAU * world.rng.float();
+    store.energy[slot] = world.cfg.genesis.energyFraction * store.energyMax[slot];
+    world.ledger.immigration += store.energy[slot] + store.body[slot];
+
+    store.age[slot] = 0;
+    store.generation[slot] = 1;
+    store.parent[slot] = 0;
+    store.sick[slot] = 0;
+    store.flags[slot] = 0;
+    store.offspring[slot] = 0;
+
+    if (newSpeciesId === -1) {
+      newSpeciesId = species.create(world, gOff, sourceId, store.x[slot], store.y[slot]);
+    }
+    store.species[slot] = newSpeciesId;
+    species.count[newSpeciesId]++;
+  }
+
+  if (newSpeciesId === -1) return; // the store was full for every member; nothing landed.
+
+  world.counters.immigrations++;
+  const edgeName = EDGE_NAMES[edge];
+  const name = species.names[newSpeciesId];
+  const text =
+    className === 'herbivore'
+      ? `A herd of ${name} crosses in from the ${edgeName} edge.`
+      : `${name} arrive from the ${edgeName} edge, hungry.`;
+  world.chronicle.add(world.tick, KIND.MIGRATION, text, edgeName, [newSpeciesId]);
+  recordEvent(
+    world,
+    EV_IMMIGRATION,
+    species.originX[newSpeciesId],
+    species.originY[newSpeciesId],
+    newSpeciesId,
+    sourceId,
+  );
+}
+
+/**
+ * Check both diet-class floors every `immigration.checkEvery` ticks,
+ * after this tick's deaths/extinctions have been resolved (SPEC §6.3).
+ * @param {import('./world.js').World} world
+ * @returns {void}
+ */
+export function checkImmigration(world) {
+  const cfg = world.cfg.immigration;
+  if (!cfg.enabled) return;
+  if (world.tick % cfg.checkEvery !== 0) return;
+
+  maybeImmigrate(world, 'herbivore', cfg.floorHerbivores);
+  maybeImmigrate(world, 'carnivore', cfg.floorCarnivores);
 }

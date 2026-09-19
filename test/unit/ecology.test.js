@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { TERRAIN } from '../../src/core/terrain.js';
 import { eatMeal } from '../../src/core/ecology.js';
 import { BRAIN_OUTPUTS } from '../../src/core/genome.js';
+import { KIND } from '../../src/core/chronicle.js';
 import { makeWorld, makeOrganism, isolate } from '../helpers.js';
 
 const OUTPUT_EAT = 2; // reflex.js OUTPUT.eat
@@ -120,7 +121,11 @@ describe('plant growth', () => {
       height: 3,
       terrain: TERRAIN.GRASS,
       organisms: [],
-      config: { plants: { enabled: false } },
+      // Immigration (P3-06) would otherwise repopulate this deliberately
+      // empty world well within the 2000-tick budget below (its default
+      // checkEvery is 600), and a grazing immigrant would perturb plants
+      // for a reason unrelated to what this test checks.
+      config: { plants: { enabled: false }, immigration: { enabled: false } },
     });
     const before = world.plants.slice();
     for (let i = 0; i < 2000; i++) world.step();
@@ -370,5 +375,91 @@ describe('eatMeal — grazing and scavenging', () => {
     const before = world.plants[1 * world.width + 1];
     eatMeal(world, slot);
     expect(world.plants[1 * world.width + 1]).toBe(before);
+  });
+});
+
+describe('immigration', () => {
+  function immigrationWorld(config = {}) {
+    return makeWorld({
+      width: 64,
+      height: 40,
+      terrain: TERRAIN.GRASS,
+      organisms: [],
+      config: {
+        immigration: {
+          checkEvery: 10,
+          floorHerbivores: 4,
+          floorCarnivores: 4,
+          cooldownTicks: 100,
+          groupSize: 4,
+          ...config,
+        },
+      },
+    });
+  }
+
+  it('immigration fires at the floor, at an edge, with groupSize members and a migration entry', () => {
+    const world = immigrationWorld();
+    world.chronicle.flush();
+
+    for (let t = 0; t < world.cfg.immigration.checkEvery; t++) world.step();
+
+    expect(world.counters.immigrations).toBeGreaterThanOrEqual(1);
+    expect(world.store.count).toBeGreaterThanOrEqual(world.cfg.immigration.groupSize);
+
+    let onEdge = false;
+    for (let i = 0; i < world.store.highWater; i++) {
+      if (!world.store.alive[i]) continue;
+      const x = world.store.x[i];
+      const y = world.store.y[i];
+      if (x === 0.5 || x === world.width - 0.5 || y === 0.5 || y === world.height - 0.5) {
+        onEdge = true;
+      }
+    }
+    expect(onEdge).toBe(true);
+
+    const entries = world.chronicle.flush() ?? [];
+    expect(entries.some((e) => e.kind === KIND.MIGRATION)).toBe(true);
+  });
+
+  it('not again before cooldownTicks', () => {
+    // A floor well above groupSize, so the population stays below it after
+    // one arrival — the cooldown, not the floor, is what should block the
+    // next check.
+    const world = immigrationWorld({
+      floorHerbivores: 10,
+      floorCarnivores: 10,
+      groupSize: 4,
+      cooldownTicks: 1000,
+    });
+    for (let t = 0; t < world.cfg.immigration.checkEvery; t++) world.step();
+    const firstCount = world.counters.immigrations;
+    expect(firstCount).toBeGreaterThanOrEqual(1);
+
+    for (let t = 0; t < world.cfg.immigration.checkEvery * 5; t++) world.step();
+    expect(world.counters.immigrations).toBe(firstCount);
+  });
+
+  it('the new species descends from the extinct one', () => {
+    const world = immigrationWorld({ floorHerbivores: 100, floorCarnivores: 0 });
+    const extinctId = world.species.create(world, 0, -1, 5, 5);
+    world.species.dietClassAtBirth[extinctId] = 0; // herbivore
+    world.species.died[extinctId] = 5;
+    world.species.count[extinctId] = 0;
+
+    for (let t = 0; t < world.cfg.immigration.checkEvery; t++) world.step();
+
+    let descendsFromExtinct = false;
+    for (let id = 0; id < world.species.n; id++) {
+      if (world.species.ancestor[id] === extinctId) descendsFromExtinct = true;
+    }
+    expect(descendsFromExtinct).toBe(true);
+  });
+
+  it('immigration.enabled = false never fires', () => {
+    const world = immigrationWorld({ enabled: false });
+    for (let t = 0; t < world.cfg.immigration.checkEvery * 5; t++) world.step();
+    expect(world.counters.immigrations).toBe(0);
+    expect(world.store.count).toBe(0);
   });
 });

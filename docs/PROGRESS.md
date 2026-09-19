@@ -45,7 +45,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P3-03 Disease
 - [x] P3-04 Regrowth debt
 - [x] P3-05 Seasons on plants and the famine entry
-- [ ] P3-06 Immigration
+- [x] P3-06 Immigration
 - [ ] P3-07 Kill aggregation, `first` events, every chronicle sentence, chronicle filter
 - [ ] P3-08 Charts — population by lineage, diversity with light
 - [ ] P3-09 Idle POI memory and narrative captions
@@ -1680,5 +1680,60 @@ and friends; that pre-existing cycle already works (neither module
 touches the other's exports at top-level evaluation time), confirming
 this task's new imports don't need the "duplicate the constant locally"
 workaround used elsewhere in this codebase for a *tighter* cycle.
+
+### P3-06 — pending sha (see commit)
+Tests: `test/unit/ecology.test.js` (+4: an immigration fires at the
+floor with `groupSize` members landed on the chosen edge and a
+`migration` chronicle entry; a second below-floor check inside
+`cooldownTicks` does not fire again (floor set above `groupSize` so
+population-sufficiency isn't what's blocking it); the new species'
+`ancestor` is a fabricated extinct one; `enabled=false` never fires).
+`test/unit/ledger.test.js` (+1: from an empty world, one
+`immigration.checkEvery` boundary brings in both classes,
+`ledger.immigration > 0`, and `relativeError` stays under 1e-3).
+`test/invariants/energy.test.js` unchanged, still passes. All pass;
+full `npm test` scope 373/373 green; `npm run test:soak` 6/6; `npm run
+headless -- --ticks 30000` sane (6 immigrations, hash `4b83c992`, no
+errors) — and, notably, carnivores survived the full run for the first
+time (population 8 at tick 30000), since immigration now backstops the
+P1-11/P2-05-documented carnivore-extinction gap; not itself a target of
+this task, just an observed effect of implementing it.
+Config keys introduced (all ⚠️ ASSUMPTION except `enabled`):
+`immigration.enabled` (true), `checkEvery` (600), `floorHerbivores`
+(20), `floorCarnivores` (4), `cooldownTicks` (1800), `groupSize` (8).
+Design: `checkImmigration(world)` (new, `ecology.js`) runs every
+`checkEvery` ticks, called right after `resolveBirths()` (after this
+tick's deaths/extinctions are resolved, matching SPEC §6.3's
+"after species.markExtinct" — extinction is handled inline in
+`SpeciesTable.onDeath`, so there is no separate `markExtinct` step to
+call). Per class: source species = most-recently-extinct of that class,
+else the largest living one, else a fresh founder genome (random
+traits, diet pinned to `genesis.dietHerbivore`/`dietCarnivore`); weight
+block = the lowest-slot living organism of that class, else the seeded
+prior (`brain.js`'s `writePrior`); `groupSize` members placed evenly
+along a `rng.int(4)`-chosen edge via the exact ring-scan `genesis.js`
+uses (`nearestLand`, now exported for this reuse); each genome gets
+`mutate(..., { forceBig: true })`; a new species is created with
+`ancestor = source species id` (-1 for the fresh-founder case, same as
+a genesis founder). `ledger.js` gains an `immigration` input term,
+folded into `relativeError`'s identity and its doc comment.
+`world.js` gains per-class cooldown timestamps (hashed, same
+large-negative-sentinel pattern as `famineArmed`'s neighbour) and
+`EV_IMMIGRATION = 4` for the idle camera. `chronicle.js` needed no new
+`KIND` case beyond the existing `migration`, just the two
+class-specific sentences built inline (herbivore: "A herd of ${name}
+crosses in from the ${edge} edge."; carnivore: "${name} arrive from
+the ${edge} edge, hungry.").
+Found and fixed (not in this task's Files touched, but a direct
+consequence of this task's own new default-enabled behavior): an
+existing `plants.enabled = false` test in `ecology.test.js` built a
+deliberately empty (`organisms: []`) 3×3 world and stepped it 2000
+times expecting `world.plants` to never change — comfortably past
+immigration's default 600-tick `checkEvery`, so an immigrant now
+spawns, grazes, and perturbs plants for a reason unrelated to what that
+test checks. Fixed by adding `immigration: { enabled: false }` to that
+test's config; the wider suite's other `organisms: []` tests all run
+too few ticks (or already disable enough via `isolate()`) to hit this,
+confirmed by the full 373-test run passing clean.
 
 
