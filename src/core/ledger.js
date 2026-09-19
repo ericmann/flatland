@@ -30,6 +30,8 @@ export class Ledger {
       metabolism: 0,
       births: 0,
       deaths: 0,
+      /** Plant mass destroyed by the `fire` intervention (P4-02, SPEC §5.3). */
+      fire: 0,
     };
   }
 }

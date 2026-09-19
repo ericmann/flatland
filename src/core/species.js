@@ -6,7 +6,7 @@
  * `resolveBirths` (ecology.js).
  */
 import { TRAIT, TRAIT_COUNT, traitValue, dietClass, distanceTo } from './genome.js';
-import { regionName, speciesName } from './names.js';
+import { regionName, speciesName, uniqueName } from './names.js';
 import { KIND, sentence, deathVerb } from './chronicle.js';
 import { FIRST_HUNTERS, FIRST_NIGHT } from './world.js';
 
@@ -18,6 +18,9 @@ const DIET_CODE = Object.freeze({ herbivore: 0, omnivore: 1, carnivore: 2 });
 
 /** Sentinel for `SpeciesTable.lastPlagueAt`: "no plague chronicled yet" (P3-03). */
 const NEVER_PLAGUED = -1_000_000_000;
+
+/** Max length of a user-supplied name, trimmed and cut to this before uniquifying (SPEC §5.3). */
+const MAX_NAME_LENGTH = 40;
 
 export class SpeciesTable {
   /**
@@ -238,5 +241,34 @@ export class SpeciesTable {
       world.chronicle.add(world.tick, KIND.FIRST, text, place, [id]);
       return;
     }
+  }
+
+  /**
+   * Rename a species (SPEC §3.6, §4.10, the `rename` intervention):
+   * trims and length-caps `name`, makes it unique with the same suffix
+   * rule `speciesName` uses, marks the species `dirty` so the scheduler's
+   * phylogeny delta picks it up, and chronicles a `naming` entry (no ⚡
+   * prefix — this is the one intervention kind SPEC §5.3 chronicles
+   * differently from the rest).
+   * @param {import('./world.js').World} world
+   * @param {number} id
+   * @param {string} name
+   * @returns {void}
+   */
+  rename(world, id, name) {
+    const oldName = this.names[id];
+    const trimmed = name.trim().slice(0, MAX_NAME_LENGTH);
+    const newName = uniqueName(this, trimmed);
+    this.names[id] = newName;
+    this.dirty[id] = 1;
+    const place = regionName(
+      this.originX[id],
+      this.originY[id],
+      world.terrain,
+      world.width,
+      world.height,
+    );
+    const text = sentence(KIND.NAMING, { old: oldName, new: newName });
+    world.chronicle.add(world.tick, KIND.NAMING, text, place, [id]);
   }
 }

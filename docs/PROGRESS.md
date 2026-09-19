@@ -52,7 +52,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P3-10 Pressure tuning, pinned seeds and the full soak
 - [x] P3-11 Phase 3 end — push, preview, phone checks
 - [x] P4-01 Save records, state snapshots, restore, and the restore determinism case
-- [ ] P4-02 Interventions — every kind in core, replay determinism, ⚡ chronicle
+- [x] P4-02 Interventions — every kind in core, replay determinism, ⚡ chronicle
 - [ ] P4-03 Hand of God pane
 - [ ] P4-04 Lineage naming
 - [ ] P4-05 Share links, replay-to-tick, platform adapter
@@ -1960,3 +1960,39 @@ same pre-existing, unrelated throughput-invariant failure documented in
 P3-10/P3-11's log (this machine's ongoing CPU contention). `npm run
 headless -- --ticks 5000` run twice: identical hash `37b7b48c` both
 times.
+
+### P4-02 — pending sha
+Goal: all 8 Hand-of-God/config/rename intervention kinds in core, with
+replay determinism and ⚡ chronicle logging.
+Tests: `test/unit/interventions.test.js` (new, 11 cases — one per kind
+plus applyDue ordering and a combined energy-identity run),
+`test/invariants/determinism.test.js` (+replay-with-interventions case),
+`test/invariants/energy.test.js` (+fire at 3,000, meteor at 7,000).
+Design: `forEachTileInRadius`/`forEachOrganismInRadius` shared helpers
+in `interventions.js` (tile membership via integer offsets, `i²+j² <=
+floor(radius²)`, matching the meadow example's `(i²+j²≤6)` for radius
+2.5 exactly). Fire/meteor/plague/river/meadow all read center coords
+`{x,y}` in tile units. `queueIntervention` now validates kind + required
+fields; the config-diff size-key rejection is instead thrown at apply
+time (inside `step()`, when `applyDue` reaches that event) rather than
+at queue time, since the task only specifies the effect is "rejected",
+not when — matches this file's existing apply-time-error precedent
+better than adding a second validation path.
+Interpretation: touched 4 files beyond the task's listed set, all
+necessary to keep P4-01's contracts intact rather than a scope creep:
+`ledger.js` (+`flows.fire`, an itemized flow the fire effect needs) and
+`save.js` (+that field in `LEDGER_FIELDS`, so state restore doesn't
+silently drop it — P4-01's own stated rule, "everything `hash()` covers
+must be in the state"); `names.js` (+`uniqueName`, extracted from
+`speciesName`'s suffix loop, reused by `species.rename`); `scheduler.js`
+(wires the already-existing `world.terrainDirty` flag — newly set by
+meteor/river/meadow — into the scheduler's own `_terrainDirty`, so a
+snapshot after one of these actually carries the changed terrain; P1-12/
+P4-01 already described this handoff but nothing set the core-side flag
+before this task).
+`npm run typecheck && npm run lint && npm test` all green except the
+same pre-existing, unrelated throughput-invariant failure documented in
+P3-10/P3-11's log (this machine's ongoing CPU contention — reproduced
+in isolation, not caused by this task's diff). `npm run test:soak`
+20/20. `npm run headless` output sane, hash unchanged from P4-01's
+baseline (no interventions queued in the default run).

@@ -100,6 +100,25 @@ export function speciesName(table, dietClass, terrainType, ordinal) {
   }
 }
 
+/**
+ * Make an arbitrary caller-supplied name unique within `table` (SPEC
+ * §3.6, the `rename` intervention), using the exact same suffix rule as
+ * `speciesName`: try `base` as-is, then `${base} II`, `${base} III`, …
+ * through `ROMAN_SUFFIX`, then decimal numbers.
+ * @param {{ names: string[] }} table anything with a `names` array to check for collisions.
+ * @param {string} base the trimmed, length-capped candidate name.
+ * @returns {string}
+ */
+export function uniqueName(table, base) {
+  const used = new Set(table.names);
+  for (let suffixIndex = 0; ; suffixIndex++) {
+    const suffix =
+      suffixIndex < ROMAN_SUFFIX.length ? ROMAN_SUFFIX[suffixIndex] : ` ${suffixIndex + 1}`;
+    const name = `${base}${suffix}`;
+    if (!used.has(name)) return name;
+  }
+}
+
 // Re-exported so callers of names.js don't also need to import terrain.js
 // just to pass a TERRAIN value in.
 export { TERRAIN };
