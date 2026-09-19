@@ -233,8 +233,8 @@ export const DEFAULTS = Object.freeze({
   regrowth: Object.freeze({
     enabled: true,
     zeroThreshold: 0.01,
-    debtTicks: 3600,
-    debtFactor: 0.3,
+    debtTicks: 10800,
+    debtFactor: 0.1,
   }),
   famine: Object.freeze({
     plantFraction: 0.1,

@@ -49,7 +49,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P3-07 Kill aggregation, `first` events, every chronicle sentence, chronicle filter
 - [x] P3-08 Charts — population by lineage, diversity with light
 - [x] P3-09 Idle POI memory and narrative captions
-- [ ] P3-10 Pressure tuning, pinned seeds and the full soak
+- [x] P3-10 Pressure tuning, pinned seeds and the full soak
 - [ ] P3-11 Phase 3 end — push, preview, phone checks
 - [ ] P4-01 Save records, state snapshots, restore, and the restore determinism case
 - [ ] P4-02 Interventions — every kind in core, replay determinism, ⚡ chronicle
@@ -1856,3 +1856,37 @@ two-sighting case ("second"), where the two readings coincide.
 "tenth" rather than falling back to a number.
 
 
+
+### P3-10 — pending sha
+Sweep columns added to `scripts/sweep.mjs`/`scripts/lib/report.mjs`:
+`immig`, `plagues` (counted from chronicle `KIND.PLAGUE` entries — no
+core change needed), `maxShare%` (largest single species' share of the
+end-state population), `noct/crep/diur` (vision-class histogram),
+`avgH`. `docs/sweeps/p3-10-before.txt`/`-after.txt` hold the full
+40-seed × 100,000-tick tables.
+Before: 6-8/40 seeds evolve a monoculture herbivore lineage (pop up to
+2,000, H down to 0.270, max share up to 98%) since plants never crash
+(famine is chronicle-only, no population effect) and regrowth debt is
+per-tile so it rarely triggers at low map-wide density. Tried
+`disease.contactRate`/`lethality` and `disease.kinBias`/`lethality`
+(2 iterations, both on the 8 worst seeds at 100k ticks): both made it
+**worse** (disease die-offs free the niche for the same dominant
+lineage to rebound bigger — no competitor exists to take its place).
+Reverted both. 3rd iteration: `regrowth.debtFactor` 0.3→0.1,
+`regrowth.debtTicks` 3600→10800 fixed it — worst-case max share
+98.0%→70.7%, worst-case end-state H 0.270→1.520, all 40/40 still
+survive, no regression on the previously-healthy seeds. Full tables and
+reasoning in `docs/tuning.md` ("P3-10 pressure tuning — before/after").
+Pinned seeds for `test/soak/ecology.test.js`: 8 and 39 (both clear
+every SPEC §9.3 target with margin at 100,000 ticks).
+Interpretation: `famine` has no mechanical population effect by design
+(P3-05, chronicle-only) — confirmed via `checkFamine`'s source rather
+than assumed, so `famine.plantFraction` was correctly left out of the
+fix (it can't affect this failure mode).
+`npm run typecheck && npm run lint && npm test && npm run test:soak`
+all pass except one pre-existing, unrelated failure:
+`test/invariants/throughput.test.js`'s `>= 2000 ticks/s` assertion
+reads 160-290 ticks/s on this run's machine, reproduced identically
+with this task's changes `git stash`ed — a shared-desktop CPU
+contention artifact (this session ran several hour-long background
+sweeps), not a regression from `regrowth.debtFactor`/`debtTicks`.
