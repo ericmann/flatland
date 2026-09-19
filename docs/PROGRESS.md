@@ -1579,7 +1579,7 @@ browser check; recorded as NOT VERIFIED (human) like other such items —
 confirmed instead via the e2e "no console errors" smoke test passing
 with the new lens code active, and the unit tests' pixel-level checks.
 
-### P3-03 — pending sha (see commit)
+### P3-03 — 986984a
 Tests: `test/unit/disease.test.js` (new, 7 cases: contact within radius
 infects, beyond it doesn't; identical genome infects at full rate,
 maximally distant (kinBias=1) never; resistance 1 is immune and pays
