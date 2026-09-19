@@ -67,7 +67,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P5-04 Mating with crossover
 - [x] P5-05 Phase 5 tuning
 - [x] P5-06 Performance pass and `docs/performance.md`
-- [ ] P5-07 Blog post draft
+- [x] P5-07 Blog post draft
 - [ ] P5-08 Phase 5 end — push, preview, phone checks
 
 ## Log
@@ -2495,3 +2495,24 @@ Phone: NOT VERIFIED (human) — `docs/performance.md`'s "Phone checklist"
 section lists every row this task could not verify (frame time at the
 real ≤8ms/50fps budget, real device memory, real 4G cold load, real
 battery drain); owed to P5-08's phone pass.
+
+### P5-07 — pending sha
+Goal: draft the launch post (`docs/blog-post.md`, ~1235 words) from real
+numbers, no invented results. Population/species/births/hunts/deaths/
+speciations/extinctions/diversity/hash for seeds 8 and 39 came from `npm
+run headless -- --seed <8|39> --ticks 100000` run to completion this
+session. The "first hunters"/"first to the night"/"first to cross water"
+chronicle sentences and ticks (not in the headless report's last-10-line
+window) came from a one-off Node script reusing `World`/`runGenesis` to
+scan each run's full chronicle for `KIND.FIRST` entries; both scans
+independently reproduced the same hashes (`40ecfa4e`, `0381c1e6`) as the
+headless runs. The share-link string came from a real `encodeShare()`
+call on a `World` after real `queueIntervention('rain')`/`('rename')`
+calls, round-tripped through `decodeShare()`.
+Tests: none (docs-only task; no acceptance test named).
+Interpretation: cited the current Phase-5-tuned numbers from fresh runs,
+not the older P3-10 figures in `test/soak/ecology.test.js`'s comments
+(pre-crossover/swim/weather), since the task asked for what "actually
+evolved" now, from commands run today.
+Verification: `npm run lint` clean.
+Phone: n/a.
