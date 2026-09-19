@@ -1,10 +1,12 @@
 /**
  * Lens overlay passes (SPEC §5.2, §6.5): Night (a tinted fill scaled by
- * `(1 - L)`, plus a dawn/dusk warm band) and Energy density (a heat map
- * of organism energy, P2-09 — SPEC §5.2 names the lens but doesn't define
- * it; PLAN.md's spec-issues resolution picks this reading). Both are
- * testable in node: `drawNight` against a recording fake 2D context,
- * `paintEnergy` against a plain `{ width, height, data }` ImageData-alike.
+ * `(1 - L)`, plus a dawn/dusk warm band), Energy density (a heat map of
+ * organism energy, P2-09 — SPEC §5.2 names the lens but doesn't define
+ * it; PLAN.md's spec-issues resolution picks this reading), and the 4
+ * Scent lenses (P3-02: each pheromone channel as heat, strongest-channel-
+ * wins per tile). All three are testable in node: `drawNight` against a
+ * recording fake 2D context, `paintEnergy`/`paintScent` against a plain
+ * `{ width, height, data }` ImageData-alike.
  */
 
 /** Sun accent colour (SPEC §5.5 palette) used to paint the energy heat map. */
@@ -13,6 +15,16 @@ const SUN_G = 168;
 const SUN_B = 58;
 /** Per-organism alpha contribution at full energy (PLAN.md P2-09). */
 const STAMP_ALPHA_AT_FULL_ENERGY = 0.6;
+
+/** Scent channel swatches (PLAN.md P3-02), RGB. */
+const SCENT_COLORS = Object.freeze([
+  [0x48, 0xc2, 0xd8],
+  [0xd8, 0x5c, 0xb5],
+  [0xe3, 0xd2, 0x4a],
+  [0x7f, 0xbb, 0x6a],
+]);
+/** Alpha-per-unit-concentration scale (PLAN.md P3-02: `v × 420`, capped at 255). */
+const SCENT_ALPHA_SCALE = 420;
 
 /**
  * Darken (and, near dawn/dusk, warm) the `w x h` rect at `(0, 0)`.
@@ -73,5 +85,47 @@ export function paintEnergy(imageData, snap) {
     data[o + 1] = SUN_G;
     data[o + 2] = SUN_B;
     data[o + 3] = Math.round(alpha[idx] * 255);
+  }
+}
+
+/**
+ * Paint the scent heat map into a 1-px-per-tile ImageData (PLAN.md
+ * P3-02): per tile, take the strongest of the *enabled* channels; its
+ * colour is that channel's swatch, alpha `min(255, v × 420)`. A tile
+ * with no enabled channel active (or value 0) stays fully transparent.
+ * @param {{ width: number, height: number, data: Uint8ClampedArray }} imageData
+ * @param {{ pher?: Float32Array[] }} snap a decoded snapshot; `pher` is present only with FLAG_PHEROMONE
+ * @param {{ scent?: boolean[] }} lensState which of the 4 channels are enabled
+ * @returns {void}
+ */
+export function paintScent(imageData, snap, lensState) {
+  const { width, height, data } = imageData;
+  const scent = lensState.scent ?? [false, false, false, false];
+  const pher = snap.pher;
+  const total = width * height;
+
+  for (let i = 0; i < total; i++) {
+    const o = i * 4;
+    let bestC = -1;
+    let bestV = 0;
+    if (pher) {
+      for (let c = 0; c < 4; c++) {
+        if (!scent[c]) continue;
+        const v = pher[c][i];
+        if (v > bestV) {
+          bestV = v;
+          bestC = c;
+        }
+      }
+    }
+    if (bestC === -1) {
+      data[o + 3] = 0;
+      continue;
+    }
+    const [r, g, b] = SCENT_COLORS[bestC];
+    data[o] = r;
+    data[o + 1] = g;
+    data[o + 2] = b;
+    data[o + 3] = Math.min(255, Math.round(bestV * SCENT_ALPHA_SCALE));
   }
 }

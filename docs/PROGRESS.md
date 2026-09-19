@@ -41,7 +41,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P2-11 Dock — chronicle pane and live phylogeny tree
 - [x] P2-12 Phase 2 end — push, preview, phone checks
 - [x] P3-01 Pheromone channels — decay, diffusion, emission, sensing
-- [ ] P3-02 Scent lenses
+- [x] P3-02 Scent lenses
 - [ ] P3-03 Disease
 - [ ] P3-04 Regrowth debt
 - [ ] P3-05 Seasons on plants and the famine entry
@@ -1549,5 +1549,34 @@ regression-guard gap this task's own new keys tripped): `config.test.js`
 and `genome.test.js` both assert every `DEFAULTS` leaf has a `DOCS`
 entry, including `.enabled` keys (`predation.enabled` etc. already do)
 — missed adding `pheromone.enabled`'s entry on the first pass; added it.
+
+### P3-02 — pending sha (see commit)
+Tests: `test/unit/lens-layer.test.js` (+4: strongest-enabled-channel-wins
+with alpha scaling, a fully-disabled tile stays transparent, alpha caps
+at 255, no `pher` data means every tile is transparent). `test/ui/
+rail.test.js` (+1: chips toggle channels independently and reflect
+`.on`; a real `createApp`'s `T`/`A`/`M`/`K` keys toggle channels 0-3
+independently, verified against `app.getLensState().scent` — the exact
+array `main.js` reads to decide `FLAG_PHEROMONE`). All pass; full `npm
+test` scope 356/356 green; `npm run build` clean; `npm run test:ui`
+20/20, no new console errors.
+Design: `paintScent(imageData, snap, lensState)` (`lens-layer.js`) —
+per tile, the strongest of the *enabled* channels wins, swatch colour,
+alpha `min(255, v×420)`. `renderer.draw` gains a `scent` lens-state
+field and a scent pass (own lazily-created 1px/tile canvas, mirroring
+`_ensureEnergyLayer`), ordered terrain -> scent -> energy -> organisms
+-> night. `app.js`'s `lensState.scent` is a 4-element boolean array;
+`toggleScent(channel)` and keys `T`/`A`/`M`/`K` (channels 0-3). Rail
+gets 4 "Scent N" chips with the spec'd swatches and key hints.
+`main.js`'s snapshot request now ORs in `FLAG_PHEROMONE` whenever any
+scent channel is on (SPEC §6.4: pheromone grids are otherwise omitted
+from the snapshot). Tooltip's tile line gains `· scent a/b/c/d`
+(percent per channel) whenever `snap.pher` is present, i.e. only when a
+scent lens is actually on — reusing the existing `FLAG_PHEROMONE`-gated
+data rather than requesting it unconditionally just for the tooltip.
+Verification: "with T on, trails glow behind moving herds" is a manual
+browser check; recorded as NOT VERIFIED (human) like other such items —
+confirmed instead via the e2e "no console errors" smoke test passing
+with the new lens code active, and the unit tests' pixel-level checks.
 
 

@@ -1,7 +1,8 @@
 /**
  * The map tooltip (SPEC §5.4, mockup `#tip`): mouse-only, follows the
- * cursor. Organism → `Name · energy NN`; tile → `terrain · plants NN%`
- * (scent channels arrive in P3-02).
+ * cursor. Organism → `Name · energy NN`; tile → `terrain · plants NN%`,
+ * plus `· scent a/b/c/d` (P3-02) when pheromone data is available (only
+ * when at least one scent lens is on — SPEC §6.4's `FLAG_PHEROMONE`).
  *
  * Interpretation: the mockup's tooltip also shows a `goal` and a raw
  * `energy` number for hovered organisms, but the real snapshot protocol
@@ -54,11 +55,16 @@ export function createTooltip(doc = document) {
 /**
  * @param {number} terrainType
  * @param {number} plantsFraction 0..1
+ * @param {number[]} [scentFractions] 0..1 per channel, only when `FLAG_PHEROMONE` data is available
  * @returns {string}
  */
-export function tileTooltipText(terrainType, plantsFraction) {
+export function tileTooltipText(terrainType, plantsFraction, scentFractions) {
   const name = TERRAIN_NAMES[terrainType] ?? 'unknown';
-  return `${name} · plants ${Math.round(plantsFraction * 100)}%`;
+  let text = `${name} · plants ${Math.round(plantsFraction * 100)}%`;
+  if (scentFractions) {
+    text += ` · scent ${scentFractions.map((v) => Math.round(v * 100)).join('/')}`;
+  }
+  return text;
 }
 
 /**
