@@ -2334,7 +2334,7 @@ test:soak` 20/20. `npm run headless -- --ticks 5000` hash identical
 across two runs.
 Phone: n/a.
 
-### P5-02 — pending sha
+### P5-02 — 8aa1664
 Goal: rare discrete rain (moisture pulse boosting plant growth-rate) and
 fog (global vision penalty) events, each a chronicle entry (SPEC §4.3).
 `weatherTick` rolls rain then fog, one `rng.chance` each, right after
