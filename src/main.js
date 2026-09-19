@@ -23,7 +23,7 @@ import { SpeciesStore } from './ui/species-store.js';
 import { Renderer } from './render/renderer.js';
 import { fit } from './render/camera.js';
 import { decodeSnapshot } from './sim/snapshot.js';
-import { FLAG_TERRAIN, FLAG_SELECTED, FLAG_SPECIES } from './sim/protocol.js';
+import { FLAG_TERRAIN, FLAG_SELECTED, FLAG_SPECIES, FLAG_PHEROMONE } from './sim/protocol.js';
 import { makeConfig } from './core/config.js';
 
 const params = new URLSearchParams(window.location.search);
@@ -189,6 +189,7 @@ function requestFrame() {
     const selectedId = app?.getSelectedId();
     let flags = (needsTerrain ? FLAG_TERRAIN : 0) | FLAG_SPECIES;
     if (selectedId != null) flags |= FLAG_SELECTED;
+    if (app?.getLensState().scent.some(Boolean)) flags |= FLAG_PHEROMONE;
     client.send('requestSnapshot', { flags });
   }
   frameCount++;

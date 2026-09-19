@@ -6,7 +6,7 @@
  */
 import { paintTerrain as paintTerrainImageData } from './terrain-layer.js';
 import { drawOrganisms } from './organism-layer.js';
-import { drawNight, paintEnergy } from './lens-layer.js';
+import { drawNight, paintEnergy, paintScent } from './lens-layer.js';
 
 /** Re-paint the terrain ImageData at most this often, in frames (SPEC §6.5). */
 const TERRAIN_REPAINT_EVERY = 6;
@@ -86,6 +86,14 @@ export class Renderer {
     this._energyCtx = null;
     /** @type {ImageData | null} */
     this._energyImage = null;
+
+    /** Lazily created: every scent lens is off by default (P3-02).
+     * @type {HTMLCanvasElement | null} */
+    this._scentCanvas = null;
+    /** @type {CanvasRenderingContext2D | null} */
+    this._scentCtx = null;
+    /** @type {ImageData | null} */
+    this._scentImage = null;
   }
 
   /**
@@ -109,6 +117,26 @@ export class Renderer {
   }
 
   /**
+   * @returns {{ canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, image: ImageData }}
+   */
+  _ensureScentLayer() {
+    let canvas = this._scentCanvas;
+    let ctx = this._scentCtx;
+    let image = this._scentImage;
+    if (!canvas || !ctx || !image) {
+      canvas = document.createElement('canvas');
+      canvas.width = this.width;
+      canvas.height = this.height;
+      ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
+      image = ctx.createImageData(this.width, this.height);
+      this._scentCanvas = canvas;
+      this._scentCtx = ctx;
+      this._scentImage = image;
+    }
+    return { canvas, ctx, image };
+  }
+
+  /**
    * Resize the visible canvas's backing store to its CSS size times device
    * pixel ratio (capped at 2, SPEC §6.5).
    * @returns {void}
@@ -123,19 +151,20 @@ export class Renderer {
 
   /**
    * Draw one frame from a decoded snapshot: terrain/plant/carcass
-   * (repainted only when dirty or every 6th frame, SPEC §6.5), the energy
-   * density lens (if on), organisms, the night lens, then present at the
-   * camera transform. Pass order is fixed (PLAN.md P2-09): terrain,
-   * energy, organisms, night.
+   * (repainted only when dirty or every 6th frame, SPEC §6.5), the scent
+   * lenses (if any are on), the energy density lens (if on), organisms,
+   * the night lens, then present at the camera transform. Pass order is
+   * fixed (PLAN.md P2-09/P3-02): terrain, scent, energy, organisms, night.
    * @param {*} snapshot a `decodeSnapshot()` result
    * @param {import('./camera.js').Camera} cam
-   * @param {{ night?: boolean, energy?: boolean, colorMode?: 'self'|'species'|'energy'|'age', speciesStore?: *, highlightSpecies?: number, selectedId?: number }} [lensState]
+   * @param {{ night?: boolean, energy?: boolean, scent?: boolean[], colorMode?: 'self'|'species'|'energy'|'age', speciesStore?: *, highlightSpecies?: number, selectedId?: number }} [lensState]
    * @returns {void}
    */
   draw(snapshot, cam, lensState = {}) {
     const {
       night = false,
       energy = false,
+      scent = [false, false, false, false],
       colorMode = 'self',
       speciesStore,
       highlightSpecies,
@@ -161,6 +190,13 @@ export class Renderer {
     this.worldCtx.imageSmoothingEnabled = false;
     this.worldCtx.clearRect(0, 0, worldW, worldH);
     this.worldCtx.drawImage(this.terrainCanvas, 0, 0, worldW, worldH);
+
+    if (scent.some(Boolean)) {
+      const layer = this._ensureScentLayer();
+      paintScent(layer.image, snapshot, { scent });
+      layer.ctx.putImageData(layer.image, 0, 0);
+      this.worldCtx.drawImage(layer.canvas, 0, 0, worldW, worldH);
+    }
 
     if (energy) {
       const layer = this._ensureEnergyLayer();

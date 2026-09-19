@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { drawNight, paintEnergy } from '../../src/render/lens-layer.js';
+import { drawNight, paintEnergy, paintScent } from '../../src/render/lens-layer.js';
 
 function fakeCtx() {
   return {
@@ -99,5 +99,54 @@ describe('lens-layer: paintEnergy', () => {
     };
     paintEnergy(img, snap);
     expect(pixel(img, 2, 2)[3]).toBe(Math.round((128 / 255) * 0.6 * 255));
+  });
+});
+
+function fakePherSnap(width, height, values) {
+  const pher = [
+    new Float32Array(width * height),
+    new Float32Array(width * height),
+    new Float32Array(width * height),
+    new Float32Array(width * height),
+  ];
+  for (const [c, i, v] of values) pher[c][i] = v;
+  return { pher };
+}
+
+describe('lens-layer: paintScent', () => {
+  it('picks the strongest enabled channel per tile and scales alpha', () => {
+    const img = fakeImageData(3, 3);
+    const tile = 4; // (1, 1)
+    const snap = fakePherSnap(3, 3, [
+      [0, tile, 0.3],
+      [1, tile, 0.6], // strongest, but channel 1 is disabled below.
+      [2, tile, 0.5],
+    ]);
+    paintScent(img, snap, { scent: [true, false, true, false] });
+
+    // Channel 1 disabled, so the strongest *enabled* channel is 2 (0.5).
+    const [r, g, b, a] = pixel(img, 1, 1);
+    expect([r, g, b]).toEqual([0xe3, 0xd2, 0x4a]);
+    expect(a).toBe(Math.round(0.5 * 420));
+  });
+
+  it('a tile with no enabled channel active stays fully transparent', () => {
+    const img = fakeImageData(3, 3);
+    const snap = fakePherSnap(3, 3, [[0, 4, 0.9]]);
+    paintScent(img, snap, { scent: [false, false, false, false] });
+    expect(pixel(img, 1, 1)[3]).toBe(0);
+  });
+
+  it('caps alpha at 255', () => {
+    const img = fakeImageData(3, 3);
+    const snap = fakePherSnap(3, 3, [[3, 4, 1]]);
+    paintScent(img, snap, { scent: [false, false, false, true] });
+    expect(pixel(img, 1, 1)[3]).toBe(255);
+  });
+
+  it('with no pher data (FLAG_PHEROMONE not requested), every tile is transparent', () => {
+    const img = fakeImageData(3, 3);
+    paintScent(img, { pher: undefined }, { scent: [true, true, true, true] });
+    expect(pixel(img, 1, 1)[3]).toBe(0);
   });
 });

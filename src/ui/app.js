@@ -33,7 +33,7 @@ const PICK_RADIUS_TILES = 2.5;
  *   getSnapshot?: () => * | null,
  *   speciesStore?: { name: (id: number) => string|undefined } | null,
  * }} opts
- * @returns {{ root: HTMLElement, world: HTMLElement, setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, mode: () => 'idle'|'station', setCamera: (next: import('../render/camera.js').Camera) => void, getLastInteractionAt: () => number, getSelectedId: () => number | null, select: (id: number | null) => void, deselect: () => void, onSelectionChange: (cb: (id: number | null) => void) => (() => void), getHighlightSpecies: () => number | null, setHighlightSpecies: (id: number | null) => void, onHighlightChange: (cb: (id: number | null) => void) => (() => void), getLensState: () => { night: boolean, energy: boolean, colorMode: 'self'|'species'|'energy'|'age' }, toggleLens: (key: 'night'|'energy') => void, setColorMode: (mode: 'self'|'species'|'energy'|'age') => void, onLensChange: (cb: (state: *) => void) => (() => void), detach: () => void }}
+ * @returns {{ root: HTMLElement, world: HTMLElement, setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, mode: () => 'idle'|'station', setCamera: (next: import('../render/camera.js').Camera) => void, getLastInteractionAt: () => number, getSelectedId: () => number | null, select: (id: number | null) => void, deselect: () => void, onSelectionChange: (cb: (id: number | null) => void) => (() => void), getHighlightSpecies: () => number | null, setHighlightSpecies: (id: number | null) => void, onHighlightChange: (cb: (id: number | null) => void) => (() => void), getLensState: () => { night: boolean, energy: boolean, scent: boolean[], colorMode: 'self'|'species'|'energy'|'age' }, toggleLens: (key: 'night'|'energy') => void, toggleScent: (channel: number) => void, setColorMode: (mode: 'self'|'species'|'energy'|'age') => void, onLensChange: (cb: (state: *) => void) => (() => void), detach: () => void }}
  */
 export function createApp({
   root,
@@ -91,12 +91,17 @@ export function createApp({
   }
 
   /**
-   * Lens rail state (SPEC §5.2, P2-09): Night defaults on, Energy density
-   * off; scent lens keys (T/A/M/K) arrive in P3-02. `colorMode` is the
-   * separate "Color by" radio (P2-07's four modes).
-   * @type {{ night: boolean, energy: boolean, colorMode: 'self'|'species'|'energy'|'age' }}
+   * Lens rail state (SPEC §5.2, P2-09/P3-02): Night defaults on, Energy
+   * density and every scent channel off. `colorMode` is the separate
+   * "Color by" radio (P2-07's four modes).
+   * @type {{ night: boolean, energy: boolean, scent: boolean[], colorMode: 'self'|'species'|'energy'|'age' }}
    */
-  let lensState = { night: true, energy: false, colorMode: 'self' };
+  let lensState = {
+    night: true,
+    energy: false,
+    scent: [false, false, false, false],
+    colorMode: 'self',
+  };
   /** @type {Set<(state: typeof lensState) => void>} */
   const lensListeners = new Set();
 
@@ -111,6 +116,17 @@ export function createApp({
    */
   function toggleLens(key) {
     lensState = { ...lensState, [key]: !lensState[key] };
+    notifyLensChange();
+  }
+
+  /**
+   * @param {number} channel 0-3 (SPEC §4.8's 4 channels; keys T/A/M/K)
+   * @returns {void}
+   */
+  function toggleScent(channel) {
+    const scent = lensState.scent.slice();
+    scent[channel] = !scent[channel];
+    lensState = { ...lensState, scent };
     notifyLensChange();
   }
 
@@ -243,7 +259,11 @@ export function createApp({
       const ty = Math.max(0, Math.min(renderer.height - 1, Math.floor(tileY)));
       const terrainType = cachedTerrain[ty * renderer.width + tx];
       const plantsFraction = snap.plants ? snap.plants[ty * renderer.width + tx] : 0;
-      tooltip.show(tileTooltipText(terrainType, plantsFraction));
+      const tileIdx = ty * renderer.width + tx;
+      const scentFractions = snap.pher
+        ? snap.pher.map(/** @param {Float32Array} p */ (p) => p[tileIdx])
+        : undefined;
+      tooltip.show(tileTooltipText(terrainType, plantsFraction, scentFractions));
     },
     onLeave: () => tooltip.hide(),
   });
@@ -294,8 +314,23 @@ export function createApp({
       case 'E':
         toggleLens('energy');
         return;
+      case 't':
+      case 'T':
+        toggleScent(0);
+        return;
+      case 'a':
+      case 'A':
+        toggleScent(1);
+        return;
+      case 'm':
+      case 'M':
+        toggleScent(2);
+        return;
+      case 'k':
+      case 'K':
+        toggleScent(3);
+        return;
       default:
-        // T/A/M/K (scent lenses) are reserved for P3-02; do nothing yet.
         if (mode === 'idle') setMode('station');
     }
   }
@@ -377,6 +412,7 @@ export function createApp({
     },
     getLensState: () => lensState,
     toggleLens,
+    toggleScent,
     setColorMode,
     /**
      * Subscribe to lens/colour-mode changes (rail.js's chips).
