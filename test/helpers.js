@@ -189,3 +189,18 @@ export function alive(world) {
 export function tileIndex(world, x, y) {
   return Math.floor(y) * world.width + Math.floor(x);
 }
+
+/**
+ * Directly infect an organism (bypassing transmission), for tests that
+ * want to build exactly the sick state they need. Mirrors what
+ * `disease.js`'s `applyNewlySick` does for a real infection: sets the
+ * sick timer and increments the species' `sick` count.
+ * @param {World} world
+ * @param {number} slot
+ * @returns {void}
+ */
+export function infect(world, slot) {
+  const store = world.store;
+  store.sick[slot] = world.cfg.disease.durationTicks;
+  world.species.sick[store.species[slot]]++;
+}

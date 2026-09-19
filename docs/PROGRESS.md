@@ -42,7 +42,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P2-12 Phase 2 end — push, preview, phone checks
 - [x] P3-01 Pheromone channels — decay, diffusion, emission, sensing
 - [x] P3-02 Scent lenses
-- [ ] P3-03 Disease
+- [x] P3-03 Disease
 - [ ] P3-04 Regrowth debt
 - [ ] P3-05 Seasons on plants and the famine entry
 - [ ] P3-06 Immigration
@@ -1578,5 +1578,48 @@ Verification: "with T on, trails glow behind moving herds" is a manual
 browser check; recorded as NOT VERIFIED (human) like other such items —
 confirmed instead via the e2e "no console errors" smoke test passing
 with the new lens code active, and the unit tests' pixel-level checks.
+
+### P3-03 — pending sha (see commit)
+Tests: `test/unit/disease.test.js` (new, 7 cases: contact within radius
+infects, beyond it doesn't; identical genome infects at full rate,
+maximally distant (kinBias=1) never; resistance 1 is immune and pays
+nothing; cost = costPerTick×(1-resistance) exactly into `ledger.
+dissipated`; lethality 1 kills at timer expiry, lethality 0 recovers
+and clears `store.sick`; a plague chronicle entry fires once on
+crossing the threshold and not again inside the cooldown;
+`enabled=false` never infects over 20 real ticks). All pass; full `npm
+test` scope 363/363 green; `npm run test:soak` 6/6; `npm run headless
+-- --ticks 30000` sane (2 disease deaths, hash `0e780e78`, no errors).
+Config keys introduced (all ⚠️ ASSUMPTION except `enabled`):
+`disease.enabled` (true), `contactRadius` (1.0), `contactRate` (0.02),
+`kinBias` (1.0), `spontaneousRate` (1e-6), `durationTicks` (1200),
+`costPerTick` (0.03), `lethality` (0.15), `outbreakThreshold` (10),
+`chronicleCooldown` (1800, "one day" at the default ticksPerDay — a
+fixed default, not derived from `time.ticksPerDay`, so overriding one
+doesn't silently retune the other).
+Design: new `src/core/disease.js`: `diseaseTick(world, i)` (per sick
+organism: contact scan for transmission, via `world.grid.queryRange`
+filtered to the true radius, exactly `senses.js`'s existing candidate-
+then-filter pattern; own cost/timer/death-or-recovery progression) and
+`applyNewlySick(world)` (applies queued infections after the full
+per-organism loop — SPEC's "a contact cannot relay the same tick" —
+and fires the plague chronicle on a threshold crossing). `world.js`
+allocates `newlySick: Uint8Array`, calls `diseaseTick` per organism
+(after `ageOrganism`) and `applyNewlySick` once, after the loop, before
+predation/`resolve()`. `SpeciesTable` gains `sick: Int32Array`
+(incremented on infection, decremented on recovery/death — `onDeath`
+also decrements it for a death from an unrelated cause while still
+sick) and `lastPlagueAt: Int32Array` (a large negative sentinel,
+`NEVER_PLAGUED`, since tick 0 is a real value). `chronicle.js` gains
+the `KIND.PLAGUE` sentence. `test/helpers.js` gains `infect(world,
+slot)` (sets the timer and the species counter directly, bypassing
+transmission, for tests that want exact sick state).
+Interpretation: `DEATH.DISEASE`'s code (6) is duplicated locally in
+`disease.js` rather than imported from `world.js`, matching
+`ecology.js`'s existing `OUTPUT.eat` duplication — `world.js` imports
+`disease.js`, so the reverse import would cycle. `store.sick` (a
+Uint16Array) clamps `durationTicks` to 65535 on infection rather than
+letting an oversized config override wrap silently, per the task's own
+note to "clamp the config to 65535".
 
 

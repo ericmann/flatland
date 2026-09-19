@@ -216,6 +216,20 @@ export const DEFAULTS = Object.freeze({
     emitRate: 0.1,
     senseGain: 4,
   }),
+  disease: Object.freeze({
+    enabled: true,
+    contactRadius: 1.0,
+    contactRate: 0.02,
+    kinBias: 1.0,
+    spontaneousRate: 1e-6,
+    durationTicks: 1200,
+    costPerTick: 0.03,
+    lethality: 0.15,
+    outbreakThreshold: 10,
+    // One day at the default time.ticksPerDay (1800); not derived from it
+    // so a config override to one doesn't silently retune the other.
+    chronicleCooldown: 1800,
+  }),
   stats: Object.freeze({
     sampleEvery: 30,
     historyLength: 1024,
@@ -771,6 +785,86 @@ export const DOCS = new Map([
       units: 'multiplier',
       assumption: true,
       doc: 'Scales the ahead-minus-behind gradient × sense gene into the brain input, clamped to [-1, 1] (SPEC §4.8).',
+    },
+  ],
+  [
+    'disease.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for disease transmission, cost and lethality (SPEC §9.1).',
+    },
+  ],
+  [
+    'disease.contactRadius',
+    {
+      units: 'tiles',
+      assumption: true,
+      doc: 'Contact radius within which a sick organism can transmit disease to a healthy one (SPEC §4.9).',
+    },
+  ],
+  [
+    'disease.contactRate',
+    {
+      units: 'probability per tick at dist=0, resistance=0',
+      assumption: true,
+      doc: 'Base per-contact transmission chance (SPEC §4.9).',
+    },
+  ],
+  [
+    'disease.kinBias',
+    {
+      units: 'multiplier',
+      assumption: true,
+      doc: 'How much trait-block distance reduces transmission chance: p × max(0, 1 - kinBias × dist) (SPEC §4.9).',
+    },
+  ],
+  [
+    'disease.spontaneousRate',
+    {
+      units: 'probability per tick per healthy organism',
+      assumption: true,
+      doc: 'Chance a healthy organism falls sick with no contact, so outbreaks can start without the Hand of God (SPEC §4.9).',
+    },
+  ],
+  [
+    'disease.durationTicks',
+    {
+      units: 'ticks',
+      assumption: true,
+      doc: 'How long an infection lasts before recovery/death is decided (SPEC §4.9). Stored in a Uint16 field; clamp overrides to 65535.',
+    },
+  ],
+  [
+    'disease.costPerTick',
+    {
+      units: 'energy per tick at resistance=0',
+      assumption: true,
+      doc: 'Energy a sick organism pays each tick, scaled by (1 - resistance) (SPEC §4.9).',
+    },
+  ],
+  [
+    'disease.lethality',
+    {
+      units: 'probability at resistance=0',
+      assumption: true,
+      doc: "Chance of death when an infection's timer expires, scaled by (1 - resistance); otherwise recovery (SPEC §4.9).",
+    },
+  ],
+  [
+    'disease.outbreakThreshold',
+    {
+      units: 'count of sick members',
+      assumption: true,
+      doc: 'A species crossing this many simultaneously-sick members upward triggers a plague chronicle entry (SPEC §4.9, §4.11).',
+    },
+  ],
+  [
+    'disease.chronicleCooldown',
+    {
+      units: 'ticks',
+      assumption: true,
+      doc: 'Minimum ticks between plague chronicle entries for the same species (SPEC §4.11).',
     },
   ],
   [

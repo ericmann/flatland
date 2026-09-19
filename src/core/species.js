@@ -12,6 +12,9 @@ import { KIND, sentence, deathVerb } from './chronicle.js';
 /** `dietClassAtBirth` codes (local, matching the same 0/1/2 order the P1-13 snapshot encoder's flagsByte uses). */
 const DIET_CODE = Object.freeze({ herbivore: 0, omnivore: 1, carnivore: 2 });
 
+/** Sentinel for `SpeciesTable.lastPlagueAt`: "no plague chronicled yet" (P3-03). */
+const NEVER_PLAGUED = -1_000_000_000;
+
 export class SpeciesTable {
   /**
    * @param {typeof import('./config.js').DEFAULTS} cfg
@@ -38,6 +41,10 @@ export class SpeciesTable {
     this.names = [];
     /** 1 = created/extinct/renamed since the sim last posted a phylogeny event (P2-06); the scheduler clears bits after posting. */
     this.dirty = new Uint8Array(capacity);
+    /** Currently-sick member count, maintained incrementally (P3-03: disease.js infects/recovers/kills). */
+    this.sick = new Int32Array(capacity);
+    /** Tick of this species' last plague chronicle entry, or `NEVER_PLAGUED` (a large negative sentinel, since 0 is a real tick) until its first one. */
+    this.lastPlagueAt = new Int32Array(capacity).fill(NEVER_PLAGUED);
   }
 
   /**
@@ -146,6 +153,14 @@ export class SpeciesTable {
     const store = world.store;
     const id = store.species[slot];
     this.count[id]--;
+    // A death from disease itself already zeroed `store.sick[slot]` and
+    // decremented this species' `sick` count when the timer expired
+    // (disease.js, before `resolve()` runs); this only covers dying sick
+    // from some other cause (starved, hunted, ...) mid-illness, timer
+    // still running.
+    if (store.sick[slot] > 0) {
+      this.sick[id]--;
+    }
     if (this.count[id] > 0) return;
 
     this.died[id] = world.tick;
