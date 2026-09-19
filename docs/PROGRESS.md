@@ -53,7 +53,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P3-11 Phase 3 end — push, preview, phone checks
 - [x] P4-01 Save records, state snapshots, restore, and the restore determinism case
 - [x] P4-02 Interventions — every kind in core, replay determinism, ⚡ chronicle
-- [ ] P4-03 Hand of God pane
+- [x] P4-03 Hand of God pane
 - [ ] P4-04 Lineage naming
 - [ ] P4-05 Share links, replay-to-tick, platform adapter
 - [ ] P4-06 Auto-save, resume and background verification
@@ -1996,3 +1996,34 @@ P3-10/P3-11's log (this machine's ongoing CPU contention — reproduced
 in isolation, not caused by this task's diff). `npm run test:soak`
 20/20. `npm run headless` output sane, hash unchanged from P4-01's
 baseline (no interventions queued in the default run).
+
+### P4-03 — pending sha
+Goal: the dock's Hand of God tab with six tools that send interventions
+on tap; Rain fires immediately.
+Tests: `test/ui/god-pane.test.js` (new, 3 cases incl. the 3 named,
+one driving a real `createApp` + real pointer tap to check tile-coord
+math end-to-end), `test/e2e/god.spec.js` (new, "a fire writes a ⚡ line
+to the chronicle", both projects).
+Design: armed-tool state lives in `app.js` (`getGodTool`/`setGodTool`/
+`fireGodTool`/`onGodToolChange`, alongside the existing lens-state
+pattern) since it must be visible to `onTap`'s interception; `god-pane.js`
+is a dumb view over that API, matching `charts.js`'s `setVisible` wiring
+(hiding the pane disarms). `renderer.view` gets the mockup's `.god`
+cursor class while armed.
+Found and fixed (blocking this task's own e2e acceptance test on
+pixel-7, unrelated to Hand of God specifically): (1) `main.js` only
+called `renderer.resize()` on a real `window` `resize` event, so the
+canvas's backing-store resolution went stale after any CSS-only layout
+change (a mode switch, a dock tab switch) — added a `ResizeObserver` on
+`#world`. (2) mobile `#rail` CSS set `flex-direction: row` and
+`overflow-x: auto` but never `display: flex`, so those rules were inert
+and rail rendered as a tall block (548px), squeezing `#view` to ~77px
+and, worse, spilling rail's own content over the map area — added the
+missing `display: flex`. Both are real, pre-existing bugs (a phone user
+tapping the map shortly after opening the station, or after switching
+a dock tab, would have hit the same wrong-tile-coordinates and
+overlapping-rail issues); neither is Hand-of-God-specific, but both
+were required for this task's own acceptance test to pass reliably.
+Interpretation: `data-tool` values are the intervention kind strings
+(`river`/`meadow`, matching P4-02's `queueIntervention`), not the
+mockup's placeholder `water`/`grass` names.

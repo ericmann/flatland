@@ -2,8 +2,8 @@
  * The dock (SPEC §4.11, §5.2, mockup `#dock`): tabs over Chronicle,
  * Phylogeny, Charts and Hand of God, exactly one pane visible at a time.
  * This module only builds the tab/pane shell; `#charts` and `#god` start
- * empty for their own modules (`charts.js`, P3-08; Hand of God, P4-xx) to
- * fill in. "Design notes" is mockup-only and is not built here.
+ * empty for their own modules (`charts.js`, P3-08; `god-pane.js`, P4-03)
+ * to fill in. "Design notes" is mockup-only and is not built here.
  */
 
 /**
@@ -22,7 +22,7 @@ export function createDock({ el }) {
     <div class="pane on" id="chron"></div>
     <div class="pane" id="phylo"><svg id="phyloSvg" viewBox="0 0 800 140" preserveAspectRatio="none"></svg></div>
     <div class="pane" id="charts"></div>
-    <div class="pane" id="god">Hand of God arrives in Phase 4</div>
+    <div class="pane" id="god"></div>
   `;
 
   const tabs = /** @type {HTMLButtonElement[]} */ (Array.from(el.querySelectorAll('[data-pane]')));

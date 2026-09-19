@@ -33,7 +33,7 @@ const PICK_RADIUS_TILES = 2.5;
  *   getSnapshot?: () => * | null,
  *   speciesStore?: { name: (id: number) => string|undefined } | null,
  * }} opts
- * @returns {{ root: HTMLElement, world: HTMLElement, setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, mode: () => 'idle'|'station', setCamera: (next: import('../render/camera.js').Camera) => void, getLastInteractionAt: () => number, getSelectedId: () => number | null, select: (id: number | null) => void, deselect: () => void, onSelectionChange: (cb: (id: number | null) => void) => (() => void), getHighlightSpecies: () => number | null, setHighlightSpecies: (id: number | null) => void, onHighlightChange: (cb: (id: number | null) => void) => (() => void), getLensState: () => { night: boolean, energy: boolean, scent: boolean[], colorMode: 'self'|'species'|'energy'|'age' }, toggleLens: (key: 'night'|'energy') => void, toggleScent: (channel: number) => void, setColorMode: (mode: 'self'|'species'|'energy'|'age') => void, onLensChange: (cb: (state: *) => void) => (() => void), detach: () => void }}
+ * @returns {{ root: HTMLElement, world: HTMLElement, setMode: (mode: 'idle'|'station') => void, setSpeed: (n: number) => void, zoomBy: (f: number, anchor?: {x:number,y:number}) => void, fitWorld: () => void, camera: () => import('../render/camera.js').Camera, mode: () => 'idle'|'station', setCamera: (next: import('../render/camera.js').Camera) => void, getLastInteractionAt: () => number, getSelectedId: () => number | null, select: (id: number | null) => void, deselect: () => void, onSelectionChange: (cb: (id: number | null) => void) => (() => void), getHighlightSpecies: () => number | null, setHighlightSpecies: (id: number | null) => void, onHighlightChange: (cb: (id: number | null) => void) => (() => void), getLensState: () => { night: boolean, energy: boolean, scent: boolean[], colorMode: 'self'|'species'|'energy'|'age' }, toggleLens: (key: 'night'|'energy') => void, toggleScent: (channel: number) => void, setColorMode: (mode: 'self'|'species'|'energy'|'age') => void, onLensChange: (cb: (state: *) => void) => (() => void), getGodTool: () => string | null, setGodTool: (tool: string | null) => void, fireGodTool: (kind: string) => void, onGodToolChange: (cb: (tool: string | null) => void) => (() => void), detach: () => void }}
  */
 export function createApp({
   root,
@@ -139,6 +139,38 @@ export function createApp({
     notifyLensChange();
   }
 
+  /**
+   * The armed Hand of God tool (SPEC §5.3, §5.4), or `null` when none is
+   * armed. Rain never arms (it has no `x`/`y`): `fireGodTool('rain')`
+   * sends immediately. Every other tool stays armed across multiple taps
+   * until re-toggled off, the dock leaves the "god" pane (main.js's
+   * `dock.onPaneChange` disarms via `setGodTool(null)`), or the pane
+   * itself disarms on hide (`god-pane.js`'s `setVisible(false)`).
+   * @type {string | null}
+   */
+  let godTool = null;
+  /** @type {Set<(tool: string | null) => void>} */
+  const godToolListeners = new Set();
+
+  /**
+   * @param {string | null} tool
+   * @returns {void}
+   */
+  function setGodTool(tool) {
+    if (tool === godTool) return;
+    godTool = tool;
+    renderer.view.classList.toggle('god', !!godTool);
+    for (const cb of godToolListeners) cb(godTool);
+  }
+
+  /**
+   * @param {string} kind an intervention kind with no required fields (only `rain`, SPEC §5.3).
+   * @returns {void}
+   */
+  function fireGodTool(kind) {
+    sim.send('intervene', { event: { kind } });
+  }
+
   const hud = createHud(doc);
   world.appendChild(hud.el);
 
@@ -222,6 +254,16 @@ export function createApp({
       zoomBy(f, { x: ax, y: ay });
     },
     onTap: (wx, wy) => {
+      if (godTool) {
+        sim.send('intervene', {
+          event: {
+            kind: godTool,
+            x: Math.floor(wx / renderer.px),
+            y: Math.floor(wy / renderer.px),
+          },
+        });
+        return;
+      }
       const snap = getSnapshot();
       const id = snap ? pick(snap, wx / renderer.px, wy / renderer.px, PICK_RADIUS_TILES) : -1;
       if (id !== -1) {
@@ -422,6 +464,18 @@ export function createApp({
     onLensChange(cb) {
       lensListeners.add(cb);
       return () => lensListeners.delete(cb);
+    },
+    getGodTool: () => godTool,
+    setGodTool,
+    fireGodTool,
+    /**
+     * Subscribe to Hand of God tool arm/disarm changes (god-pane.js).
+     * @param {(tool: string | null) => void} cb
+     * @returns {() => void} unsubscribe
+     */
+    onGodToolChange(cb) {
+      godToolListeners.add(cb);
+      return () => godToolListeners.delete(cb);
     },
     detach() {
       detachInput();
