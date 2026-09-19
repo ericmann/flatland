@@ -2059,7 +2059,7 @@ overlaps the dock tabs while open, intercepting the Phylogeny tab
 click — the new e2e test closes the inspector (`#unsel`) before
 switching tabs, matching how a phone user would actually reach the dock.
 
-### P4-05 — pending sha
+### P4-05 — e557fb0
 Goal: encode a world as `?w=` (SPEC §5.6), load one by replaying to its
 tick and continuing live, and add the Share button through the platform
 adapter.
