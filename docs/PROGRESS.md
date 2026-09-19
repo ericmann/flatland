@@ -1232,7 +1232,7 @@ Interpretation:
   divergence in `n` still shows up in the other columns (a new species
   necessarily writes into them).
 
-### P2-05 — pending sha (see commit)
+### P2-05 — accf772
 Tests: `test/soak/survival.test.js` (+2 cases: at least one speciation by
 30,000 ticks; living species ≥ 2 at the end). Both passed on the first
 attempt; the pinned seed (29) was re-checked, not re-pinned.
@@ -1257,7 +1257,7 @@ Verification line) doesn't have this contention and passes cleanly. Not
 a code change — just a note that the two steps should stay separate
 invocations, not merged into one bare `vitest run`.
 
-### P2-06 — pending sha (see commit)
+### P2-06 — accf772
 Tests: `test/unit/snapshot.test.js` (+3: FLAG_SPECIES per-species row,
 selected-record family scalars, social flagsByte bit), `scheduler.test.js`
 (+2: loaded → full phylogeny then split → delta-only, status pop/species
@@ -1291,7 +1291,7 @@ the phylogeny delta tracking.
 the connection after a graceful-restart attempt); this and P2-05 remain
 staged/complete but uncommitted until it's back. No signing bypass used.
 
-### P2-07 — pending sha (see commit)
+### P2-07 — accf772
 Tests: `test/unit/sprites.test.js` (new, 8 cases: carnivore spines vs
 none, nocturnal/diurnal eye colour, social tail, sick marker, all rects
 multiples of scale, self/species/energy/age colour). `test/unit/
@@ -1326,7 +1326,7 @@ verifiable unattended (no browser here); no Playwright spec is listed
 for this task. Recorded as NOT VERIFIED (human), same convention as the
 phone checks.
 
-### P2-08 — pending sha (see commit)
+### P2-08 — accf772
 Tests: `test/ui/topbar.test.js` (new, 6 cases: clock/season/light text,
 speed buttons reflect status, Idle button, population summary, cluster
 click sends setSpeed, setSeed hex format). `test/ui/app.test.js`
@@ -1359,7 +1359,7 @@ fixed `test/ui/idle.test.js`'s `fakeApp()` (missing `world`) and
 `[data-sp="4"]` selector became ambiguous now that the top bar has its
 own speed group alongside the floating cluster's — scoped it to `#hud`.
 
-### P2-09 — pending sha (see commit)
+### P2-09 — accf772
 Tests: `test/unit/lens-layer.test.js` (+3: 3×3 stamp at full energy,
 overlapping stamps clamp to 255, alpha scales with energyFrac).
 `test/ui/rail.test.js` (new, 3 cases: chips toggle + reflect `.on`,
@@ -1391,7 +1391,7 @@ into `layout.rail` and subscribes `redraw` to `app.onLensChange` so a
 lens/colour toggle repaints immediately rather than waiting for the
 next snapshot.
 
-### P2-10 — pending sha (see commit)
+### P2-10 — accf772
 Tests: `test/unit/pick.test.js` (new, 2 cases: nearest-within-r + -1,
 ties by lowest id, radius boundary). `test/ui/inspector.test.js` (new,
 7 cases: name/diet/gen/energy/age bars, 17 brain bars, goal derivation
@@ -1441,7 +1441,7 @@ script against the dev server (reproduced the "detached ArrayBuffer"
 and "undefined is not iterable" crashes before the fix, clean after)
 before folding the repro into `station.spec.js`'s new test.
 
-### P2-11 — pending sha (see commit)
+### P2-11 — accf772
 Tests: `test/ui/dock.test.js` (new, 2 cases: tab/pane exclusivity,
 onPaneChange notification). `test/ui/chronicle-pane.test.js` (new, 3:
 newest-first + time tags + kind classes, an unmapped kind gets no
@@ -1472,7 +1472,7 @@ intermittently missed because organisms occupy only part of the map and
 move every tick; replaced with random points over a larger budget
 (400 attempts / 30s timeout), verified flake-free over 6 repeated runs.
 
-### P2-12 — pending sha (see commit)
+### P2-12 — accf772
 Goal: close Phase 2 with a green suite, a pushed branch and the owed
 phone checks recorded.
 Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
@@ -1490,28 +1490,31 @@ the two-step form is what this repo's own Verification lines already
 use elsewhere and is what was actually run.
 Preview: `https://build-2026-09-18.flatland.pages.dev` (same branch as
 Phase 1's).
-Push: failed — 1Password SSH commit signing has been unavailable on
-this machine since partway through P2-05 (the agent socket refuses the
-connection; a graceful restart attempt stopped the app entirely rather
-than fixing it, and relaunching it is outside what this run is allowed
-to do). Every task from P2-05 through P2-12 is complete, tested and
-staged in the git index, but **zero commits have landed** — `git push`
-correctly reports nothing to push. The run has continued implementing
-without committing throughout (documented at each affected task's log
-entry) rather than stopping, per the standing instruction to never
-bypass commit signing and never halt the loop. All of it will be
-committed, in task order, the moment signing is available again; until
-then the branch head remains `8aa3183` (P2-04).
-Phone: NOT VERIFIED (human) — and, per the above, not yet even pushed
-for a human to reach via the preview URL. Checklist for whenever it is
-reachable: (1) tap opens the station; the rail strip scrolls sideways;
+Push: initially blocked, then succeeded. 1Password SSH commit signing
+was unavailable on this machine from partway through P2-05 onward (the
+agent socket refused the connection; a graceful restart attempt stopped
+the app entirely rather than fixing it). Every task from P2-05 through
+P3-01 was implemented, tested and verified individually, staged in the
+git index, but nothing could commit while signing was down — the run
+kept implementing without committing throughout (documented at each
+affected task's log entry) rather than stopping, per the standing
+instruction to never bypass commit signing without explicit permission
+and never halt the loop. The user then explicitly authorized unsigned
+commits ("commit as you go with no signature if needed - we can rebase
+to add sigs when things are done"), so P2-05 through P3-01 landed as
+one consolidated unsigned catch-up commit `accf772` (git's staging had
+already collapsed several multi-task files into single blobs, making a
+clean per-task split impractical after the fact) and pushed to
+`build/2026-09-18`. One-commit-per-task resumes from P3-02 onward.
+Phone: NOT VERIFIED (human). Checklist for the human to run through on
+the preview URL above: (1) tap opens the station; the rail strip scrolls sideways;
 dock tabs are reachable; (2) tapping a creature opens the bottom-sheet
 inspector with live brain bars, and Close dismisses it without covering
 the cluster; (3) tapping a phylogeny branch rings its members; (4) the
 pixel font renders (no fallback sans) and text is legible at arm's
 length; (5) Escape/Idle returns to idle and the auto-camera resumes.
 
-### P3-01 — pending sha (see commit)
+### P3-01 — accf772
 Tests: `test/unit/pheromone.test.js` (new, 8 cases: decay multiplies by
 rate, diffusion conserves interior mass and spreads a point, a corner
 averages over only its 2 existing neighbours (no leak), emission adds
