@@ -263,6 +263,15 @@ export const DEFAULTS = Object.freeze({
     cooldownTicks: 1800,
     groupSize: 8,
   }),
+  // Lagged ambient temperature and its metabolic cost (SPEC §4.3, Phase 5).
+  temperature: Object.freeze({
+    enabled: true,
+    base: 0.35,
+    dayGain: 0.4,
+    seasonAmp: 0.2,
+    lag: 0.002,
+    costGain: 1.0,
+  }),
   stats: Object.freeze({
     sampleEvery: 30,
     historyLength: 1024,
@@ -1039,6 +1048,54 @@ export const DOCS = new Map([
       units: 'count',
       assumption: true,
       doc: 'Number of organisms in one immigrating group (SPEC §4.9).',
+    },
+  ],
+  [
+    'temperature.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for ambient temperature and its metabolic cost (SPEC §9.1, §4.3).',
+    },
+  ],
+  [
+    'temperature.base',
+    {
+      units: 'unitless [0,1]',
+      assumption: true,
+      doc: 'Baseline ambient temperature target before the daylight and seasonal terms (SPEC §4.3); also `ambient`s initial value at genesis.',
+    },
+  ],
+  [
+    'temperature.dayGain',
+    {
+      units: 'multiplier on light L',
+      assumption: true,
+      doc: 'How much daylight L raises the ambient temperature target (SPEC §4.3).',
+    },
+  ],
+  [
+    'temperature.seasonAmp',
+    {
+      units: 'multiplier on seasonal offset [-1,1]',
+      assumption: true,
+      doc: "Amplitude of the seasonal swing in the ambient temperature target (SPEC §4.3), in phase with `dayFraction`'s `light.seasonOffset` (peak mid-summer, trough mid-winter).",
+    },
+  ],
+  [
+    'temperature.lag',
+    {
+      units: 'fraction of the target gap closed per tick',
+      assumption: true,
+      doc: 'Thermal-mass smoothing: how fast `ambient` chases its target each tick (SPEC §4.3) — small, so nights cool gradually rather than snapping to the target.',
+    },
+  ],
+  [
+    'temperature.costGain',
+    {
+      units: 'multiplier per unit of |prefTemp - ambient|',
+      assumption: true,
+      doc: "How much the gap between an organism's preferred temperature (the `prefTemp` gene) and `ambient` inflates its metabolic cost (SPEC §4.3).",
     },
   ],
   [
