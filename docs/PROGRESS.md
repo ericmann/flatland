@@ -59,7 +59,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P4-06 Auto-save, resume and background verification
 - [x] P4-07 Trophic energy-flow chart
 - [x] P4-08 PWA — manifest, icons, service worker, bundle budget
-- [ ] P4-09 E2E completeness pass on desktop and Pixel 7
+- [x] P4-09 E2E completeness pass on desktop and Pixel 7
 - [ ] P4-10 Phase 4 end — push, preview, phone checks
 - [ ] P5-01 Temperature
 - [ ] P5-02 Weather events — rain and fog
@@ -2225,3 +2225,42 @@ task's changes `git stash`ed and disappeared when the same spec ran
 alone with `--workers=1`, confirming it is this session's CPU
 contention, not a regression — `test/e2e/pwa.spec.js`'s two new specs
 passed on every run, on both projects, with no retries needed.
+
+### P4-09 — pending sha
+Goal: every SPEC §9.4 browser check has a passing, stable e2e spec on
+both projects, plus the P4-06 resume check that task deferred.
+Tests: `test/e2e/resume.spec.js` (new: "a reload resumes at or after
+the previous tick" — forces an auto-save via the same
+`document.hidden`+`visibilitychange` trick as `autosave.test.js`, then
+a bare reload resumes at/after the saved tick with no
+determinism-mismatch console error). `test/e2e/README.md` (new: maps
+every §9.4 bullet to its spec file/test name).
+Design: P4-08's "CPU contention" e2e flakiness was actually
+`registerType: 'autoUpdate'`'s `registerSW` calling
+`window.location.reload()` on a service-worker `activated` event with
+`isUpdate`/`isExternal` true — every spec shares one origin, so
+several open tabs can trip that on each other (or, rarely, on their
+own in-flight registration). `playwright.config.js` now sets
+`workers: 1` (blocking service workers instead avoids the reload too,
+but makes `registerSW`'s own `onRegisterError` fail the
+no-console-errors check). `smoke`/`input`/`station`/`god`/`share`
+specs now boot via a fixed per-file `?seed=` (bypasses any leftover
+IndexedDB auto-save, P4-06's boot precedence) instead of bare `/`.
+`station.spec.js`'s organism-click loop is wall-clock-bounded, not
+attempt-count, and tolerates the rare in-tab reload race via try/catch
+on "Execution context was destroyed". `share.spec.js` closes the
+inspector before the god-pane tab click if the opening tap also
+selected an organism (bottom-sheet overlap on phone widths, SPEC
+§5.2, the same issue P4-04 found for the phylogeny tab).
+Interpretation: the resume check uses a bare `page.goto('/')`, never
+`page.reload()` — matches SPEC §9.4/P4-10's "closing and reopening the
+tab" wording, and is the only way to hit the auto-save boot path
+(`page.reload()` keeps the `?seed=` a fresh boot's own
+`history.replaceState` wrote). Rename-chronicle waits bumped
+10s→40s: an isolated repro confirmed it always resolves (15–131
+ticks) but real time to get there varies under this session's
+documented CPU contention (P3-10 onward).
+Verification: `npm run build && npx playwright test --repeat-each 3`:
+96 passed, 6 correctly skipped, 0 failures, reproduced clean across 4
+consecutive full runs. typecheck/lint clean.
+Phone: n/a (headless test-only task).
