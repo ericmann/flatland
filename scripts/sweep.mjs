@@ -114,6 +114,10 @@ function ecologyRow(seed) {
     crep: report.visionHistogram.crepuscular,
     diur: report.visionHistogram.diurnal,
     avgH: report.diversityAvg,
+    swimmers: report.swimmers,
+    crossings: report.crossings,
+    rain: report.rain,
+    fog: report.fog,
     extinctAt,
     tps,
   };
@@ -160,7 +164,7 @@ if (JSON_OUT) {
   if (ecologyRows) {
     console.log();
     console.log(
-      '     pop     herb     omni     carn  species        H  plants%     born  starved   hunted      old   splits  extinct      gen  extinctAt      tps    immig  plagues maxShare%  noct/crep/diur     avgH',
+      '     pop     herb     omni     carn  species        H  plants%     born  starved   hunted      old   splits  extinct      gen  extinctAt      tps    immig  plagues maxShare%  noct/crep/diur     avgH  swimmers crossings     rain      fog',
     );
     ecologyRows.forEach((e) => {
       console.log(
@@ -168,13 +172,15 @@ if (JSON_OUT) {
           `${pad(e.H.toFixed(3), 8)} ${pad(e.plantsPct.toFixed(1), 8)} ${pad(e.born, 8)} ${pad(e.starved, 8)} ` +
           `${pad(e.hunted, 8)} ${pad(e.old, 8)} ${pad(e.splits, 8)} ${pad(e.extinct, 8)} ${pad(e.gen, 8)} ` +
           `${pad(e.extinctAt, 10)} ${pad(e.tps.toFixed(0), 8)} ${pad(e.immig, 8)} ${pad(e.plagues, 8)} ` +
-          `${pad(e.maxSharePct.toFixed(1), 9)}  ${pad(`${e.noct}/${e.crep}/${e.diur}`, 14)} ${pad(e.avgH.toFixed(3), 8)}`,
+          `${pad(e.maxSharePct.toFixed(1), 9)}  ${pad(`${e.noct}/${e.crep}/${e.diur}`, 14)} ${pad(e.avgH.toFixed(3), 8)} ` +
+          `${pad(e.swimmers, 9)} ${pad(e.crossings, 9)} ${pad(e.rain, 8)} ${pad(e.fog, 8)}`,
       );
     });
     const survived = ecologyRows.filter((e) => e.pop > 0 && e.herb > 0 && e.carn > 0).length;
     const withSplits = ecologyRows.filter((e) => e.splits >= 1).length;
+    const withCrossing = ecologyRows.filter((e) => e.crossings >= 1).length;
     const emean = (
-      /** @type {'pop'|'H'|'plantsPct'|'tps'|'splits'|'gen'|'immig'|'plagues'|'maxSharePct'|'avgH'} */ key,
+      /** @type {'pop'|'H'|'plantsPct'|'tps'|'splits'|'gen'|'immig'|'plagues'|'maxSharePct'|'avgH'|'swimmers'|'rain'|'fog'} */ key,
     ) => ecologyRows.reduce((a, e) => a + e[key], 0) / ecologyRows.length;
     console.log('---');
     console.log(
@@ -186,6 +192,10 @@ if (JSON_OUT) {
     console.log(
       `mean immig ${emean('immig').toFixed(1)}  mean plagues ${emean('plagues').toFixed(1)}  ` +
         `mean maxShare% ${emean('maxSharePct').toFixed(1)}  mean avgH ${emean('avgH').toFixed(3)}`,
+    );
+    console.log(
+      `mean swimmers ${emean('swimmers').toFixed(1)}  seeds with a swim crossing: ${withCrossing}/${ecologyRows.length}  ` +
+        `mean rain events ${emean('rain').toFixed(1)}  mean fog events ${emean('fog').toFixed(1)}`,
     );
   }
 }

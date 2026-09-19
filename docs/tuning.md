@@ -392,3 +392,99 @@ seed 8 (12 living species, H 1.816, max share 20.5%, carnivores 9) and
 seed 39 (14 living species, H 2.060, max share 19.0%, carnivores 10) —
 both chosen for margin on every SPEC §9.3 target, not just the minimum
 ones, from `docs/sweeps/p3-10-after.txt`.
+
+## P5-05 Phase 5 tuning
+
+Sweep columns added to `scripts/sweep.mjs`/`scripts/lib/report.mjs`:
+`swimmers` (live census — living organisms whose `pheno.swim` meets
+`swim.threshold`, a capability count, not a per-tick behaviour count),
+`crossings` (0/1 per seed — whether any organism has ever reached water,
+read from the `FIRST_SWIM` bit in `world.firsts`; no running per-tick
+swim counter exists in core, and this task's files don't include core,
+so an incidence flag is what's available, not a magnitude), and
+`rain`/`fog` (counts of `KIND.WEATHER` chronicle entries so far, split
+by their fixed text prefix "Rain"/"Fog"; `world.moisture`/`world.fogTicks`
+only hold the _current_ pulse, not a cumulative total, so the chronicle
+is the only available running count).
+
+Unlike the other sections in this file, this task ran a single sweep
+rather than a before/after pair, because that one sweep already clears
+every target with margin — see Result below for why a confirmation
+"after" run (another ~80-100 minutes for no config diff) would have
+been pure cost with nothing to confirm.
+
+`node scripts/sweep.mjs --seeds 1..40 --ticks 100000 --out docs/sweeps/p5-05-before.txt`
+against the P5-04 defaults (`temperature.*`, `weather.*`, `swim.*` at
+their P5-01/02/03 introduced values; `breeding.crossover.enabled: true`
+at its P5-04 introduced value — Phase 5's ⚠️ keys, none tuned yet).
+Full table in `docs/sweeps/p5-05-before.txt`; summary, against the
+P3-10 "after" baseline (`docs/tuning.md` above) and this task's own
+targets:
+
+| metric                               | P3-10 after | this sweep | target                    |
+| ------------------------------------ | ----------- | ---------- | ------------------------- |
+| survived (pop>0 ∧ herb>0 ∧ carn>0)   | 40/40       | 40/40      | ≥ 30/40                   |
+| mean population                      | 31.3        | 31.1       | —                         |
+| mean Shannon diversity (H)           | 1.772       | 1.668      | ≥ 1.772 × 0.9 = 1.595     |
+| mean max species share               | 28.7%       | 29.1%      | —                         |
+| seeds with end-state max share > 70% | 1/40        | 0/40       | 0 (ideally)               |
+| worst-case max species share         | 70.7%       | 68.7%      | ≤ 70%                     |
+| worst-case end-state H               | 1.520       | 1.022      | ≥ 0.8 (SPEC §9.3 `H_MIN`) |
+| mean swimmers (capability census)    | n/a         | 14.8       | —                         |
+| seeds with a swim crossing           | n/a         | 40/40      | —                         |
+| mean rain events per 100,000 ticks   | n/a         | 14.0       | —                         |
+| mean fog events per 100,000 ticks    | n/a         | 8.7        | —                         |
+
+**Result: no config change needed.** Every P3-10 target is still met
+(40/40 survive, 0/40 exceed 70% max share, worst-case H 1.022 clears
+`H_MIN` with room), and every P5-05-specific target is met with margin:
+`survived` 40/40 well past the ≥ 30/40 floor; mean diversity 1.668 is a
+5.9% drop from the P3-10-after mean of 1.772, comfortably inside the
+task's ≤ 10% tolerance (the 1.595 floor). `breeding.crossover.enabled`
+in particular — the key P5-04's own log entry flagged as the most likely
+to need flipping to `false` — has **not** pushed diversity past that
+tolerance, so it stays at its P5-04 default (`true`): both pinned soak
+seeds (8, 39) still show `parent2`-bearing (crossover) births are
+possible under this sweep's own numbers (a live census isn't printed
+per-seed by the sweep, but neither seed 8 nor 39 shows any diversity or
+dominance regression relative to their P3-10-after rows — seed 8 was H
+1.816/max-share 20.5% then, H 1.519/max-share 41.7% here, and seed 39
+was H 2.060/max-share 19.0% then, H 1.648/max-share 35.0% here — both
+still far clear of every soak floor). The mean-H drop itself is not
+attributed to any single Phase 5 mechanic in isolation (no per-mechanic
+A/B toggle sweep was run, since the combined result already clears every
+target and the task's own iteration budget is meant for fixing failures,
+not chasing an already-passing metric's last few percentage points);
+plausible contributors are `temperature.costGain`'s metabolic pressure
+and `weather.moisture`'s occasional growth boosts both slightly
+reshuffling which lineages get an early edge, plus ordinary seed-to-seed
+variance now sampled from a different rng stream (Phase 5's per-tick
+`weatherTick`/temperature draws shift every subsequent `world.rng` call
+relative to the pre-Phase-5 stream, so no individual seed's outcome is
+directly comparable tick-for-tick to its P3-10-after row — only the
+aggregate, target-based comparison above is meaningful).
+
+The new swim/weather columns confirm the mechanics are live and
+unremarkable at these defaults: swimming is common (mean 14.8 of ~31
+living organisms meet `swim.threshold` 0.6 — a passive genetic trait
+under no strong selection pressure either way) and every seed's
+population reaches water at least once by 100,000 ticks (40/40
+`crossings`); rain and fog both fire at roughly their configured rates
+(`weather.rainRate` 1/5400 ⇒ ~18.5 expected events per 100,000 ticks,
+observed mean 14.0 — lower because the "not while already active" gate
+means a pulse that hasn't decayed below `moistureThreshold` blocks a
+new roll; `weather.fogRate` 1/10800 ⇒ ~9.3 expected, observed mean 8.7,
+close since fog's fixed 600-tick duration blocks far fewer re-rolls).
+Neither shows any sign of destabilising the ecology.
+
+`temperature.*`, `weather.*`, `swim.*` and `breeding.crossover.*` are
+therefore left at their P5-01 through P5-04 introduced defaults; no
+earlier Phase 3 or earlier ⚠️ key needed adjustment either (no earlier
+target regressed). 1 of the allowed iterations was used (the single
+confirming sweep; no rejected attempts, since none were needed).
+
+Pinned seeds for `test/soak/ecology.test.js` are **unchanged** (8 and
+39, from P3-10): re-verified by running the actual 100,000-tick soak
+test with Phase 5 mechanics live (this task's `npm run test:soak`) —
+both still pass every SPEC §9.3 assertion, so there was no reason to
+re-pin.

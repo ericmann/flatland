@@ -2,6 +2,7 @@
 // Imports only src/core/**, no DOM, no sim.
 import { TRAIT, TRAIT_COUNT, dietClass, visionClass } from '../../src/core/genome.js';
 import { KIND } from '../../src/core/chronicle.js';
+import { FIRST_SWIM } from '../../src/core/world.js';
 
 /**
  * A point-in-time report of a World's ecological state (SPEC §9.5):
@@ -10,8 +11,16 @@ import { KIND } from '../../src/core/chronicle.js';
  * plagues (chronicle `KIND.PLAGUE` entries so far), the largest single
  * species' share of the current population, Shannon diversity now and
  * averaged over samples, plants fraction, the
- * max generation among the living, a vision-class histogram, and the
- * world hash.
+ * max generation among the living, a vision-class histogram, Phase 5
+ * columns (P5-05: `swimmers` — living organisms whose `pheno.swim` meets
+ * `swim.threshold`, a capability census, not a per-tick behaviour count;
+ * `crossings` — 0/1, whether any organism has ever reached water, from
+ * the `FIRST_SWIM` bit in `world.firsts`, since no running per-tick swim
+ * counter exists in core and adding one is out of this task's scope;
+ * `rain`/`fog` — counts of `KIND.WEATHER` chronicle entries so far,
+ * split by their fixed text prefix, since `world.moisture`/`fogTicks`
+ * only hold the *current* pulse, not a cumulative total), and the world
+ * hash.
  * `ticksPerSecond` is not measured here (timing is the caller's job); it
  * is threaded through as a parameter so this stays a pure function of
  * `world` plus whatever the caller already measured.
@@ -27,6 +36,8 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
   let omnivore = 0;
   let carnivore = 0;
   let maxGeneration = 0;
+  let swimmers = 0;
+  const swimThreshold = world.cfg.swim.threshold;
   const visionHistogram = { nocturnal: 0, crepuscular: 0, diurnal: 0 };
   /** @type {Map<number, number>} */
   const bySpecies = new Map();
@@ -43,6 +54,7 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
 
     visionHistogram[visionClass(store.pheno[pOff + TRAIT.visionPeak])]++;
     if (store.generation[i] > maxGeneration) maxGeneration = store.generation[i];
+    if (store.pheno[pOff + TRAIT.swim] >= swimThreshold) swimmers++;
 
     const sp = store.species[i];
     bySpecies.set(sp, (bySpecies.get(sp) ?? 0) + 1);
@@ -57,7 +69,16 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
   const maxSharePct = total > 0 ? (maxSpeciesCount / total) * 100 : 0;
 
   let plagues = 0;
-  for (const entry of world.chronicle.entries) if (entry.kind === KIND.PLAGUE) plagues++;
+  let rain = 0;
+  let fog = 0;
+  for (const entry of world.chronicle.entries) {
+    if (entry.kind === KIND.PLAGUE) plagues++;
+    else if (entry.kind === KIND.WEATHER) {
+      if (entry.text.startsWith('Rain')) rain++;
+      else if (entry.text.startsWith('Fog')) fog++;
+    }
+  }
+  const crossings = world.firsts & FIRST_SWIM ? 1 : 0;
 
   const stats = world.stats;
   let sumDiversity = 0;
@@ -102,6 +123,10 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
     plantsFraction,
     maxGeneration,
     visionHistogram,
+    swimmers,
+    crossings,
+    rain,
+    fog,
     ticksPerSecond,
     hash: world.hash(),
   };

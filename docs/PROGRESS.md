@@ -65,7 +65,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P5-02 Weather events — rain and fog
 - [x] P5-03 Swimming
 - [x] P5-04 Mating with crossover
-- [ ] P5-05 Phase 5 tuning
+- [x] P5-05 Phase 5 tuning
 - [ ] P5-06 Performance pass and `docs/performance.md`
 - [ ] P5-07 Blog post draft
 - [ ] P5-08 Phase 5 end — push, preview, phone checks
@@ -2418,4 +2418,32 @@ test` 451/452 (same pre-existing throughput-invariant flake — ~172-193
 ticks/s vs. the required 2000 — this machine's ongoing CPU contention,
 see P3-10 onward's log, not a regression); `npm run test:soak` 20/20.
 `npm run headless -- --ticks 5000` hash identical across two runs.
+Phone: n/a.
+
+### P5-05 — pending sha
+Goal: tune the Phase 5 ⚠️ keys with the sweep while keeping every soak
+invariant green. Sweep columns added to `scripts/sweep.mjs`/
+`scripts/lib/report.mjs`: `swimmers` (live census, `pheno.swim >=
+swim.threshold`), `crossings` (0/1 per seed, `FIRST_SWIM` bit — no
+running per-tick counter exists in core), `rain`/`fog` (counts of
+`KIND.WEATHER` chronicle entries by text prefix). One
+`--seeds 1..40 --ticks 100000` sweep (`docs/sweeps/p5-05-before.txt`)
+against the unmodified P5-04 defaults already clears every P3-10 target
+(40/40 survive, 0/40 over 70% max share, worst-case H 1.022) and every
+P5-05 target (survived 40/40 ≥ 30; mean H 1.668 vs. P3-10-after's
+1.772, a 5.9% drop, within the ≤10% tolerance). `breeding.crossover.
+enabled` — the key P5-04 flagged as the likeliest to need disabling —
+did not push diversity past tolerance, so it stays `true`. **Result: no
+config change needed**; no second "after" sweep run (nothing to
+confirm). Full reasoning and the comparison table in `docs/tuning.md`
+"P5-05 Phase 5 tuning". Pinned soak seeds unchanged (8, 39) — both still
+pass every SPEC §9.3 assertion under live Phase 5 mechanics.
+Interpretation: `crossings` is an incidence flag, not a magnitude, since
+no running swim-move counter exists in core and adding one is out of
+this config/scripts-only task's file scope.
+Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
+test` 451/452 (same pre-existing throughput-invariant flake — 209
+ticks/s vs. the required 2000, this machine's ongoing CPU contention,
+see P3-10 onward's log, not a regression — this task touches no
+`src/core` file at all); `npm run test:soak` 20/20.
 Phone: n/a.
