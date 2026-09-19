@@ -2309,7 +2309,7 @@ meteor and river are placeable by tap and appear in the chronicle; (6)
 renaming a lineage from the bottom sheet works with the on-screen
 keyboard and no shortcut fires.
 
-### P5-01 — pending sha
+### P5-01 — 4419c2c
 Goal: lagged ambient temperature and preferred-temperature metabolic
 cost (SPEC §4.3). `world.ambient` updates once per tick (right after
 `light`, before organisms act), hashed after `nextId`.
