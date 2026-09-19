@@ -272,6 +272,11 @@ export const DEFAULTS = Object.freeze({
     batchBudgetMs: 12,
     fallbackBudgetMs: 6,
   }),
+  persist: Object.freeze({
+    verifyOnResume: true,
+    verifyReplayTicks: 2000,
+    autosaveSeconds: 30,
+  }),
 });
 
 /** @type {Map<string, ConfigDoc>} */
@@ -1074,6 +1079,30 @@ export const DOCS = new Map([
       units: 'ms',
       assumption: false,
       doc: 'Wall-clock budget per pump() batch on the main-thread fallback (SPEC §6.4), smaller than sim.batchBudgetMs since it shares the thread with rendering.',
+    },
+  ],
+  [
+    'persist.verifyOnResume',
+    {
+      units: 'boolean',
+      assumption: true,
+      doc: 'Whether resuming from an auto-saved state runs a bounded background replay from the last checkpoint to verify the restored hash (SPEC §5.6, Decisions §12.4).',
+    },
+  ],
+  [
+    'persist.verifyReplayTicks',
+    {
+      units: 'ticks',
+      assumption: true,
+      doc: 'Interval at which the scheduler refreshes its in-memory verification checkpoint, and the maximum number of ticks a resume-verification replay ever spends (SPEC §5.6, Decisions §12.4).',
+    },
+  ],
+  [
+    'persist.autosaveSeconds',
+    {
+      units: 'seconds',
+      assumption: true,
+      doc: 'How often the auto-save writes seed + log + state to IndexedDB, in addition to on visibilitychange (SPEC §5.6).',
     },
   ],
 ]);

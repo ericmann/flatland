@@ -50,6 +50,9 @@ export const FLAG_SPECIES = 16;
  * @property {number} [replayTo] a share link's tick (SPEC §5.6): step forward to it before going live.
  * @property {number} [speed] overrides the scheduler's default speed (1) right after load — a share link
  *   loads paused (`speed: 0`, P4-05) so the viewer sees the exact replayed state before it resumes ticking.
+ * @property {{ checkpoint: ArrayBuffer, checkpointTick: number, expectedHash: string }} [verify] an
+ *   auto-save resume's verification checkpoint (P4-06, Decisions §12.4): starts a bounded background
+ *   replay from `checkpoint` proving `state`'s hash at the resumed tick is not a determinism-bug fork.
  */
 
 /**
@@ -97,6 +100,9 @@ export const FLAG_SPECIES = 16;
  *   (SPEC §5.6); this and `progress` are the only fields set on a replay-progress
  *   `status` event — everything else above belongs to the regular per-pump one.
  * @property {number} [progress] `0..1` through the replay, only set alongside `replaying`.
+ * @property {'ok'|'mismatch'} [verify] a resume-verification replay's result (P4-06, Decisions §12.4);
+ *   this and `at` are the only fields set on a verify `status` event.
+ * @property {number} [at] the tick the verification replay compared hashes at, only set alongside `verify`.
  */
 
 /**

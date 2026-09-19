@@ -56,7 +56,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P4-03 Hand of God pane
 - [x] P4-04 Lineage naming
 - [x] P4-05 Share links, replay-to-tick, platform adapter
-- [ ] P4-06 Auto-save, resume and background verification
+- [x] P4-06 Auto-save, resume and background verification
 - [ ] P4-07 Trophic energy-flow chart
 - [ ] P4-08 PWA — manifest, icons, service worker, bundle budget
 - [ ] P4-09 E2E completeness pass on desktop and Pixel 7
@@ -2095,3 +2095,46 @@ but a real phone should still confirm the Share button doesn't scroll
 under other topbar chrome (this task's fix uses overflow-x, not a
 redesign) and that the OS share sheet (not just clipboard fallback)
 actually appears on a real mobile browser.
+
+### P4-06 — pending sha
+Goal: persist seed + log + state to IndexedDB, resume instantly on
+reload, and verify the resumed state by a bounded background replay
+(Decisions §12.4).
+Tests: `test/unit/db.test.js` (new, fake-indexeddb, put/get/del
+round-trip), `test/unit/autosave.test.js` (new, fake timers + stub sim,
+5 cases: interval, hidden, db write shape, stop(), the
+cfg.persist.autosaveSeconds default), `test/unit/scheduler.test.js`
+(+3: verify ok, verify mismatch on a wrong expectedHash, the checkpoint
+gap never reaches verifyReplayTicks), `test/ui/topbar.test.js` (+1: New
+world deletes the save and reloads with the query string stripped).
+Design: `Scheduler` gained `checkpoint`/`checkpointTick` (refreshed
+every `persist.verifyReplayTicks` ticks inside the per-tick loop, into
+the same reused buffer when big enough) and a `_verifier` World, stepped
+up to half the tick budget per `pump()` regardless of pause state (a
+background check of a past resume, unrelated to live playback) until it
+reaches the resumed tick, then posts `status {verify:'ok'|'mismatch',
+at}`. `snapshotState`'s reply now includes a *copy* of the checkpoint
+(never the live one — that would detach it on transfer). `persist.*`
+added to config.js (`verifyOnResume` true, `verifyReplayTicks` 2000,
+`autosaveSeconds` 30 — all ⚠️ ASSUMPTION, SPEC gives no numbers).
+`main.js`'s `boot()` is now async: `?w=` → share load; else `?seed=` →
+fresh; else `db.get('world')` → resume with `verify`; else
+`crypto.getRandomValues` + `history.replaceState`. Manually verified
+against a live dev server + Playwright (not part of the test suite,
+scratch script deleted after): fresh random-seed boot works, `?seed=`
+correctly bypasses the auto-save (SPEC's stated precedence), a bare
+reload resumes from IndexedDB at the saved tick, no console mismatch
+after the verifier finishes, and New World clears the save and rolls a
+fresh seed.
+Interpretation: verification runs even while
+`paused` (a resume-time correctness check, not tied to playback state).
+An initial checkpoint is taken at load time (not just at the first
+`verifyReplayTicks` boundary) so one always exists for an early
+`snapshotState`/autosave. `decodeRecord`'s `config` (an already-resolved
+`makeConfig()` result) is passed straight into `load`'s `config` field
+and re-merged via `makeConfig()` there — the same pattern P4-05's share
+link already established, not a new one.
+Not verified: the SPEC's literal "in the browser: reload resumes with
+the same clock" was checked via the scratch Playwright script above,
+not a permanent e2e spec (out of scope here; P4-09 adds e2e
+completeness). Phone: NOT VERIFIED (human).

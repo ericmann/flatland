@@ -28,14 +28,18 @@ import { decodeSnapshot } from './sim/snapshot.js';
 import { FLAG_TERRAIN, FLAG_SELECTED, FLAG_SPECIES, FLAG_PHEROMONE } from './sim/protocol.js';
 import { makeConfig, applyDiff } from './core/config.js';
 import { decodeShare } from './persist/share.js';
+import { decodeRecord } from './core/save.js';
+import { openStore } from './persist/db.js';
+import { startAutosave } from './persist/autosave.js';
 
 const params = new URLSearchParams(window.location.search);
 
 /**
  * A share link's `?w=` payload (SPEC §5.6), decoded once at boot, or
- * `null` for an ordinary `?seed=`/default load. `?w=` takes precedence
- * over `?seed=` (P4-06's auto-save, not yet implemented, would slot in
- * below both: `?w=` > `?seed=` > auto-save > seed 1).
+ * `null` for an ordinary `?seed=`/`?w=`-less load. `?w=` takes
+ * precedence over `?seed=`, which takes precedence over a saved
+ * auto-save, which takes precedence over a fresh random seed (P4-06's
+ * boot order) — see `boot()` below.
  * @type {{ seed: number, configDiff: *, interventions: *[], tick: number } | null}
  */
 let sharedWorld = null;
@@ -49,11 +53,8 @@ if (wParam) {
 }
 
 const seedParam = Number(params.get('seed'));
-const seed = sharedWorld
-  ? sharedWorld.seed
-  : Number.isFinite(seedParam) && seedParam > 0
-    ? Math.floor(seedParam)
-    : 1;
+
+const db = openStore();
 
 const root = document.getElementById('app');
 const layout = createLayout(document);
@@ -65,13 +66,19 @@ const vignette = document.createElement('div');
 vignette.className = 'vig';
 layout.world.append(view, vignette);
 
-// Interpretation (P1-15 log, resolved by P4-05): main.js sends `load` with
-// no config override for an ordinary boot, so the sim runs against exactly
-// `makeConfig({})` — computing the same object locally is the only way
-// idle.js (UI-side) gets `cfg` without changing the protocol/scheduler. A
-// `?w=` share link's `configDiff` is the one case with a real override, so
-// it is applied identically on both sides here.
-const cfg = sharedWorld ? applyDiff(sharedWorld.configDiff) : makeConfig({});
+// Interpretation (P1-15 log, resolved by P4-05, extended P4-06): main.js
+// sends `load` with no config override for an ordinary/random-seed boot,
+// so the sim runs against exactly `makeConfig({})` — computing the same
+// object locally is the only way idle.js (UI-side) gets `cfg` without
+// changing the protocol/scheduler. A `?w=` share link's `configDiff` or a
+// resumed auto-save's config is the one case with a real override, so
+// it is applied identically on both sides here. `cfg` starts as the
+// `makeConfig({})` default and `boot()` (below, once the boot source is
+// known — synchronously for `?w=`/`?seed=`, after one IndexedDB read for
+// an auto-save resume) reassigns it before sending `load`; every reader
+// of `cfg` (idle, topbar, the station panes) is created later, inside the
+// `loaded` handler, so it always sees the final value.
+let cfg = makeConfig({});
 const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 const client = new SimClient(createSim());
@@ -168,8 +175,9 @@ client.on('loaded', (msg) => {
       })
     : null;
   idle = app ? createIdle({ app, camera, cfg, reduceMotion }) : null;
-  topbar = app ? createTopBar({ el: layout.top, app, cfg }) : null;
+  topbar = app ? createTopBar({ el: layout.top, app, cfg, db }) : null;
   topbar?.setSeed(msg.seed);
+  startAutosave({ sim: client, db, cfg });
   if (app) {
     createRail({ el: layout.rail, app });
     inspector = createInspector({ el: layout.insp, app, cfg, speciesStore });
@@ -197,6 +205,16 @@ client.on('status', (msg) => {
   // separately until the replay finishes and regular status events resume.
   if (msg.replaying !== undefined) {
     document.documentElement.dataset.replaying = msg.replaying ? '1' : '0';
+    return;
+  }
+  // A resume-verification replay's result (P4-06, Decisions §12.4): its
+  // own distinct partial `status` shape (`{verify, at}` only), surfaced
+  // to the console on a mismatch (a determinism bug), never silently
+  // ignored, and otherwise not shown in the UI.
+  if (msg.verify !== undefined) {
+    if (msg.verify === 'mismatch') {
+      console.error('[flatland] determinism mismatch after resume', { at: msg.at });
+    }
     return;
   }
   document.documentElement.dataset.tick = String(msg.tick);
@@ -232,18 +250,80 @@ client.on('snapshot', (msg) => {
   snapshotOutstanding = false;
 });
 
-client.send(
-  'load',
-  sharedWorld
-    ? {
-        seed: sharedWorld.seed,
-        config: applyDiff(sharedWorld.configDiff),
-        interventions: sharedWorld.interventions,
-        replayTo: sharedWorld.tick,
-        speed: 0, // loads paused, so the viewer sees the exact replayed state before it resumes ticking.
-      }
-    : { seed },
-);
+/**
+ * A fresh positive seed via `crypto.getRandomValues` (SPEC §5.6, P4-06:
+ * "fresh with a random seed... UI side" — never `world.rng`, which is
+ * `src/core`-only and doesn't exist yet at boot time anyway).
+ * @returns {number}
+ */
+function randomSeed() {
+  const arr = new Uint32Array(1);
+  crypto.getRandomValues(arr);
+  return (arr[0] % 0x7fffffff) + 1; // 1..0x7fffffff, never 0 (the "no seed given" sentinel elsewhere).
+}
+
+/**
+ * Decide what to `load` (SPEC §5.6, P4-06's boot order): a `?w=` share
+ * link, else a `?seed=` param, else a resumable auto-save from
+ * IndexedDB (with a resume-verification checkpoint attached), else a
+ * fresh random seed recorded into the URL via `history.replaceState` so
+ * a reload doesn't roll a new one. Sets the module-level `cfg` before
+ * sending `load`, so every reader created in the `loaded` handler above
+ * sees the config the sim is actually running.
+ * @returns {Promise<void>}
+ */
+async function boot() {
+  if (sharedWorld) {
+    cfg = applyDiff(sharedWorld.configDiff);
+    client.send('load', {
+      seed: sharedWorld.seed,
+      config: cfg,
+      interventions: sharedWorld.interventions,
+      replayTo: sharedWorld.tick,
+      speed: 0, // loads paused, so the viewer sees the exact replayed state before it resumes ticking.
+    });
+    return;
+  }
+
+  if (Number.isFinite(seedParam) && seedParam > 0) {
+    cfg = makeConfig({});
+    client.send('load', { seed: Math.floor(seedParam) });
+    return;
+  }
+
+  /** @type {*} */
+  let saved = null;
+  try {
+    saved = await db.get('world');
+  } catch (err) {
+    console.error('Flatland: could not read the auto-saved world', err);
+  }
+  if (saved) {
+    const decoded = decodeRecord(saved.record);
+    cfg = decoded.config;
+    client.send('load', {
+      seed: decoded.seed,
+      config: decoded.config,
+      interventions: decoded.interventions,
+      state: saved.state,
+      verify:
+        saved.checkpoint != null
+          ? {
+              checkpoint: saved.checkpoint,
+              checkpointTick: saved.checkpointTick,
+              expectedHash: saved.hash,
+            }
+          : undefined,
+    });
+    return;
+  }
+
+  const fresh = randomSeed();
+  window.history.replaceState(null, '', `?seed=${fresh}`);
+  cfg = makeConfig({});
+  client.send('load', { seed: fresh });
+}
+boot();
 
 /**
  * Request the next snapshot. Once per animation frame in station mode;
