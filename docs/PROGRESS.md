@@ -1789,7 +1789,7 @@ Fixed by finding the genesis entry by `kind` instead of assuming index
 0; the wider suite's other chronicle-entry-order assumptions (searched
 for `chronicle.entries[0]` project-wide) had no other occurrences.
 
-### P3-08 — pending sha (see commit)
+### P3-08 — dcac28d
 Tests: `test/unit/scheduler.test.js` (+1: a `stats` event's `species`
 array is `[id, count]` pairs matching `world.species.count` exactly,
 one entry per species ever created). `test/ui/charts.test.js` (new, 3
