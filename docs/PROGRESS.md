@@ -2420,7 +2420,7 @@ see P3-10 onward's log, not a regression); `npm run test:soak` 20/20.
 `npm run headless -- --ticks 5000` hash identical across two runs.
 Phone: n/a.
 
-### P5-05 — pending sha
+### P5-05 — e7366d4
 Goal: tune the Phase 5 ⚠️ keys with the sweep while keeping every soak
 invariant green. Sweep columns added to `scripts/sweep.mjs`/
 `scripts/lib/report.mjs`: `swimmers` (live census, `pheno.swim >=
