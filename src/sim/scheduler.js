@@ -524,6 +524,7 @@ export class Scheduler {
       light: world.light,
       season: season(world.tick, world.cfg),
       dayFraction: dayFraction(world.tick, world.cfg),
+      temperature: world.ambient,
       herb: idx === -1 ? 0 : stats.herb[idx],
       omni: idx === -1 ? 0 : stats.omni[idx],
       carn: idx === -1 ? 0 : stats.carn[idx],

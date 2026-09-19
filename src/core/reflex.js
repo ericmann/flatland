@@ -146,9 +146,10 @@ export function act(world, i) {
 }
 
 /**
- * Pay the metabolic cost for this tick (SPEC §4.5); marks the organism
- * `dying` (STARVED) if that empties it. The realised (Float32-rounded)
- * payment is dissipated energy.
+ * Pay the metabolic cost for this tick (SPEC §4.5), inflated by the gap
+ * between an organism's preferred temperature and ambient (SPEC §4.3,
+ * P5-01); marks the organism `dying` (STARVED) if that empties it. The
+ * realised (Float32-rounded) payment is dissipated energy.
  * @param {import('./world.js').World} world
  * @param {number} i
  * @returns {void}
@@ -167,11 +168,19 @@ export function metabolise(world, i) {
   const speed = store.pheno[pOff + TRAIT.speed];
   const speedMax = cfg.phenotype.speed[1];
 
+  // Temperature cost (SPEC §4.3, P5-01): the further an organism's
+  // preferred temperature sits from ambient, the more its metabolism
+  // costs. A no-op multiplier (1) when temperature is disabled.
+  const tempFactor = cfg.temperature.enabled
+    ? 1 + cfg.temperature.costGain * Math.abs(store.pheno[pOff + TRAIT.prefTemp] - world.ambient)
+    : 1;
+
   const cost =
     cfg.metabolism.base *
     metab *
     (0.5 + size) *
-    (1 + (cfg.metabolism.moveCost * throttle * speed) / speedMax);
+    (1 + (cfg.metabolism.moveCost * throttle * speed) / speedMax) *
+    tempFactor;
 
   const before = store.energy[i];
   const intended = Math.min(before, cost);

@@ -37,6 +37,22 @@ function yearFracOf(tick, cfg) {
 }
 
 /**
+ * The seasonal phase shared by `dayFraction` (light) and `ambient`
+ * (temperature, SPEC §4.3, Phase 5): `sin(2π·(yearFrac − 0.125))`, in
+ * [-1, 1], peaking at mid-summer (yearFrac = 0.375) and bottoming at
+ * mid-winter (yearFrac = 0.875) — pulled out so temperature's seasonal
+ * swing stays exactly in phase with day length rather than a
+ * re-derivation that could drift out of sync.
+ * @param {number} tick
+ * @param {typeof import('./config.js').DEFAULTS} cfg
+ * @returns {number}
+ */
+export function seasonOffset(tick, cfg) {
+  const yf = yearFracOf(tick, cfg);
+  return sin(TAU * (yf - 0.125));
+}
+
+/**
  * The lit fraction of the day (SPEC §4.3: `f`), peaking at 0.72 at
  * mid-summer (yearFrac = 0.375) and bottoming at 0.28 at mid-winter
  * (yearFrac = 0.875).
@@ -45,8 +61,7 @@ function yearFracOf(tick, cfg) {
  * @returns {number}
  */
 export function dayFraction(tick, cfg) {
-  const yf = yearFracOf(tick, cfg);
-  return 0.5 + 0.22 * sin(TAU * (yf - 0.125));
+  return 0.5 + 0.22 * seasonOffset(tick, cfg);
 }
 
 /**

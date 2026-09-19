@@ -61,7 +61,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P4-08 PWA — manifest, icons, service worker, bundle budget
 - [x] P4-09 E2E completeness pass on desktop and Pixel 7
 - [x] P4-10 Phase 4 end — push, preview, phone checks
-- [ ] P5-01 Temperature
+- [x] P5-01 Temperature
 - [ ] P5-02 Weather events — rain and fog
 - [ ] P5-03 Swimming
 - [ ] P5-04 Mating with crossover
@@ -2308,3 +2308,28 @@ the tab resumes at the same clock with no console mismatch; (5) fire,
 meteor and river are placeable by tap and appear in the chronicle; (6)
 renaming a lineage from the bottom sheet works with the on-screen
 keyboard and no shortcut fires.
+
+### P5-01 — pending sha
+Goal: lagged ambient temperature and preferred-temperature metabolic
+cost (SPEC §4.3). `world.ambient` updates once per tick (right after
+`light`, before organisms act), hashed after `nextId`.
+Tests: `test/unit/temperature.test.js` (new, 3 cases: lag not instant,
+mid-winter nights colder, enabled=false keeps base); `test/unit/
+metabolism.test.js` extended (temp-cost-gap case, plus a disabled-flag
+case); `test/unit/scheduler.test.js` and `test/ui/topbar.test.js`
+extended for the new `status.temperature` field.
+Interpretation: touched `reflex.js` (the cost multiplier) and `save.js`
+(new Float64 `FLOAT_SCALAR_FIELDS` section for `ambient`, since
+`SCALAR_FIELDS` is Int32-only) beyond the task's listed files —
+required so `ambient` round-trips through `encodeState`/`restoreState`
+(P4-02 precedent). `prefTemp` already existed in `genome.js`'s TRAIT
+enum from an earlier phase, so no genome.js change was needed. For
+P5-02: `world.ambient`, `cfg.temperature.*` and `light.seasonOffset`
+are now available to build on.
+Verification: `npm run typecheck` clean; `npm run lint` clean; `npm
+test` 440/441 (same pre-existing, unrelated throughput-invariant
+failure — 209 ticks/s vs. the required 2000 — this machine's ongoing
+CPU contention, see P3-10 onward's log, not a regression); `npm run
+test:soak` 20/20. `npm run headless -- --ticks 5000` hash identical
+across two runs.
+Phone: n/a.

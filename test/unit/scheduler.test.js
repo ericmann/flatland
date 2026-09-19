@@ -177,6 +177,7 @@ describe('Scheduler', () => {
       'light',
       'season',
       'dayFraction',
+      'temperature',
       'herb',
       'omni',
       'carn',

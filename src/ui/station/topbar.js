@@ -53,7 +53,7 @@ export function createTopBar({ el, app, cfg, db, platform = defaultPlatform, win
         <circle id="sundot" cx="20" cy="3" r="3" fill="#e3a83a"/>
       </svg>
       <span id="clock">Year 1 · Day 1 · 06:00</span>
-      <span class="season" id="season">Spring · light 0% · day 0%</span>
+      <span class="season" id="season">Spring · light 0% · day 0% · temp 0%</span>
     </div>
     <div class="speed" role="group" aria-label="Simulation speed">
       <button data-sp="0">⏸</button><button data-sp="1" class="on">1×</button><button data-sp="4">4×</button><button data-sp="16">16×</button>
@@ -152,14 +152,15 @@ export function createTopBar({ el, app, cfg, db, platform = defaultPlatform, win
   }
 
   /**
-   * @param {{ tick: number, speed: number, light: number, season: string, dayFraction: number, herb: number, carn: number, plantsFraction: number, speciesLiving: number, speciesTotal: number }} status
+   * @param {{ tick: number, speed: number, light: number, season: string, dayFraction: number, temperature: number, herb: number, carn: number, plantsFraction: number, speciesLiving: number, speciesTotal: number }} status
    * @returns {void}
    */
   function update(status) {
     clockEl.textContent = clock(status.tick, cfg).text;
     const lightPct = Math.round(status.light * 100);
     const dayPct = Math.round(status.dayFraction * 100);
-    seasonEl.textContent = `${status.season} · light ${lightPct}% · day ${dayPct}%`;
+    const tempPct = Math.round(status.temperature * 100);
+    seasonEl.textContent = `${status.season} · light ${lightPct}% · day ${dayPct}% · temp ${tempPct}%`;
 
     const arc = sunArc(status.tick, cfg);
     sundot.style.display = arc.up ? '' : 'none';

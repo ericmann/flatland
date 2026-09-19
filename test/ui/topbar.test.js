@@ -66,6 +66,7 @@ function statusAt(tick, cfg, overrides = {}) {
     light: 0.5,
     season: season(tick, cfg),
     dayFraction: dayFraction(tick, cfg),
+    temperature: 0.42,
     herb: 10,
     omni: 3,
     carn: 4,
@@ -77,12 +78,13 @@ function statusAt(tick, cfg, overrides = {}) {
 }
 
 describe('createTopBar', () => {
-  it('renders the clock, season and light % from a status event', () => {
+  it('renders the clock, season, light % and temp % from a status event', () => {
     const { el, cfg, topbar } = setup();
-    topbar.update(statusAt(0, cfg, { light: 0.42 }));
+    topbar.update(statusAt(0, cfg, { light: 0.42, temperature: 0.37 }));
 
     expect(el.querySelector('#clock').textContent).toMatch(/Year 1 · Day 1 · \d{2}:\d{2}/);
     expect(el.querySelector('#season').textContent).toMatch(/light 42%/);
+    expect(el.querySelector('#season').textContent).toMatch(/temp 37%/);
   });
 
   it('speed buttons reflect app speed', () => {

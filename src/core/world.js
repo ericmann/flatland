@@ -9,7 +9,8 @@
  * every buffer a later task needs is allocated here in the constructor.
  */
 import { Rng } from './rng.js';
-import { lightAt } from './light.js';
+import { lightAt, seasonOffset } from './light.js';
+import { clamp } from './fmath.js';
 import { generateTerrain } from './terrain.js';
 import { OrganismStore, HASH_ORDER } from './organisms.js';
 import { genomeLength, BRAIN_INPUTS, BRAIN_OUTPUTS } from './genome.js';
@@ -277,6 +278,26 @@ export function flushKillTable(world) {
   world.killOverflowRowCount = 0;
 }
 
+/**
+ * Advance `world.ambient` one tick toward this tick's target (SPEC §4.3,
+ * Phase 5): thermal mass, so ambient lags daylight and season instead of
+ * tracking them instantly — nights cool gradually and winter nights
+ * settle colder than summer ones. Called once per tick, before organisms
+ * act, right after `light` is set for the tick.
+ * @param {World} world
+ * @returns {void}
+ */
+function updateTemperature(world) {
+  const cfg = world.cfg.temperature;
+  if (!cfg.enabled) return;
+  const target = clamp(
+    cfg.base + cfg.dayGain * world.light + cfg.seasonAmp * seasonOffset(world.tick, world.cfg),
+    0,
+    1,
+  );
+  world.ambient = Math.fround(world.ambient + (target - world.ambient) * cfg.lag);
+}
+
 /** DEATH code -> `world.counters` key, index-aligned (index 0 unused). */
 const DEATH_COUNTER_KEY = Object.freeze([
   null,
@@ -343,6 +364,10 @@ export class World {
     this.rng = new Rng(this.seed);
     this.tick = 0;
     this.light = 0;
+    /** Lagged ambient temperature in [0,1] (SPEC §4.3, Phase 5, P5-01), updated once per tick in `updateTemperature`; starts at `temperature.base` before the first tick moves it toward a tick-1 target. */
+    this.ambient = Math.fround(cfg.temperature.base);
+    /** Scratch for hashing `ambient` (a fractional Float32, unlike every other hashed scalar) without allocating on every `hash()` call. */
+    this._hashF32 = new Float32Array(1);
     /** 1 = a famine chronicle entry may fire on the next below-threshold sample (P3-05); disarmed after firing, re-armed once plants recover above 2x the threshold. */
     this.famineArmed = 1;
     /** Tick of the last immigration event per diet class (P3-06), or `NEVER_IMMIGRATED` until the first. */
@@ -479,6 +504,7 @@ export class World {
   step() {
     this.tick++;
     this.light = lightAt(this.tick, this.cfg);
+    updateTemperature(this);
     applyDue(this);
     growPlants(this);
     decayCarcasses(this);
@@ -545,7 +571,7 @@ export class World {
   /**
    * A deterministic FNV-1a 32-bit hash of everything that defines world
    * state, as an 8-character lowercase hex string (SPEC §3.1, §6.3). Order:
-   * tick, rng state, next organism id, `famineArmed` (P3-05),
+   * tick, rng state, next organism id, `ambient` (P5-01), `famineArmed` (P3-05),
    * `lastImmigrationHerb`/`Carn` (P3-06), `firsts` (P3-07 — the kill
    * table itself is transient bookkeeping, like chronicle text, and is
    * not hashed); terrain, plants, carcass, soil,
@@ -562,6 +588,8 @@ export class World {
     h = hashUpdateU32(h, this.tick >>> 0);
     h = hashUpdateU32(h, this.rng.state >>> 0);
     h = hashUpdateU32(h, this.store.nextId >>> 0);
+    this._hashF32[0] = this.ambient;
+    h = hashUpdate(h, bytesOf(this._hashF32));
     h = hashUpdateU32(h, this.famineArmed);
     h = hashUpdateU32(h, this.lastImmigrationHerb);
     h = hashUpdateU32(h, this.lastImmigrationCarn);

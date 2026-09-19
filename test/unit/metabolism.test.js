@@ -6,8 +6,18 @@ import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS } from '../../src/core/genome.js';
 import { DEATH } from '../../src/core/world.js';
 import { makeWorld, makeOrganism } from '../helpers.js';
 
-function bareWorld(opts = {}) {
-  return makeWorld({ width: 10, height: 10, terrain: TERRAIN.GRASS, organisms: [], ...opts });
+function bareWorld({ config = {}, ...opts } = {}) {
+  return makeWorld({
+    width: 10,
+    height: 10,
+    terrain: TERRAIN.GRASS,
+    organisms: [],
+    // Isolate metabolism from temperature (P5-01) by default, so these
+    // tests' plain `base * metab * (0.5 + size) * ...` formulas hold;
+    // the temperature-specific test below re-enables it explicitly.
+    config: { temperature: { enabled: false }, ...config },
+    ...opts,
+  });
 }
 
 describe('metabolise', () => {
@@ -68,6 +78,47 @@ describe('metabolise', () => {
     const before = world.store.energy[slot];
     metabolise(world, slot);
     expect(world.store.energy[slot]).toBe(before);
+  });
+
+  it('the cost rises with the gap between preferred and ambient temperature', () => {
+    const world = bareWorld({ config: { temperature: { enabled: true } } });
+    world.ambient = 0.5;
+    // Same size/metab/speed (both default to the trait midpoint) so the
+    // only difference between these two is the prefTemp-to-ambient gap.
+    const atAmbient = makeOrganism(world, { x: 5, y: 5, traits: { prefTemp: 0.5 } });
+    const farFromAmbient = makeOrganism(world, { x: 6, y: 6, traits: { prefTemp: 0.9 } });
+    world.outputs[atAmbient * BRAIN_OUTPUTS + OUTPUT.throttle] = 0;
+    world.outputs[farFromAmbient * BRAIN_OUTPUTS + OUTPUT.throttle] = 0;
+
+    const beforeAt = world.store.energy[atAmbient];
+    const beforeFar = world.store.energy[farFromAmbient];
+    metabolise(world, atAmbient);
+    metabolise(world, farFromAmbient);
+    const costAt = beforeAt - world.store.energy[atAmbient];
+    const costFar = beforeFar - world.store.energy[farFromAmbient];
+
+    expect(costFar).toBeGreaterThan(costAt);
+
+    const prefFar = world.store.pheno[farFromAmbient * TRAIT_COUNT + TRAIT.prefTemp];
+    const expectedFactor = 1 + world.cfg.temperature.costGain * Math.abs(prefFar - world.ambient);
+    expect(costFar / costAt).toBeCloseTo(expectedFactor, 5);
+  });
+
+  it('temperature.enabled = false ignores the preferred-temperature gap', () => {
+    const world = bareWorld();
+    world.ambient = 0.9;
+    const atAmbient = makeOrganism(world, { x: 5, y: 5, traits: { prefTemp: 0.5 } });
+    const farFromAmbient = makeOrganism(world, { x: 6, y: 6, traits: { prefTemp: 0.9 } });
+    world.outputs[atAmbient * BRAIN_OUTPUTS + OUTPUT.throttle] = 0;
+    world.outputs[farFromAmbient * BRAIN_OUTPUTS + OUTPUT.throttle] = 0;
+
+    const beforeAt = world.store.energy[atAmbient];
+    const beforeFar = world.store.energy[farFromAmbient];
+    metabolise(world, atAmbient);
+    metabolise(world, farFromAmbient);
+    expect(beforeAt - world.store.energy[atAmbient]).toBe(
+      beforeFar - world.store.energy[farFromAmbient],
+    );
   });
 });
 

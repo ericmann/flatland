@@ -40,6 +40,8 @@ const SEC_SCALARS = 0;
 const SEC_LEDGER = 100;
 /** Section id for `world.counters`, packed in `Object.keys()` order. */
 const SEC_COUNTERS = 101;
+/** Section id for float64 scalars outside the ledger (see `FLOAT_SCALAR_FIELDS`). */
+const SEC_FLOAT_SCALARS = 102;
 /** Section id for the UTF-8 JSON blob (chronicle, species names, interventions, pending). */
 const SEC_JSON = 200;
 /** Typed-array sections start here, one id per field in `typedFields()`. */
@@ -98,6 +100,16 @@ const LEDGER_FIELDS = [
   ['flows.deaths', (w) => w.ledger.flows.deaths, (w, v) => (w.ledger.flows.deaths = v)],
   ['flows.fire', (w) => w.ledger.flows.fire, (w, v) => (w.ledger.flows.fire = v)],
 ];
+
+/**
+ * Float64 scalar `World` fields that don't belong to the ledger, in a
+ * fixed order matching `SEC_FLOAT_SCALARS`'s Float64Array. `ambient`
+ * lives here (not `SCALAR_FIELDS`, whose Int32Array truncates fractional
+ * values) since it is a fractional scalar with history a source world
+ * could read (P5-01, SPEC §4.3).
+ * @type {[string, (w: import('./world.js').World) => number, (w: import('./world.js').World, v: number) => void][]}
+ */
+const FLOAT_SCALAR_FIELDS = [['ambient', (w) => w.ambient, (w, v) => (w.ambient = v)]];
 
 /**
  * Every typed-array field the state must carry, freshly resolved against
@@ -220,6 +232,7 @@ export function stateByteLength(world) {
   let total = HEADER_BYTES;
   total += 8 + align4(SCALAR_FIELDS.length * 4);
   total += 8 + align4(LEDGER_FIELDS.length * 8);
+  total += 8 + align4(FLOAT_SCALAR_FIELDS.length * 8);
   total += 8 + align4(Object.keys(world.counters).length * 4);
   total += 8 + align4(new TextEncoder().encode(JSON.stringify(jsonBlob(world))).byteLength);
   for (const field of typedFields(world)) {
@@ -270,6 +283,19 @@ export function encodeState(world, buffer) {
     for (let i = 0; i < LEDGER_FIELDS.length; i++) scratch[i] = LEDGER_FIELDS[i][1](world);
     const payload = bytesOf(scratch);
     view.setInt32(offset, SEC_LEDGER, true);
+    view.setInt32(offset + 4, payload.byteLength, true);
+    bytes.set(payload, offset + 8);
+    offset += align4(8 + payload.byteLength);
+    sectionCount++;
+  }
+
+  // Float scalars outside the ledger (currently just `ambient`, P5-01).
+  {
+    const scratch = new Float64Array(FLOAT_SCALAR_FIELDS.length);
+    for (let i = 0; i < FLOAT_SCALAR_FIELDS.length; i++)
+      scratch[i] = FLOAT_SCALAR_FIELDS[i][1](world);
+    const payload = bytesOf(scratch);
+    view.setInt32(offset, SEC_FLOAT_SCALARS, true);
     view.setInt32(offset + 4, payload.byteLength, true);
     bytes.set(payload, offset + 8);
     offset += align4(8 + payload.byteLength);
@@ -382,6 +408,10 @@ export function restoreState(world, buffer) {
     } else if (id === SEC_LEDGER) {
       const scratch = new Float64Array(payload.buffer, payload.byteOffset, payload.byteLength / 8);
       for (let i = 0; i < LEDGER_FIELDS.length; i++) LEDGER_FIELDS[i][2](world, scratch[i]);
+    } else if (id === SEC_FLOAT_SCALARS) {
+      const scratch = new Float64Array(payload.buffer, payload.byteOffset, payload.byteLength / 8);
+      for (let i = 0; i < FLOAT_SCALAR_FIELDS.length; i++)
+        FLOAT_SCALAR_FIELDS[i][2](world, scratch[i]);
     } else if (id === SEC_COUNTERS) {
       const keys = Object.keys(world.counters);
       const scratch = new Int32Array(payload.buffer, payload.byteOffset, payload.byteLength / 4);
