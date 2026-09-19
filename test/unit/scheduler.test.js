@@ -297,4 +297,101 @@ describe('Scheduler', () => {
     expect(ticks).toBe(0);
     expect(scheduler.world.tick).toBe(300);
   });
+
+  it('resume with a valid checkpoint reports verify ok', () => {
+    const source = makeScheduler();
+    source.scheduler.handle({
+      type: MSG.LOAD,
+      seed: 7,
+      config: { world: { width: 16, height: 12 }, persist: { verifyReplayTicks: 5 } },
+    });
+    for (let i = 0; i < 20; i++) {
+      source.advance(300);
+      source.scheduler.pump();
+    }
+    source.scheduler.handle({ type: MSG.SNAPSHOT_STATE });
+    const snap = source.posts.filter((p) => p.msg.type === MSG.STATE_SNAPSHOT).at(-1).msg;
+    expect(snap.checkpoint).toBeInstanceOf(ArrayBuffer);
+    expect(typeof snap.checkpointTick).toBe('number');
+
+    const resumed = makeScheduler();
+    resumed.scheduler.handle({
+      type: MSG.LOAD,
+      seed: 7,
+      config: { world: { width: 16, height: 12 }, persist: { verifyReplayTicks: 5 } },
+      state: snap.state,
+      verify: {
+        checkpoint: snap.checkpoint,
+        checkpointTick: snap.checkpointTick,
+        expectedHash: snap.hash,
+      },
+    });
+
+    let verifyStatus;
+    for (let i = 0; i < 50 && !verifyStatus; i++) {
+      resumed.advance(50);
+      resumed.scheduler.pump();
+      verifyStatus = resumed.posts.find(
+        (p) => p.msg.type === MSG.STATUS && p.msg.verify !== undefined,
+      );
+    }
+    expect(verifyStatus).toBeDefined();
+    expect(verifyStatus.msg.verify).toBe('ok');
+    expect(verifyStatus.msg.at).toBe(snap.tick);
+  });
+
+  it('a tampered state reports verify mismatch', () => {
+    const source = makeScheduler();
+    source.scheduler.handle({
+      type: MSG.LOAD,
+      seed: 8,
+      config: { world: { width: 16, height: 12 }, persist: { verifyReplayTicks: 5 } },
+    });
+    for (let i = 0; i < 20; i++) {
+      source.advance(300);
+      source.scheduler.pump();
+    }
+    source.scheduler.handle({ type: MSG.SNAPSHOT_STATE });
+    const snap = source.posts.filter((p) => p.msg.type === MSG.STATE_SNAPSHOT).at(-1).msg;
+
+    const resumed = makeScheduler();
+    resumed.scheduler.handle({
+      type: MSG.LOAD,
+      seed: 8,
+      config: { world: { width: 16, height: 12 }, persist: { verifyReplayTicks: 5 } },
+      state: snap.state,
+      verify: {
+        checkpoint: snap.checkpoint,
+        checkpointTick: snap.checkpointTick,
+        expectedHash: 'deadbeef', // wrong on purpose.
+      },
+    });
+
+    let verifyStatus;
+    for (let i = 0; i < 50 && !verifyStatus; i++) {
+      resumed.advance(50);
+      resumed.scheduler.pump();
+      verifyStatus = resumed.posts.find(
+        (p) => p.msg.type === MSG.STATUS && p.msg.verify !== undefined,
+      );
+    }
+    expect(verifyStatus).toBeDefined();
+    expect(verifyStatus.msg.verify).toBe('mismatch');
+  });
+
+  it('verification never runs more than verifyReplayTicks ticks', () => {
+    const source = makeScheduler();
+    source.scheduler.handle({
+      type: MSG.LOAD,
+      seed: 9,
+      config: { world: { width: 16, height: 12 }, persist: { verifyReplayTicks: 5 } },
+    });
+    for (let i = 0; i < 30; i++) {
+      source.advance(50);
+      source.scheduler.pump();
+      source.scheduler.handle({ type: MSG.SNAPSHOT_STATE });
+      const snap = source.posts[source.posts.length - 1].msg;
+      expect(snap.tick - snap.checkpointTick).toBeLessThan(5);
+    }
+  });
 });

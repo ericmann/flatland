@@ -35,7 +35,18 @@ function fakePlatform(result = 'copied') {
   };
 }
 
-function setup(platform = fakePlatform()) {
+/** A fake db: records del() calls, resolves immediately. */
+function fakeDb() {
+  return {
+    delCalls: [],
+    del(key) {
+      this.delCalls.push(key);
+      return Promise.resolve();
+    },
+  };
+}
+
+function setup(platform = fakePlatform(), db = fakeDb()) {
   const el = document.createElement('header');
   const app = fakeApp();
   const cfg = makeConfig({});
@@ -44,8 +55,8 @@ function setup(platform = fakePlatform()) {
     setTimeout: (...a) => globalThis.setTimeout(...a),
     clearTimeout: (...a) => globalThis.clearTimeout(...a),
   };
-  const topbar = createTopBar({ el, app, cfg, platform, win });
-  return { el, app, cfg, platform, topbar };
+  const topbar = createTopBar({ el, app, cfg, db, platform, win });
+  return { el, app, cfg, db, win, platform, topbar };
 }
 
 function statusAt(tick, cfg, overrides = {}) {
@@ -130,6 +141,17 @@ describe('createTopBar', () => {
     expect(platform.calls).toHaveLength(1);
     expect(platform.calls[0].url).toMatch(/^https:\/\/flatland\.test\/\?w=[^&]+$/);
     expect(platform.calls[0].title).toBeTruthy();
+  });
+
+  it('New world deletes the auto-save and reloads with the query string stripped', async () => {
+    const { el, db, win } = setup();
+
+    el.querySelector('#newWorldBtn').dispatchEvent(new Event('click', { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(db.delCalls).toEqual(['world']);
+    expect(win.location.href).toBe('/');
   });
 
   it('Share shows a toast reflecting the platform adapter result', async () => {

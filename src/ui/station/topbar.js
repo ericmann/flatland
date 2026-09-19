@@ -17,6 +17,11 @@
  * interaction — the URL-building (`encodeShare`) and the platform-adapter
  * call live here so they're covered directly by this file's own tests,
  * per the task's acceptance test being attached to topbar, not app.
+ *
+ * New world (P4-06, SPEC §5.6): likewise not in the mockup. Clears the
+ * auto-saved record and reloads with the query string stripped, so
+ * `boot()` (main.js) falls through past the (now-gone) save straight to
+ * rolling a fresh random seed.
  */
 import { clock, sunArc } from '../../core/light.js';
 import { encodeShare } from '../../persist/share.js';
@@ -32,12 +37,13 @@ const TOAST_MS = 2000;
  *   el: HTMLElement,
  *   app: { setSpeed: (n: number) => void, setMode: (m: 'idle'|'station') => void, requestRecord: (cb: (r: { record: string, tick: number }) => void) => void },
  *   cfg: typeof import('../../core/config.js').DEFAULTS,
+ *   db?: { del: (key: string) => Promise<void> },
  *   platform?: { share: (opts: { url: string, title?: string }) => Promise<'shared'|'copied'|'unavailable'> },
  *   win?: Window & typeof globalThis,
  * }} opts
  * @returns {{ el: HTMLElement, update: (status: *) => void, setSeed: (seed: number) => void }}
  */
-export function createTopBar({ el, app, cfg, platform = defaultPlatform, win = window }) {
+export function createTopBar({ el, app, cfg, db, platform = defaultPlatform, win = window }) {
   el.innerHTML = `
     <span class="brand">FLATLAND</span>
     <span class="seed">world <span id="seed">#0000</span></span>
@@ -60,6 +66,7 @@ export function createTopBar({ el, app, cfg, platform = defaultPlatform, win = w
     </div>
     <span class="toast" id="toast" hidden></span>
     <button class="tbtn" id="shareBtn">Share ⤴</button>
+    <button class="tbtn" id="newWorldBtn">New world ⟳</button>
     <button class="tbtn" id="toIdle">Idle ⤢</button>
   `;
 
@@ -76,12 +83,21 @@ export function createTopBar({ el, app, cfg, platform = defaultPlatform, win = w
   const pSpec = /** @type {HTMLElement} */ (el.querySelector('#pSpec'));
   const toastEl = /** @type {HTMLElement} */ (el.querySelector('#toast'));
   const shareBtn = /** @type {HTMLButtonElement} */ (el.querySelector('#shareBtn'));
+  const newWorldBtn = /** @type {HTMLButtonElement} */ (el.querySelector('#newWorldBtn'));
   const toIdle = /** @type {HTMLButtonElement} */ (el.querySelector('#toIdle'));
 
   for (const btn of speedButtons) {
     btn.addEventListener('click', () => app.setSpeed(Number(btn.dataset.sp)));
   }
   toIdle.addEventListener('click', () => app.setMode('idle'));
+
+  newWorldBtn.addEventListener('click', () => {
+    Promise.resolve(db?.del('world'))
+      .catch(() => {})
+      .finally(() => {
+        win.location.href = win.location.pathname; // drops ?seed=/?w=, so boot() rolls a fresh random seed.
+      });
+  });
 
   /** @type {*} a timer handle, whichever shape this `win`'s setTimeout returns. */
   let toastTimer = null;

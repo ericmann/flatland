@@ -56,6 +56,29 @@ export class Scheduler {
     this._lastStatsN = 0;
     /** Species ids `< this` were included in a previous phylogeny post; new ids and dirty old ones are sent as a delta (P2-06). */
     this._lastPostedSpeciesN = 0;
+
+    /**
+     * A periodic in-memory state snapshot (P4-06, Decisions §12.4),
+     * refreshed every `persist.verifyReplayTicks` ticks, sent alongside
+     * an auto-save's live state so a later resume can verify itself by
+     * replaying from here rather than from genesis.
+     * @type {ArrayBuffer|null}
+     */
+    this.checkpoint = null;
+    /** The tick `this.checkpoint` was taken at. */
+    this.checkpointTick = 0;
+
+    /**
+     * A second `World`, present only while verifying a just-resumed
+     * world's determinism against `this._verifierExpectedHash` (P4-06,
+     * Decisions §12.4). Stepped a little further on each `pump()` (half
+     * the tick budget) rather than all at once, so a long-ish replay
+     * never blocks the live world's own ticking.
+     * @type {import('../core/world.js').World|null}
+     */
+    this._verifier = null;
+    this._verifierTargetTick = 0;
+    this._verifierExpectedHash = '';
   }
 
   /**
@@ -110,14 +133,18 @@ export class Scheduler {
   }
 
   /**
-   * @param {{ seed: number, config?: *, interventions?: import('../core/interventions.js').InterventionEvent[], state?: ArrayBuffer, replayTo?: number, speed?: number }} msg
+   * @param {{ seed: number, config?: *, interventions?: import('../core/interventions.js').InterventionEvent[], state?: ArrayBuffer, replayTo?: number, speed?: number, verify?: { checkpoint: ArrayBuffer, checkpointTick: number, expectedHash: string } }} msg
    *   `state`, when given (SPEC §5.6), restores a cached snapshot instead
    *   of replaying from genesis; `interventions` is still the full,
    *   canonical log either way, and any entry with `tick > world.tick`
    *   (i.e. not yet applied as of the snapshot) is (re)queued. `replayTo`
    *   (a share link, SPEC §5.6) steps the freshly-loaded world forward to
    *   that tick, ignoring `speed` and not throttled by wall-clock, before
-   *   `LOADED`/the first live `pump()` — see `_replayTo`.
+   *   `LOADED`/the first live `pump()` — see `_replayTo`. `verify` (an
+   *   auto-save resume, P4-06, Decisions §12.4), when `persist.
+   *   verifyOnResume` is set, starts a background replay from its
+   *   checkpoint to prove the restored `state` is not a determinism-bug
+   *   fork — see `pumpVerifier`.
    * @returns {void}
    */
   _load(msg) {
@@ -151,6 +178,26 @@ export class Scheduler {
     this._lastStatsN = world.stats.n;
     this._lastPostedSpeciesN = 0;
     this.pool = new SnapshotPool(snapshotByteLength(cfg));
+
+    // A checkpoint at the just-loaded tick, so one is always available for
+    // a future `snapshotState` even before the first `verifyReplayTicks`
+    // boundary is crossed (P4-06).
+    this.checkpoint = encodeState(world);
+    this.checkpointTick = world.tick;
+
+    if (msg.verify && cfg.persist.verifyOnResume && msg.verify.checkpoint) {
+      const verifier = World.fromState(cfg, msg.seed, msg.verify.checkpoint);
+      for (const ev of msg.interventions ?? []) {
+        if (ev.tick > msg.verify.checkpointTick && ev.tick <= world.tick) {
+          queueIntervention(verifier, ev);
+        }
+      }
+      this._verifier = verifier;
+      this._verifierTargetTick = world.tick;
+      this._verifierExpectedHash = msg.verify.expectedHash;
+    } else {
+      this._verifier = null;
+    }
 
     this._post({
       type: MSG.LOADED,
@@ -256,9 +303,11 @@ export class Scheduler {
 
   /**
    * Encode the current world's full state (SPEC §5.6) and post it,
-   * transferred, alongside its hash, tick and an encoded save record —
-   * everything a caller needs to cache a fast-resume point and verify it
-   * later with a background replay.
+   * transferred, alongside its hash, tick, an encoded save record, and a
+   * *copy* of the current verification checkpoint (P4-06, Decisions
+   * §12.4) — copied, not transferred directly, so this scheduler keeps
+   * its own live checkpoint buffer usable for the next refresh rather
+   * than handing it over (and detaching it here) with the reply.
    * @returns {void}
    */
   _snapshotState() {
@@ -269,9 +318,57 @@ export class Scheduler {
       config: world.cfg,
       interventions: world.interventions,
     });
-    this._post({ type: MSG.STATE_SNAPSHOT, state, hash: world.hash(), tick: world.tick, record }, [
-      state,
-    ]);
+    const checkpoint = this.checkpoint ? this.checkpoint.slice(0) : null;
+    this._post(
+      {
+        type: MSG.STATE_SNAPSHOT,
+        state,
+        hash: world.hash(),
+        tick: world.tick,
+        record,
+        checkpoint,
+        checkpointTick: this.checkpointTick,
+      },
+      checkpoint ? [state, checkpoint] : [state],
+    );
+  }
+
+  /**
+   * Refresh `this.checkpoint` in place, into the same buffer when it is
+   * still big enough (`encodeState`'s reuse rule) — a periodic snapshot
+   * used only for a *future* resume's verification replay, never for the
+   * live world itself.
+   * @returns {void}
+   */
+  _refreshCheckpoint() {
+    const world = this._requireWorld();
+    this.checkpoint = encodeState(world, this.checkpoint ?? undefined);
+    this.checkpointTick = world.tick;
+  }
+
+  /**
+   * Step the resume-verification replay (P4-06, Decisions §12.4), if one
+   * is in progress, up to `budgetMs` further. Once it reaches the tick
+   * the resumed world was saved at, compares hashes, posts a `status
+   * { verify, at }` event, and drops the verifier.
+   * @param {number} budgetMs
+   * @returns {void}
+   */
+  _pumpVerifier(budgetMs) {
+    if (!this._verifier) return;
+    const batchStart = this._now();
+    while (this._verifier.tick < this._verifierTargetTick && this._now() - batchStart < budgetMs) {
+      this._verifier.step();
+    }
+    if (this._verifier.tick >= this._verifierTargetTick) {
+      const ok = this._verifier.hash() === this._verifierExpectedHash;
+      this._post({
+        type: MSG.STATUS,
+        verify: ok ? 'ok' : 'mismatch',
+        at: this._verifierTargetTick,
+      });
+      this._verifier = null;
+    }
   }
 
   /**
@@ -285,11 +382,22 @@ export class Scheduler {
     const dt = now - this.lastNow;
     this.lastNow = now;
 
-    if (!world || this.paused) {
+    if (!world) {
       return { ticks: 0, behind: false };
     }
 
     const cfg = world.cfg;
+    const budgetMs = this._budgetMsOverride ?? cfg.sim.batchBudgetMs;
+
+    // The verification replay (P4-06) runs regardless of pause state: it
+    // is a background check of a *past* resume, unrelated to whether the
+    // live world is currently ticking.
+    this._pumpVerifier(budgetMs / 2);
+
+    if (this.paused) {
+      return { ticks: 0, behind: false };
+    }
+
     this.acc += (dt / 1000) * this.speed * cfg.sim.tps;
 
     let behind = false;
@@ -298,13 +406,13 @@ export class Scheduler {
       behind = true;
     }
 
-    const budgetMs = this._budgetMsOverride ?? cfg.sim.batchBudgetMs;
     const batchStart = this._now();
     let ticks = 0;
     while (this.acc >= 1 && this._now() - batchStart < budgetMs) {
       world.step();
       this.acc -= 1;
       ticks++;
+      if (world.tick % cfg.persist.verifyReplayTicks === 0) this._refreshCheckpoint();
     }
 
     this._tpsTickAccum += ticks;
