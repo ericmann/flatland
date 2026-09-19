@@ -7,7 +7,7 @@
 import { TERRAIN } from './terrain.js';
 import { TAU } from './fmath.js';
 import { TRAIT, TRAIT_COUNT, BRAIN_OUTPUTS, applyPhenotype, mutate, dietClass } from './genome.js';
-import { DEATH, EV_HUNT, EV_BIRTH, EV_IMMIGRATION, recordEvent } from './world.js';
+import { DEATH, EV_HUNT, EV_BIRTH, EV_IMMIGRATION, recordEvent, recordKill } from './world.js';
 import { regionName } from './names.js';
 import { season } from './light.js';
 import { KIND, sentence } from './chronicle.js';
@@ -323,6 +323,7 @@ export function resolvePredationKills(world) {
     ledger.flows.predation += E;
 
     recordEvent(world, EV_HUNT, store.x[j], store.y[j], store.species[i], store.species[j]);
+    recordKill(world, store.species[j], store.species[i], store.x[j], store.y[j]);
 
     // Prey's value is fully consumed above; zero it so resolve()'s
     // generic death handling adds nothing more for this slot.

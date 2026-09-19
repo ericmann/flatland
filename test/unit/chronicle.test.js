@@ -1,14 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import { Chronicle, KIND, sentence, deathVerb } from '../../src/core/chronicle.js';
 import { checkFamine } from '../../src/core/ecology.js';
+import { recordKill, flushKillTable, FIRST_HUNTERS, FIRST_NIGHT } from '../../src/core/world.js';
+import { TRAIT, TRAIT_COUNT } from '../../src/core/genome.js';
 import { TERRAIN } from '../../src/core/terrain.js';
 import { makeWorld } from '../helpers.js';
 
 describe('genesis chronicle entry', () => {
+  // Found by kind, not by index 0 (P3-07): a genesis founder can already
+  // qualify for a `first` entry (e.g. first-night), which species.create()
+  // logs *during* runGenesis's per-lineage loop, before the genesis entry
+  // itself is appended at the end.
+  function genesisEntry(world) {
+    return world.chronicle.entries.find((e) => e.kind === KIND.GENESIS);
+  }
+
   it('exists at tick 0 with kind genesis and a place', () => {
     const world = makeWorld({ seed: 5 });
     expect(world.chronicle.entries.length).toBeGreaterThanOrEqual(1);
-    const entry = world.chronicle.entries[0];
+    const entry = genesisEntry(world);
     expect(entry.tick).toBe(0);
     expect(entry.kind).toBe(KIND.GENESIS);
     expect(typeof entry.place).toBe('string');
@@ -18,7 +28,7 @@ describe('genesis chronicle entry', () => {
 
   it('genesis lists lineage names', () => {
     const world = makeWorld({ seed: 5 });
-    const entry = world.chronicle.entries[0];
+    const entry = genesisEntry(world);
     for (const name of world.species.names) {
       expect(entry.text).toContain(name);
     }
@@ -120,5 +130,117 @@ describe('famine (P3-05)', () => {
     // Crosses below again: fires again.
     sampleAt(threshold - 0.01);
     expect(famineEntries()).toHaveLength(1);
+  });
+});
+
+describe('kill aggregation (P3-07)', () => {
+  it('kills are aggregated per prey lineage per day and flushed at dawn', () => {
+    const world = makeWorld({ width: 8, height: 8, terrain: TERRAIN.GRASS, organisms: [] });
+    world.chronicle.flush();
+    const preyId = world.species.create(world, 0, -1, 2, 2);
+    const predId = world.species.create(world, 0, -1, 3, 3);
+    world.chronicle.flush(); // discard any `first` entries these two triggered.
+
+    recordKill(world, preyId, predId, 2, 2);
+    recordKill(world, preyId, predId, 2, 2);
+    recordKill(world, preyId, predId, 3, 3);
+
+    expect(world.chronicle.flush()).toBeNull(); // not flushed until dawn.
+
+    flushKillTable(world);
+    const hunts = (world.chronicle.flush() ?? []).filter((e) => e.kind === KIND.HUNT_SUMMARY);
+    expect(hunts).toHaveLength(1);
+    expect(hunts[0].text).toContain('3');
+    expect(hunts[0].subjects).toEqual([preyId, predId]);
+
+    // The table resets after a flush.
+    flushKillTable(world);
+    expect(world.chronicle.flush()).toBeNull();
+  });
+
+  it('singular and plural hunt sentences', () => {
+    const ctx = { prey: 'Meadow Grazers', pred: 'Rock Lurkers', place: 'the meadow' };
+    expect(sentence(KIND.HUNT_SUMMARY, { ...ctx, n: 1, others: false })).toBe(
+      'One of the Meadow Grazers was taken by Rock Lurkers near the meadow.',
+    );
+    expect(sentence(KIND.HUNT_SUMMARY, { ...ctx, n: 5, others: false })).toBe(
+      'A hard night for the Meadow Grazers — 5 taken by Rock Lurkers.',
+    );
+    expect(sentence(KIND.HUNT_SUMMARY, { ...ctx, n: 5, others: true })).toBe(
+      'A hard night for the Meadow Grazers — 5 taken by Rock Lurkers and others.',
+    );
+  });
+
+  it('every KIND produces a non-empty sentence with a place', () => {
+    const place = 'the meadow';
+    /** @type {Record<string, *>} */
+    const ctxByKind = {
+      [KIND.GENESIS]: { n: 2, names: ['A', 'B'] },
+      [KIND.SPLIT]: { name: 'B', parent: 'A', place },
+      [KIND.EXTINCT]: { name: 'A', verb: 'starved', place },
+      [KIND.MIGRATION]: { name: 'A', edge: 'west', carn: false },
+      [KIND.HUNT_SUMMARY]: { n: 1, prey: 'A', pred: 'B', others: false, place },
+      [KIND.FAMINE]: { pct: 5, season: 'Winter' },
+      [KIND.PLAGUE]: { name: 'A', place, n: 12 },
+      [KIND.INTERVENTION]: { text: 'Fire in the meadow' },
+      [KIND.NAMING]: { old: 'A', new: 'B' },
+      [KIND.FIRST]: { variant: 'hunters', name: 'A', ancestor: 'B' },
+      [KIND.WEATHER]: { text: 'A storm rolls in.' },
+    };
+    for (const kind of Object.values(KIND)) {
+      const text = sentence(kind, ctxByKind[kind]);
+      expect(typeof text).toBe('string');
+      expect(text.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('first entries (P3-07)', () => {
+  /**
+   * Write a neutral (0.5) trait block at `offset`, then apply named
+   * overrides — a controlled genome for exercising `species.create()`'s
+   * first-hunters/first-night checks without genesis's own randomness.
+   */
+  function setGenome(world, offset, overrides) {
+    for (let t = 0; t < TRAIT_COUNT; t++) world.store.genome[offset + t] = 0.5;
+    for (const [trait, v] of Object.entries(overrides)) {
+      world.store.genome[offset + TRAIT[trait]] = v;
+    }
+  }
+
+  it('first hunters and first night fire exactly once', () => {
+    const world = makeWorld({ width: 8, height: 8, terrain: TERRAIN.GRASS, organisms: [] });
+    world.chronicle.flush();
+    const gLen = world.store.genomeLength;
+
+    setGenome(world, 0, { diet: 0.1, visionPeak: 0.5 });
+    const herbAncestor = world.species.create(world, 0, -1, 2, 2);
+    world.chronicle.flush();
+
+    // A carnivore descending from a herbivore: fires FIRST_HUNTERS.
+    setGenome(world, gLen, { diet: 0.9, visionPeak: 0.5 });
+    world.species.create(world, gLen, herbAncestor, 3, 3);
+    expect(world.firsts & FIRST_HUNTERS).toBeTruthy();
+    let entries = (world.chronicle.flush() ?? []).filter((e) => e.kind === KIND.FIRST);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].text).toContain('hunters');
+
+    // Another carnivore descending from a non-carnivore: does not re-fire.
+    setGenome(world, 2 * gLen, { diet: 0.9, visionPeak: 0.5 });
+    world.species.create(world, 2 * gLen, herbAncestor, 4, 4);
+    expect((world.chronicle.flush() ?? []).filter((e) => e.kind === KIND.FIRST)).toHaveLength(0);
+
+    // A species with low visionPeak: fires FIRST_NIGHT.
+    setGenome(world, 3 * gLen, { diet: 0.1, visionPeak: 0.1 });
+    world.species.create(world, 3 * gLen, -1, 5, 5);
+    expect(world.firsts & FIRST_NIGHT).toBeTruthy();
+    entries = (world.chronicle.flush() ?? []).filter((e) => e.kind === KIND.FIRST);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].text).toContain('night');
+
+    // Another low-visionPeak species: does not re-fire.
+    setGenome(world, 4 * gLen, { diet: 0.1, visionPeak: 0.05 });
+    world.species.create(world, 4 * gLen, -1, 6, 6);
+    expect((world.chronicle.flush() ?? []).filter((e) => e.kind === KIND.FIRST)).toHaveLength(0);
   });
 });
