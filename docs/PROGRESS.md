@@ -1821,7 +1821,7 @@ carrying a separate `died` flag through the wire format, since the
 `species: [id, count]` payload shape was given literally in this
 task's Design constraints.
 
-### P3-09 — pending sha (see commit)
+### P3-09 — 0d7c599
 Tests: `test/ui/idle.test.js` (+4: a repeated organism target on a
 later world day says "the same hunter, second night running."; a
 repeated species hunt says "lineage N again."; the 16-slot ring evicts
