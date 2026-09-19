@@ -16,6 +16,7 @@ import { TRAIT_NAMES, TRAIT_COUNT, applyPhenotype } from '../src/core/genome.js'
  * @returns {*}
  */
 function mergeOverrides(a, b) {
+  /** @param {*} v */
   const isPlain = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
   if (!isPlain(a) || !isPlain(b)) return b;
   const out = { ...a };
