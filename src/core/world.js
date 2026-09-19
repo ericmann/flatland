@@ -37,6 +37,7 @@ import {
   diffuse as diffusePheromone,
   emit as emitPheromone,
 } from './pheromone.js';
+import { diseaseTick, applyNewlySick } from './disease.js';
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
@@ -271,6 +272,8 @@ export class World {
     /** Scratch hidden-layer activations for `brain.forward` (P2-02), reused across organisms/ticks. */
     this.hidden = new Float32Array(cfg.brain.hidden);
     this.dying = new Uint8Array(cap);
+    /** Infections queued this tick, applied after the per-organism loop (P3-03, `disease.js`). */
+    this.newlySick = new Uint8Array(cap);
     this.attackTarget = new Int32Array(cap);
     this.birthQueue = new Int32Array(cap);
     /** Number of valid entries currently in `birthQueue` (reset each tick by `resolveBirths`). */
@@ -355,8 +358,10 @@ export class World {
       }
       metabolise(this, i);
       ageOrganism(this, i);
+      diseaseTick(this, i);
       checkBreeding(this, i);
     }
+    applyNewlySick(this);
     if (this.cfg.predation.enabled) {
       resolvePredationKills(this);
     }
