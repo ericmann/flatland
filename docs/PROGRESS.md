@@ -2517,7 +2517,7 @@ evolved" now, from commands run today.
 Verification: `npm run lint` clean.
 Phone: n/a.
 
-### P5-08 — pending sha
+### P5-08 — 2f4d957
 Goal: close the build — Phase 5 end and the final task of the entire plan:
 a green suite, a pushed branch, and the owed phone checks recorded.
 Verification: `npm run typecheck` clean except the one pre-existing,
