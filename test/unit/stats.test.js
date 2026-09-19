@@ -89,4 +89,41 @@ describe('Stats.sample', () => {
     const world = bareWorld();
     expect(world.stats.counters).toBe(world.counters);
   });
+
+  it('flow deltas per sample sum to the ledger flow differences', () => {
+    const world = bareWorld();
+    world.ledger.flows.photosynthesis = 10;
+    world.ledger.flows.grazing = 5;
+    world.ledger.flows.predation = 0;
+    world.ledger.flows.scavenging = 2;
+    world.ledger.flows.decay = 1;
+    world.ledger.flows.metabolism = 3;
+
+    world.stats.sample(world);
+    let idx = (world.stats.head - 1 + world.stats.capacity) % world.stats.capacity;
+    expect(world.stats.flows.photosynthesis[idx]).toBeCloseTo(10, 6);
+    expect(world.stats.flows.grazing[idx]).toBeCloseTo(5, 6);
+    expect(world.stats.flows.predation[idx]).toBeCloseTo(0, 6);
+    expect(world.stats.flows.scavenging[idx]).toBeCloseTo(2, 6);
+    expect(world.stats.flows.decay[idx]).toBeCloseTo(1, 6);
+    expect(world.stats.flows.metabolism[idx]).toBeCloseTo(3, 6);
+
+    // Second sample: ledger totals are cumulative (never reset), so the
+    // recorded ring value is this interval's delta, not the running total.
+    world.ledger.flows.photosynthesis = 25; // +15
+    world.ledger.flows.grazing = 5; // +0
+    world.ledger.flows.predation = 4; // +4
+    world.ledger.flows.scavenging = 2; // +0
+    world.ledger.flows.decay = 6; // +5
+    world.ledger.flows.metabolism = 3; // +0
+
+    world.stats.sample(world);
+    idx = (world.stats.head - 1 + world.stats.capacity) % world.stats.capacity;
+    expect(world.stats.flows.photosynthesis[idx]).toBeCloseTo(15, 6);
+    expect(world.stats.flows.grazing[idx]).toBeCloseTo(0, 6);
+    expect(world.stats.flows.predation[idx]).toBeCloseTo(4, 6);
+    expect(world.stats.flows.scavenging[idx]).toBeCloseTo(0, 6);
+    expect(world.stats.flows.decay[idx]).toBeCloseTo(5, 6);
+    expect(world.stats.flows.metabolism[idx]).toBeCloseTo(0, 6);
+  });
 });

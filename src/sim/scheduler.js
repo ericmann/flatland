@@ -16,6 +16,7 @@ import { runGenesis } from '../core/genesis.js';
 import { queueIntervention } from '../core/interventions.js';
 import { season, dayFraction } from '../core/light.js';
 import { encodeState, encodeRecord } from '../core/save.js';
+import { FLOW_KEYS } from '../core/stats.js';
 import { MSG } from './protocol.js';
 import { snapshotByteLength, encodeSnapshot, SnapshotPool } from './snapshot.js';
 
@@ -478,6 +479,9 @@ export class Scheduler {
     for (let id = 0; id < world.species.n; id++) {
       species.push([id, world.species.count[id]]);
     }
+    /** @type {Record<string, number>} this interval's delta per trophic-flow key (P4-07). */
+    const flows = {};
+    for (const key of FLOW_KEYS) flows[key] = stats.flows[key][idx];
     this._post({
       type: MSG.STATS,
       tick: stats.tick[idx],
@@ -490,6 +494,7 @@ export class Scheduler {
       diversity: stats.diversity[idx],
       speciesLiving: stats.speciesLiving[idx],
       species,
+      flows,
     });
   }
 

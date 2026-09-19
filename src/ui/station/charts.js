@@ -16,6 +16,29 @@ const LABEL_FONT = '10px IBM Plex Mono';
 const LIGHT_FILL = 'rgba(227,168,58,.14)';
 const DIVERSITY_STROKE = '#7fbb6a';
 
+/** The six trophic-flow ledger keys, stack order bottom-to-top (P4-07, SPEC §5.2). */
+const FLOW_KEYS = ['photosynthesis', 'grazing', 'predation', 'scavenging', 'decay', 'metabolism'];
+/** @type {Record<string, string>} one distinct colour per flow, for both the stack and the legend. */
+const FLOW_COLORS = {
+  photosynthesis: '#e3a83a',
+  grazing: '#8fd97d',
+  predation: '#d8573f',
+  scavenging: '#b98b4e',
+  decay: '#6b7a5e',
+  metabolism: '#5a86a8',
+};
+/** @type {Record<string, string>} legend label per flow key. */
+const FLOW_LABELS = {
+  photosynthesis: 'Photosynthesis',
+  grazing: 'Grazing',
+  predation: 'Predation',
+  scavenging: 'Scavenging',
+  decay: 'Decay',
+  metabolism: 'Metabolism',
+};
+const LEGEND_SLOT_WIDTH = 76;
+const LEGEND_SWATCH = 6;
+
 /**
  * @param {CanvasRenderingContext2D | *} ctx
  * @param {number} w
@@ -125,18 +148,86 @@ export function paintDiversity(ctx, w, h, history) {
 }
 
 /**
+ * A stacked area of the six `world.ledger.flows` deltas per sample
+ * (bottom-to-top in `FLOW_KEYS` order), with a coloured-swatch legend row
+ * across the top.
+ * @param {CanvasRenderingContext2D | *} ctx
+ * @param {number} w
+ * @param {number} h
+ * @param {{ flows: Record<string, number> }[]} history oldest first
+ * @returns {void}
+ */
+export function paintFlows(ctx, w, h, history) {
+  drawGrid(ctx, w, h);
+  if (history.length === 0) return;
+
+  /**
+   * @param {{ flows?: Record<string, number> }} pt
+   * @param {string} key
+   * @returns {number}
+   */
+  function flowAt(pt, key) {
+    return Math.max(0, pt.flows?.[key] ?? 0);
+  }
+
+  let max = 1e-6;
+  for (const pt of history) {
+    let sum = 0;
+    for (const key of FLOW_KEYS) sum += flowAt(pt, key);
+    if (sum > max) max = sum;
+  }
+
+  const denom = history.length - 1 || 1;
+  const stackTop = new Float64Array(history.length);
+  for (const key of FLOW_KEYS) {
+    ctx.beginPath();
+    for (let i = 0; i < history.length; i++) {
+      const top = stackTop[i] + flowAt(history[i], key);
+      const x = (i / denom) * w;
+      const y = h - (top / max) * h;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    for (let i = history.length - 1; i >= 0; i--) {
+      const x = (i / denom) * w;
+      const y = h - (stackTop[i] / max) * h;
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = FLOW_COLORS[key];
+    ctx.fill();
+
+    for (let i = 0; i < history.length; i++) {
+      stackTop[i] += flowAt(history[i], key);
+    }
+  }
+
+  ctx.font = LABEL_FONT;
+  let lx = 3;
+  for (const key of FLOW_KEYS) {
+    ctx.fillStyle = FLOW_COLORS[key];
+    ctx.fillRect(lx, 2, LEGEND_SWATCH, LEGEND_SWATCH);
+    ctx.fillStyle = LABEL_COLOR;
+    ctx.fillText(FLOW_LABELS[key], lx + LEGEND_SWATCH + 3, 9);
+    lx += LEGEND_SLOT_WIDTH;
+  }
+}
+
+/**
  * @param {{ el: HTMLElement, speciesStore?: { hue: (id: number) => number | undefined } }} opts
- * @returns {{ el: HTMLElement, setVisible: (v: boolean) => void, update: (stat: { tick: number, light: number, diversity: number, species: [number, number][] }) => void }}
+ * @returns {{ el: HTMLElement, setVisible: (v: boolean) => void, update: (stat: { tick: number, light: number, diversity: number, species: [number, number][], flows: Record<string, number> }) => void }}
  */
 export function createCharts({ el, speciesStore }) {
   el.innerHTML = `
     <div class="c"><h4>Population by lineage</h4><canvas id="chPop"></canvas></div>
     <div class="c"><h4>Diversity (Shannon) · Light</h4><canvas id="chDiv"></canvas></div>
+    <div class="c"><h4>Trophic energy flow</h4><canvas id="chFlow"></canvas></div>
   `;
   const popCanvas = /** @type {HTMLCanvasElement} */ (el.querySelector('#chPop'));
   const divCanvas = /** @type {HTMLCanvasElement} */ (el.querySelector('#chDiv'));
+  const flowCanvas = /** @type {HTMLCanvasElement} */ (el.querySelector('#chFlow'));
 
-  /** @type {{ light: number, diversity: number, species: [number, number][] }[]} */
+  /** @type {{ light: number, diversity: number, species: [number, number][], flows: Record<string, number> }[]} */
   const history = [];
   let visible = false;
   let lastTick = -1;
@@ -163,6 +254,8 @@ export function createCharts({ el, speciesStore }) {
     if (pop) paintPopulation(pop.ctx, pop.w, pop.h, history, speciesStore);
     const div = sizeCanvas(divCanvas);
     if (div) paintDiversity(div.ctx, div.w, div.h, history);
+    const flow = sizeCanvas(flowCanvas);
+    if (flow) paintFlows(flow.ctx, flow.w, flow.h, history);
   }
 
   /**
@@ -176,13 +269,18 @@ export function createCharts({ el, speciesStore }) {
   }
 
   /**
-   * @param {{ tick: number, light: number, diversity: number, species: [number, number][] }} stat
+   * @param {{ tick: number, light: number, diversity: number, species: [number, number][], flows: Record<string, number> }} stat
    * @returns {void}
    */
   function update(stat) {
     if (stat.tick === lastTick) return; // unchanged since the last call.
     lastTick = stat.tick;
-    history.push({ light: stat.light, diversity: stat.diversity, species: stat.species });
+    history.push({
+      light: stat.light,
+      diversity: stat.diversity,
+      species: stat.species,
+      flows: stat.flows,
+    });
     if (history.length > HISTORY_LENGTH) history.shift();
     if (!visible) return;
     redraw();

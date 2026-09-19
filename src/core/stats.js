@@ -1,13 +1,24 @@
 /**
  * Periodic ecological samples (SPEC §5.2, §6.3, §9.3): population by diet
- * class and species, plants fraction, Shannon diversity. A fixed-capacity
- * ring buffer, no allocation after construction (SPEC §3.5).
+ * class and species, plants fraction, Shannon diversity, and per-interval
+ * trophic-flow deltas (P4-07). A fixed-capacity ring buffer, no allocation
+ * after construction (SPEC §3.5).
  *
  * Determinism (SPEC §3.1, §6.3): slot-order/row-major loops, `fmath.log`
  * only.
  */
 import { log } from './fmath.js';
 import { TRAIT, TRAIT_COUNT, dietClass } from './genome.js';
+
+/** The six trophic-flow ledger keys sampled for the Charts pane's flow chart (P4-07, SPEC §5.2). */
+export const FLOW_KEYS = Object.freeze([
+  'photosynthesis',
+  'grazing',
+  'predation',
+  'scavenging',
+  'decay',
+  'metabolism',
+]);
 
 export class Stats {
   /**
@@ -25,6 +36,23 @@ export class Stats {
     this.plantsFraction = new Float32Array(capacity);
     this.diversity = new Float32Array(capacity);
     this.speciesLiving = new Int32Array(capacity);
+
+    /**
+     * Per-interval delta of each `world.ledger.flows` key (P4-07), one ring
+     * column per key. `prevFlows` holds the ledger's cumulative totals as
+     * of the last sample, so `sample()` can record this interval's delta
+     * (`current - prevFlows[key]`) rather than the running total.
+     * @type {Record<string, Float32Array>}
+     */
+    this.flows = {};
+    /** @type {Record<string, number>} */
+    this.prevFlows = {};
+    /** @type {Record<string, number>} */
+    const ledgerFlows = world.ledger.flows;
+    for (const key of FLOW_KEYS) {
+      this.flows[key] = new Float32Array(capacity);
+      this.prevFlows[key] = ledgerFlows[key];
+    }
 
     /** Per-species-id count scratch, reused every sample; never allocated per-tick. */
     this.speciesCount = new Int32Array(world.cfg.world.maxSpecies);
@@ -98,6 +126,14 @@ export class Stats {
     this.plantsFraction[idx] = plantsFraction;
     this.diversity[idx] = diversity;
     this.speciesLiving[idx] = speciesLiving;
+
+    /** @type {Record<string, number>} */
+    const ledgerFlows = world.ledger.flows;
+    for (const key of FLOW_KEYS) {
+      const current = ledgerFlows[key];
+      this.flows[key][idx] = current - this.prevFlows[key];
+      this.prevFlows[key] = current;
+    }
 
     this.head = (idx + 1) % this.capacity;
     if (this.n < this.capacity) this.n++;

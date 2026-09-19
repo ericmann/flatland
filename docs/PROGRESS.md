@@ -57,7 +57,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P4-04 Lineage naming
 - [x] P4-05 Share links, replay-to-tick, platform adapter
 - [x] P4-06 Auto-save, resume and background verification
-- [ ] P4-07 Trophic energy-flow chart
+- [x] P4-07 Trophic energy-flow chart
 - [ ] P4-08 PWA — manifest, icons, service worker, bundle budget
 - [ ] P4-09 E2E completeness pass on desktop and Pixel 7
 - [ ] P4-10 Phase 4 end — push, preview, phone checks
@@ -2138,3 +2138,37 @@ Not verified: the SPEC's literal "in the browser: reload resumes with
 the same clock" was checked via the scratch Playwright script above,
 not a permanent e2e spec (out of scope here; P4-09 adds e2e
 completeness). Phone: NOT VERIFIED (human).
+
+### P4-07 — pending sha
+Goal: add the third Charts-pane chart (SPEC §5.2): a stacked-area energy
+flow between the six trophic pools per sample.
+Tests: `test/unit/stats.test.js` (+1: "flow deltas per sample sum to
+the ledger flow differences", sets `world.ledger.flows.*` directly and
+checks two successive `sample()` calls record the interval delta, not
+the running total). `test/ui/charts.test.js` (+2: "draws six stacked
+areas with a legend", "draws nothing but the grid for an empty
+history"; `fakeCtx` gained `fillRect` for the legend swatches).
+Design: `stats.js` exports `FLOW_KEYS` (the six ledger keys named in
+the task: photosynthesis/grazing/predation/scavenging/decay/
+metabolism — the ledger itself already tracked these plus uptake/
+births/deaths/fire since P4-01's save.js prep comment; only the six
+named ones feed this chart). `Stats` gained one `Float32Array` ring
+column per key (`this.flows`) plus a plain `prevFlows` running-total
+snapshot so `sample()` can record `current - prevFlows[key]`.
+`scheduler.js`'s `_maybeSendStats()` now includes a `flows` object.
+`charts.js` gained `paintFlows` (pure, matches `paintPopulation`/
+`paintDiversity`'s conventions) plus a third `#chFlow` canvas wired
+into `createCharts`'s existing visibility/change-detection gating; a
+missing `flows` field on a history entry defaults every key to 0
+(defensive, since the pre-existing `createCharts` test's stat fixtures
+predate this task and don't carry one).
+Interpretation: colours for the six flows are new (not specified in
+SPEC §5.5's palette, which only names the shared UI colours) — chosen
+distinct from each other and from the existing population/diversity
+chart colours. `style.css`'s `#charts` grid (`1fr 1fr`, unchanged, out
+of this task's Files touched) auto-places the third `.c` div onto a
+second row without any CSS change needed.
+Verification: typecheck/lint clean; `npm test` 431/432 (only the
+pre-existing throughput/CPU-contention flake, same as every prior
+Phase 4 task); `npm run build` clean; `npm run headless` sane.
+Phone: n/a (Verification line for this task has no test:ui/browser step).
