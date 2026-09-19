@@ -206,4 +206,57 @@ describe('Scheduler', () => {
       expect(count).toBe(scheduler.world.species.count[id]);
     }
   });
+
+  it('snapshotState posts a transferred state, hash, tick and record; load(state) resumes from it', () => {
+    const source = makeScheduler();
+    load(source.scheduler, 3);
+    for (let i = 0; i < 10; i++) {
+      source.advance(200);
+      source.scheduler.pump();
+    }
+
+    source.scheduler.handle({ type: MSG.SNAPSHOT_STATE });
+    const post = source.posts.find((p) => p.msg.type === MSG.STATE_SNAPSHOT);
+    expect(post).toBeDefined();
+    expect(post.msg.hash).toBe(source.scheduler.world.hash());
+    expect(post.msg.tick).toBe(source.scheduler.world.tick);
+    expect(typeof post.msg.record).toBe('string');
+    expect(post.transfer).toContain(post.msg.state);
+
+    const resumed = makeScheduler();
+    resumed.scheduler.handle({
+      type: MSG.LOAD,
+      seed: 3,
+      config: { world: { width: 16, height: 12 } },
+      state: post.msg.state,
+    });
+    expect(resumed.scheduler.world.hash()).toBe(source.scheduler.world.hash());
+    expect(resumed.scheduler.world.tick).toBe(source.scheduler.world.tick);
+  });
+
+  it('load(state) queues only interventions after the restored tick', () => {
+    const source = makeScheduler();
+    load(source.scheduler, 4);
+    for (let i = 0; i < 5; i++) {
+      source.advance(200);
+      source.scheduler.pump();
+    }
+    source.scheduler.handle({ type: MSG.SNAPSHOT_STATE });
+    const state = source.posts.find((p) => p.msg.type === MSG.STATE_SNAPSHOT).msg.state;
+    const restoredTick = source.scheduler.world.tick;
+
+    const resumed = makeScheduler();
+    resumed.scheduler.handle({
+      type: MSG.LOAD,
+      seed: 4,
+      config: { world: { width: 16, height: 12 } },
+      state,
+      interventions: [
+        { tick: 1, kind: 'rain' }, // already in the past — must not be (re)queued.
+        { tick: restoredTick + 50, kind: 'rain' },
+      ],
+    });
+
+    expect(resumed.scheduler.world.pending).toEqual([{ tick: restoredTick + 50, kind: 'rain' }]);
+  });
 });

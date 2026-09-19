@@ -1212,3 +1212,77 @@ export function flatten(cfg) {
   walk(cfg, '');
   return out;
 }
+
+/**
+ * Two flattened leaf values are equal: arrays element-wise, everything
+ * else by `===` (SPEC §5.6: a config diff/share link never carries more
+ * than the keys a user actually changed).
+ * @param {*} a
+ * @param {*} b
+ * @returns {boolean}
+ */
+function leafEquals(a, b) {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+  return a === b;
+}
+
+/**
+ * A flat, dotted-key object of every leaf in `cfg` whose value differs
+ * from `DEFAULTS` (SPEC §5.6: save records and share links carry only
+ * this diff, never the full config). Arrays are compared element-wise
+ * and, when different, included whole (never merged element-wise, to
+ * match `makeConfig`'s own array-is-a-leaf semantics).
+ * @param {Object} cfg a `makeConfig()` result (or any config-shaped object)
+ * @returns {Record<string, *>}
+ */
+export function diffConfig(cfg) {
+  const defaults = flatten(DEFAULTS);
+  const current = flatten(cfg);
+  /** @type {Record<string, *>} */
+  const diff = {};
+  for (const [key, value] of current) {
+    if (!leafEquals(defaults.get(key), value)) {
+      diff[key] = value;
+    }
+  }
+  return diff;
+}
+
+/**
+ * Set a dotted path on a plain object, creating intermediate objects.
+ * @param {Record<string, *>} obj
+ * @param {string} path
+ * @param {*} value
+ * @returns {void}
+ */
+function setPath(obj, path, value) {
+  const parts = path.split('.');
+  let node = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (!(parts[i] in node)) node[parts[i]] = {};
+    node = node[parts[i]];
+  }
+  node[parts[parts.length - 1]] = value;
+}
+
+/**
+ * The inverse of `diffConfig`: turn a flat, dotted-key diff back into a
+ * full `makeConfig()` result by nesting it into an overrides tree first
+ * (`makeConfig` merges nested overrides onto `DEFAULTS`, not dotted keys).
+ * @param {Record<string, *>} diff
+ * @returns {typeof DEFAULTS}
+ */
+export function applyDiff(diff) {
+  /** @type {Record<string, *>} */
+  const overrides = {};
+  for (const key of Object.keys(diff)) {
+    setPath(overrides, key, diff[key]);
+  }
+  return makeConfig(overrides);
+}
