@@ -1921,7 +1921,7 @@ render as heat without frame drops; (2) charts are readable in the
 minutes of idle, hunt summaries, a famine or plague, and a migration
 appear in the ticker; (5) sick creatures show the marker.
 
-### P4-01 — pending sha
+### P4-01 — 59f9144
 Goal: `save.js`'s `{seed, configDiff, interventions}` records, full state
 encode/restore, and prove restore-then-continue equals a continuous run.
 Tests: `test/unit/save.test.js` (new, 6 cases incl. the 4 named), `test/unit/config.test.js`
