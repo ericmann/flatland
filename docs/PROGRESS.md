@@ -2496,7 +2496,7 @@ section lists every row this task could not verify (frame time at the
 real ≤8ms/50fps budget, real device memory, real 4G cold load, real
 battery drain); owed to P5-08's phone pass.
 
-### P5-07 — pending sha
+### P5-07 — c349c03
 Goal: draft the launch post (`docs/blog-post.md`, ~1235 words) from real
 numbers, no invented results. Population/species/births/hunts/deaths/
 speciations/extinctions/diversity/hash for seeds 8 and 39 came from `npm
