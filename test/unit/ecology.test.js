@@ -128,6 +128,66 @@ describe('plant growth', () => {
   });
 });
 
+describe('regrowth debt', () => {
+  it('a tile grazed to zero regrows at debtFactor × rate for debtTicks, then at the full rate', () => {
+    const enabled = isolate('plants', 'regrowth');
+    const world = makeWorld({
+      width: 3,
+      height: 3,
+      terrain: TERRAIN.GRASS,
+      organisms: [],
+      config: { ...enabled, regrowth: { ...enabled.regrowth, debtTicks: 3, debtFactor: 0.5 } },
+    });
+    const cap = world.cfg.terrain.plantCap[TERRAIN.GRASS];
+    const growth = world.cfg.plants.growth;
+    world.plants.fill(0.3 * cap);
+    while (world.light === 0) world.step();
+    // Now on a lit tick: set fresh debt and predict the next 5 ticks'
+    // growth step by step from the same formula growPlants uses, using
+    // the actual light each tick produces (soil stays 0 throughout, so
+    // there's no soil-boost term to account for).
+    world.debt.fill(world.cfg.regrowth.debtTicks);
+    let debt = world.cfg.regrowth.debtTicks;
+    let p = world.plants[0];
+    for (let t = 0; t < 5; t++) {
+      world.step();
+      const L = world.light;
+      let base = growth * L * (1 - p / cap);
+      if (debt > 0) {
+        base *= world.cfg.regrowth.debtFactor;
+        debt--;
+      }
+      p = Math.min(cap, p + base);
+      expect(world.plants[0]).toBeCloseTo(p, 4);
+    }
+    expect(debt).toBe(0);
+    expect(world.debt[0]).toBe(0);
+  });
+
+  it('regrowth.enabled = false never sets debt', () => {
+    const world = makeWorld({
+      width: 3,
+      height: 3,
+      terrain: TERRAIN.GRASS,
+      organisms: [{ x: 1, y: 1, traits: { diet: 0 } }],
+      config: { regrowth: { enabled: false, zeroThreshold: 0.5 } },
+    });
+    const tile = 1 * 3 + 1;
+    world.plants[tile] = 0.01; // already below zeroThreshold (0.5)
+    world.outputs[0 * BRAIN_OUTPUTS + OUTPUT_EAT] = 1;
+    eatMeal(world, 0);
+    expect(world.debt[tile]).toBe(0);
+  });
+
+  it('debt is hashed', () => {
+    const world = makeWorld({ width: 3, height: 3, terrain: TERRAIN.GRASS, organisms: [] });
+    const before = world.hash();
+    world.debt[0] = 100;
+    const after = world.hash();
+    expect(after).not.toBe(before);
+  });
+});
+
 describe('carcass decay', () => {
   it('decays to soil, slower on mud than on grass', () => {
     const grass = makeWorld({

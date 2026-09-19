@@ -64,6 +64,8 @@ export function growPlants(world) {
   const soil = world.soil;
   const terrain = world.terrain;
   const ledger = world.ledger;
+  const debt = world.debt;
+  const regrowth = world.cfg.regrowth;
 
   for (let i = 0; i < plants.length; i++) {
     const cap = caps[terrain[i]];
@@ -71,7 +73,11 @@ export function growPlants(world) {
 
     const p = plants[i];
     const s = soil[i];
-    const base = growth * L * (1 - p / cap);
+    let base = growth * L * (1 - p / cap);
+    if (regrowth.enabled && debt[i] > 0) {
+      base *= regrowth.debtFactor;
+      debt[i]--;
+    }
     const fromSoil = Math.min(s * uptakeRate, base * soilBoost * s);
     let baseAdj = base;
     let fromSoilAdj = fromSoil;
@@ -184,6 +190,10 @@ export function eatMeal(world, i) {
       const realisedGain = store.energy[i] - beforeE;
       ledger.dissipated += realisedTaken - realisedGain;
       ledger.flows.grazing += realisedTaken;
+
+      if (world.cfg.regrowth.enabled && world.plants[tile] < world.cfg.regrowth.zeroThreshold) {
+        world.debt[tile] = Math.min(65535, world.cfg.regrowth.debtTicks); // world.debt is a Uint16Array; clamp, don't let it wrap.
+      }
     }
   }
 

@@ -230,6 +230,12 @@ export const DEFAULTS = Object.freeze({
     // so a config override to one doesn't silently retune the other.
     chronicleCooldown: 1800,
   }),
+  regrowth: Object.freeze({
+    enabled: true,
+    zeroThreshold: 0.01,
+    debtTicks: 3600,
+    debtFactor: 0.3,
+  }),
   stats: Object.freeze({
     sampleEvery: 30,
     historyLength: 1024,
@@ -865,6 +871,38 @@ export const DOCS = new Map([
       units: 'ticks',
       assumption: true,
       doc: 'Minimum ticks between plague chronicle entries for the same species (SPEC §4.11).',
+    },
+  ],
+  [
+    'regrowth.enabled',
+    {
+      units: 'boolean',
+      assumption: false,
+      doc: 'Master switch for regrowth debt on overgrazed tiles (SPEC §9.1).',
+    },
+  ],
+  [
+    'regrowth.zeroThreshold',
+    {
+      units: 'plant fraction of cap',
+      assumption: true,
+      doc: 'Grazing a tile below this sets its regrowth debt (SPEC §4.9).',
+    },
+  ],
+  [
+    'regrowth.debtTicks',
+    {
+      units: 'ticks',
+      assumption: true,
+      doc: 'How long a tile regrows at the reduced rate after being grazed to zero (SPEC §4.9). Stored in a Uint16 field; clamp overrides to 65535.',
+    },
+  ],
+  [
+    'regrowth.debtFactor',
+    {
+      units: 'multiplier on the growth rate',
+      assumption: true,
+      doc: 'Growth rate multiplier while a tile is in regrowth debt (SPEC §4.9).',
     },
   ],
   [
