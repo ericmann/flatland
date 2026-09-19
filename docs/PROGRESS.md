@@ -1997,7 +1997,7 @@ in isolation, not caused by this task's diff). `npm run test:soak`
 20/20. `npm run headless` output sane, hash unchanged from P4-01's
 baseline (no interventions queued in the default run).
 
-### P4-03 — pending sha
+### P4-03 — 0cd1403
 Goal: the dock's Hand of God tab with six tools that send interventions
 on tap; Rain fires immediately.
 Tests: `test/ui/god-pane.test.js` (new, 3 cases incl. the 3 named,
