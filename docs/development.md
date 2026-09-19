@@ -163,6 +163,24 @@ installable (manifest + service worker, `vite-plugin-pwa`) and runs
 offline after a first load. Part of the phone checklist (`docs/PROGRESS.md`'s
 Phase 4 end log entry).
 
+## Weather and evolution (Phase 5)
+
+Ambient temperature (`world.ambient`) lags a target driven by time of day
+and season and costs organisms metabolic energy in proportion to the gap
+from their genome's preferred temperature; the top bar's season text
+carries a `temp NN%` figure that moves between day and night. Rain and fog
+are rare discrete weather events (SPEC §4.3): rain boosts plant growth for a
+slowly decaying window and fog halves vision range while it lasts, and each
+occurrence writes a chronicle line naming the place. Organisms whose swim
+gene clears `swim.threshold` can cross water at a cost instead of being
+blocked by it, and the first crossing gets its own chronicle line, same as
+the first hunter or the first to take to the night. Breeding gained an
+optional sexual path: a social parent near a mature, sufficiently social
+same-species neighbour produces a child by per-gene crossover of both
+parents rather than a mutated copy of one, and the inspector's family line
+shows `parents #a × #b` when a child has two. Part of the phone checklist
+(`docs/PROGRESS.md`'s Phase 5 end log entry).
+
 ## Module layout
 
 See CLAUDE.md → Module map. `docs/PLAN.md` is the task-by-task build plan;

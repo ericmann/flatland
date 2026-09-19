@@ -68,7 +68,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P5-05 Phase 5 tuning
 - [x] P5-06 Performance pass and `docs/performance.md`
 - [x] P5-07 Blog post draft
-- [ ] P5-08 Phase 5 end — push, preview, phone checks
+- [x] P5-08 Phase 5 end — push, preview, phone checks
 
 ## Log
 (one entry per task, appended by /implement)
@@ -2516,3 +2516,65 @@ not the older P3-10 figures in `test/soak/ecology.test.js`'s comments
 evolved" now, from commands run today.
 Verification: `npm run lint` clean.
 Phone: n/a.
+
+### P5-08 — pending sha
+Goal: close the build — Phase 5 end and the final task of the entire plan:
+a green suite, a pushed branch, and the owed phone checks recorded.
+Verification: `npm run typecheck` clean except the one pre-existing,
+unrelated `test/helpers.js` implicit-`any` error (confirmed via `git
+stash` in P5-06, unchanged); `npm run lint` clean; `npm test` 451/452
+(only the pre-existing throughput-invariant flake — 205 ticks/s vs. the
+required 2000, this session's ongoing heavy background CPU load
+throughout Phase 3 through 5, see P3-10 onward's log, not a regression);
+`npm run test:soak` 20/20 (`test/soak/survival.test.js` and
+`test/soak/ecology.test.js`); `npm run build` clean (359.69 KiB
+precache, under P4-08's 400 kB gzip budget); `npm run test:ui` 33/36
+passed, 2 correctly skipped per-project (desktop's pinch test and
+pixel-7's rail-layout test) on the first run, plus one
+`test/e2e/station.spec.js` renaming test that timed out waiting on the
+chronicle line under this session's heavy CPU load (same class of flake
+as P3-11's), reran in isolation (failed once more the same way, then
+passed cleanly the third time) — not a regression.
+Pinned-seed headless summaries (`npm run headless -- --seed <8|39>
+--ticks 100000`, run fresh this task): seed 8 — 24 alive (12 herbivore,
+1 omnivore, 11 carnivore) across 6 species, 101 born, 183 hunts, 63
+speciations, 130 extinctions, 69 immigrations, diversity 1.388 (avg
+1.519), hash `40ecfa4e`; seed 39 — 20 alive (10 herbivore, 3 omnivore, 7
+carnivore) across 7 species, 79 born, 171 hunts, 54 speciations, 106
+extinctions, 55 immigrations, diversity 1.564 (avg 1.648), hash
+`0381c1e6`. Both hashes are byte-identical to P5-07's blog-post numbers
+run on an unchanged `src/core`, reconfirming determinism rather than
+just reusing the old figures.
+Interpretation: ran `npm run typecheck`, `npm run lint`, `npm test`,
+`npm run test:soak`, `npm run build` and `npm run test:ui` as separate
+invocations rather than the literal `npm run test:all` command — the
+same precedent set in P2-05/P2-12 and followed again in P3-11/P4-10,
+since running `test/soak`'s multi-minute runs inside the same `vitest
+run` invocation as everything else lets it contend for CPU with the
+other suites and spuriously blow their timeouts.
+docs/development.md: added a "Weather and evolution (Phase 5)" section
+(lagged ambient temperature and its metabolic cost, rain/fog weather
+events with chronicle lines, swimming past the water gene threshold and
+its first-crossing chronicle entry, and optional sexual reproduction
+with per-gene crossover and the inspector's `parents #a × #b` line)
+alongside the Phase 2/3/4 station sections, following the same
+paragraph-plus-"part of the phone checklist" pattern.
+README.md: this branch closes every phase in `docs/PLAN.md`, and the
+existing README (from Phase 0) had only the doc-link list and a bare
+quick start, so this task's first real content pass added a short
+what-the-project-is paragraph (deterministic seed-plus-history world;
+sensing, breeding, hunting, weather; idle narration and Hand-of-God
+interventions; installable/offline), a note that the build plan is
+complete on this branch, a link to `docs/blog-post.md`, and the
+Cloudflare Pages preview URL — reusing the same URL, since it deploys
+from this same branch, rather than inventing a separate "production"
+link before `main` has this branch merged into it.
+Preview: `https://build-2026-09-18.flatland.pages.dev` (same branch as
+Phases 1 through 4).
+Push: pushed to `origin/build/2026-09-18`.
+Phone: NOT VERIFIED (human). Checklist for the human to run through on
+the preview URL above: (1) frame time at 16× feels smooth in idle and
+station; (2) install and airplane-mode launch still work; (3) a rain or
+fog line appears within an hour of watching; (4) with the OS
+reduce-motion setting on, the idle camera cuts instead of gliding; (5)
+the temperature figure changes between day and night.
