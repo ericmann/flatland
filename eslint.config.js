@@ -112,7 +112,15 @@ export default [
   {
     files: ['src/core/**/*.js'],
     languageOptions: {
-      globals: Object.fromEntries(CORE_DENYLIST.map((name) => [name, 'off'])),
+      globals: {
+        ...Object.fromEntries(CORE_DENYLIST.map((name) => [name, 'off'])),
+        // Deterministic, wall-clock-free UTF-8 codecs (P4-01's save.js
+        // state buffer), available identically in Node, Workers and the
+        // main thread — unlike the denylist above, these carry no
+        // timing/DOM/network concern.
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly',
+      },
     },
     rules: {
       'no-restricted-properties': ['error', ...noMathRandomDateNow, ...noTranscendentalMath],

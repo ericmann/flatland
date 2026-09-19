@@ -51,7 +51,7 @@ Started: 2026-09-18T15:20:35Z
 - [x] P3-09 Idle POI memory and narrative captions
 - [x] P3-10 Pressure tuning, pinned seeds and the full soak
 - [x] P3-11 Phase 3 end — push, preview, phone checks
-- [ ] P4-01 Save records, state snapshots, restore, and the restore determinism case
+- [x] P4-01 Save records, state snapshots, restore, and the restore determinism case
 - [ ] P4-02 Interventions — every kind in core, replay determinism, ⚡ chronicle
 - [ ] P4-03 Hand of God pane
 - [ ] P4-04 Lineage naming
@@ -1920,3 +1920,43 @@ render as heat without frame drops; (2) charts are readable in the
 170 px dock; (3) chronicle filter chips are tappable; (4) over ten
 minutes of idle, hunt summaries, a famine or plague, and a migration
 appear in the ticker; (5) sick creatures show the marker.
+
+### P4-01 — pending sha
+Goal: `save.js`'s `{seed, configDiff, interventions}` records, full state
+encode/restore, and prove restore-then-continue equals a continuous run.
+Tests: `test/unit/save.test.js` (new, 6 cases incl. the 4 named), `test/unit/config.test.js`
+(+diffConfig/applyDiff round-trip), `test/invariants/determinism.test.js`
+(+restore-at-2500-step-to-5000 case), `test/unit/scheduler.test.js`
+(+2 cases: snapshotState payload shape, load(state) requeues only
+future interventions).
+Design: state buffer is header (Int32x8: magic/version/tick/byteLength/
+sectionCount/width/height/reserved) + 4-byte-aligned `[id,len,bytes]`
+sections — one per HASH_ORDER-adjacent typed array (raw byte copy, ids
+1000+), plus SCALARS (rng.state, famineArmed, lastImmigration*, firsts,
+terrainRerolls, store.count/highWater/nextId, species.n, kill-table
+counts, events/stats ring positions), LEDGER (14 Float64s), COUNTERS
+(packed in `Object.keys(world.counters)` order) and one JSON UTF-8
+blob (chronicle entries+pendingFrom, species names, interventions,
+pending). Excludes pure per-tick scratch (`grid`, brain/attack/birth
+scratch — all cleared+refilled within the same `step()`) and
+`pheno`/`energyMax`/`lifespanTicks`/`maturityTicks`/`breedEnergy`
+(recomputed via `applyPhenotype` post-restore, same reason `hash()`
+excludes them).
+Interpretation: `World.fromState` lives on `world.js` (not monkeypatched
+from save.js) to avoid a real import cycle — save.js takes a `world`
+duck-typed parameter and never imports the `World` class itself.
+`plagues`/`maxSharePct` sweep columns from P3-10 needed no changes here.
+`scheduler._load`'s interventions filter is exactly the task's literal
+spec ("queues only interventions with tick > world.tick") — no
+deduplication against whatever the restored state's own `pending`
+already has, since a state snapshot is documented as a cache and the
+passed-in `interventions` array is the canonical log.
+Config change: `eslint.config.js`'s `src/core` globals gained
+`TextEncoder`/`TextDecoder` (readonly) — needed for the JSON section's
+UTF-8 encoding, available identically in Node/Worker/main-thread, no
+wall-clock/DOM concern like the existing denylist.
+`npm run typecheck && npm run lint && npm test` all green except the
+same pre-existing, unrelated throughput-invariant failure documented in
+P3-10/P3-11's log (this machine's ongoing CPU contention). `npm run
+headless -- --ticks 5000` run twice: identical hash `37b7b48c` both
+times.

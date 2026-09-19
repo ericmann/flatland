@@ -15,6 +15,7 @@ import { World } from '../core/world.js';
 import { runGenesis } from '../core/genesis.js';
 import { queueIntervention } from '../core/interventions.js';
 import { season, dayFraction } from '../core/light.js';
+import { encodeState, encodeRecord } from '../core/save.js';
 import { MSG } from './protocol.js';
 import { snapshotByteLength, encodeSnapshot, SnapshotPool } from './snapshot.js';
 
@@ -90,8 +91,7 @@ export class Scheduler {
         if (this.pool) this.pool.release(msg.buffer);
         break;
       case MSG.SNAPSHOT_STATE:
-        // State snapshot bytes are defined in P4-01; until then, say so.
-        this._post({ type: MSG.STATE_SNAPSHOT, unsupported: true });
+        this._snapshotState();
         break;
       case MSG.HASH:
         this._post({ type: MSG.HASH, hash: this._requireWorld().hash() });
@@ -110,15 +110,24 @@ export class Scheduler {
   }
 
   /**
-   * @param {{ seed: number, config?: *, interventions?: import('../core/interventions.js').InterventionEvent[] }} msg
+   * @param {{ seed: number, config?: *, interventions?: import('../core/interventions.js').InterventionEvent[], state?: ArrayBuffer }} msg
+   *   `state`, when given (SPEC §5.6), restores a cached snapshot instead
+   *   of replaying from genesis; `interventions` is still the full,
+   *   canonical log either way, and any entry with `tick > world.tick`
+   *   (i.e. not yet applied as of the snapshot) is (re)queued.
    * @returns {void}
    */
   _load(msg) {
     const cfg = makeConfig(msg.config ?? {});
-    const world = new World(cfg, msg.seed);
-    runGenesis(world);
+    let world;
+    if (msg.state) {
+      world = World.fromState(cfg, msg.seed, msg.state);
+    } else {
+      world = new World(cfg, msg.seed);
+      runGenesis(world);
+    }
     for (const ev of msg.interventions ?? []) {
-      queueIntervention(world, ev);
+      if (ev.tick > world.tick) queueIntervention(world, ev);
     }
     this.world = world;
 
@@ -204,6 +213,26 @@ export class Scheduler {
   _intervene(event) {
     const world = this._requireWorld();
     queueIntervention(world, { ...event, tick: Math.max(event.tick ?? 0, world.tick + 1) });
+  }
+
+  /**
+   * Encode the current world's full state (SPEC §5.6) and post it,
+   * transferred, alongside its hash, tick and an encoded save record —
+   * everything a caller needs to cache a fast-resume point and verify it
+   * later with a background replay.
+   * @returns {void}
+   */
+  _snapshotState() {
+    const world = this._requireWorld();
+    const state = encodeState(world);
+    const record = encodeRecord({
+      seed: world.seed,
+      config: world.cfg,
+      interventions: world.interventions,
+    });
+    this._post({ type: MSG.STATE_SNAPSHOT, state, hash: world.hash(), tick: world.tick, record }, [
+      state,
+    ]);
   }
 
   /**

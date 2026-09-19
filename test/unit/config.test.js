@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULTS, DOCS, makeConfig, flatten } from '../../src/core/config.js';
+import {
+  DEFAULTS,
+  DOCS,
+  makeConfig,
+  flatten,
+  diffConfig,
+  applyDiff,
+} from '../../src/core/config.js';
 
 describe('makeConfig', () => {
   it('returns defaults when given nothing', () => {
@@ -68,5 +75,26 @@ describe('flatten', () => {
   it('treats arrays as leaf values, not nested paths', () => {
     const flat = flatten({ a: [1, 2, 3] });
     expect(flat.get('a')).toEqual([1, 2, 3]);
+  });
+});
+
+describe('diffConfig / applyDiff', () => {
+  it('diffConfig of DEFAULTS is empty and applyDiff(diffConfig(c)) equals c', () => {
+    expect(diffConfig(makeConfig())).toEqual({});
+
+    const c = makeConfig({
+      world: { width: 64, height: 40 },
+      regrowth: { debtFactor: 0.5, debtTicks: 9000 },
+      pheromone: { decay: [0.9, 0.9, 0.9, 0.9] },
+    });
+    const diff = diffConfig(c);
+    expect(diff).toEqual({
+      'world.width': 64,
+      'world.height': 40,
+      'regrowth.debtFactor': 0.5,
+      'regrowth.debtTicks': 9000,
+      'pheromone.decay': [0.9, 0.9, 0.9, 0.9],
+    });
+    expect(applyDiff(diff)).toEqual(c);
   });
 });

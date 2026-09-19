@@ -41,6 +41,7 @@ import {
   emit as emitPheromone,
 } from './pheromone.js';
 import { diseaseTick, applyNewlySick } from './disease.js';
+import { restoreState } from './save.js';
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
@@ -576,5 +577,21 @@ export class World {
     h = hashUpdate(h, bytesOf(species.count));
     h = hashUpdate(h, bytesOf(species.centroid));
     return h.toString(16).padStart(8, '0');
+  }
+
+  /**
+   * Construct a new `World` and restore it from a state buffer produced
+   * by `save.js`'s `encodeState` (SPEC §5.6, §3.4): the result hashes
+   * identically to the source at the same tick and steps identically
+   * afterwards.
+   * @param {typeof import('./config.js').DEFAULTS} cfg
+   * @param {number} seed
+   * @param {ArrayBuffer} buffer
+   * @returns {World}
+   */
+  static fromState(cfg, seed, buffer) {
+    const world = new World(cfg, seed);
+    restoreState(world, buffer);
+    return world;
   }
 }
