@@ -58,6 +58,35 @@ static-asset directory):
 No COOP/COEP: the design does not rely on `SharedArrayBuffer`, and setting
 those headers would complicate the Android WebView case (SPEC §10).
 
+## Progressive Web App (Phase 4)
+
+`vite-plugin-pwa` (`strategies: 'generateSW'`) precaches the built bundle
+(`workbox.globPatterns`) with `navigateFallback: 'index.html'`, so once a
+build has loaded once, the service worker serves the app shell and every
+asset from its cache on subsequent loads — including with the network
+fully off (airplane mode), since nothing in `src/core`/`src/sim` fetches
+after boot (CLAUDE.md's offline-first rule). `registerType: 'autoUpdate'`
+means a new deployment's worker activates and reloads open tabs onto it
+automatically rather than waiting for every tab to close; `src/main.js`
+registers it itself via `import { registerSW } from
+'virtual:pwa-register'` (`immediate: true`), and `vite.config.js` sets
+`injectRegister: false` so the plugin doesn't also inject its own
+registration.
+
+`scripts/make-icons.mjs` generates the manifest's icon set byte-identically
+on every run: `icon.svg`, `icon-192.png`/`icon-512.png` (purpose `any`) and
+`maskable-512.png` (purpose `maskable`, an 80% safe zone). The manifest
+(name, start URL, the dark-theme `theme_color`/`background_color` from
+SPEC §5.5, and those icons) is injected into `dist/index.html` at build
+time, alongside the `theme-color` meta tag and `apple-touch-icon` link
+`index.html` sets directly. Once the manifest and service worker are both
+served, a Chromium-based browser (desktop or Android) offers "Add to Home
+Screen" / "Install"; the installed app launches standalone, without browser
+chrome, using `theme_color` for the title/status bar. `test/unit/
+bundle-size.test.js` keeps the gzip total (JS+CSS+fonts+`index.html`)
+under a 400 kB budget so the precached, offline footprint stays small.
+Part of the phone checklist (`docs/PROGRESS.md`'s Phase 4 end log entry).
+
 ## CI
 
 `.github/workflows/test.yml` runs on push to `main` and every PR:
