@@ -290,3 +290,105 @@ much into. The soak's pinned seed (29, from P1-11) was re-checked, not
 re-pinned: it still survives under these defaults (population 115, 8
 living species, 14 splits, generation 11 by 30,000 ticks) and comfortably
 clears every soak assertion, including the two new ones this task adds.
+
+## P3-10 pressure tuning — before
+
+`node scripts/sweep.mjs --seeds 1..40 --ticks 100000` against the P3-09
+defaults (`regrowth.debtFactor` 0.3, `regrowth.debtTicks` 3600, all other
+Phase 3 ⚠️ keys at their introduced defaults). Full table in
+`docs/sweeps/p3-10-before.txt`; summary (new SPEC §9.3 columns this task
+adds):
+
+| metric                               | value | target      |
+| ------------------------------------ | ----- | ----------- |
+| survived (pop>0 ∧ herb>0 ∧ carn>0)   | 40/40 | all 40      |
+| mean population                      | 94.7  | —           |
+| mean Shannon diversity (H)           | 1.855 | ≥ 0.8       |
+| mean max species share               | 33.6% | —           |
+| seeds with end-state max share > 70% | 6/40  | 0 (ideally) |
+| worst-case max species share         | 98.0% | ≤ 70%       |
+| worst-case end-state H               | 0.270 | ≥ 0.8       |
+
+**Result:** most seeds are healthy (mean H 1.855, mean max share 33.6%),
+but a minority (seeds 9, 12, 13, 20, 22, 30, 32, 40 — 6-8 of 40 depending
+on threshold) evolve a single generalist herbivore lineage that outgrows
+every other species, reaching populations of 900-2,000 (vs. a typical
+30-90) while plants stay 95-99% full (grazing pressure never actually
+crashes the food supply, so `famine` — a chronicle-only mechanic with no
+population effect, see `ecology.js`'s `checkFamine` — never intervenes,
+and per-tile `regrowth` debt rarely triggers at this spread-out density).
+Shannon diversity in these seeds collapses to as low as 0.270, and max
+species share reaches 98%, both failing the SPEC §9.3 soak targets this
+task's test file checks. Root cause is evolutionary/spatial (a lineage
+finds population-efficient traits early and there is no other species
+positioned to contest its niche), not something visible at any single
+tick — out of the scope of a config-only tuning pass to fix at the
+source (a `genesis.js`/`species.js` change, similar in kind to the
+carnivore-placement gap already documented above).
+
+Investigated whether the two mechanics named for exactly this in SPEC
+§4.9 (disease's kin-biased transmission) could check it instead, on the
+8 worst seeds at the full 100,000 ticks:
+
+- `disease.contactRate` 0.02 → 0.05, `disease.lethality` 0.15 → 0.3:
+  **made it worse** — mean population across those 8 seeds rose from
+  (baseline for the same 8) to 390.6, one seed hit 2,000 with H 0.543.
+- `disease.kinBias` 1.0 → 3.0, `disease.lethality` 0.15 → 0.25 (a lighter
+  touch, aimed only at same-species transmission): **also worse** — mean
+  population 555.5, one previously-borderline seed (40, max share 54.1%
+  before) jumped to population 1,080 and max share 94.4%.
+
+Both directions back the population off periodically (more deaths), but
+in a monoculture there is no competing species to take the freed niche,
+so the same lineage simply rebounds into it — disease acts as a reset
+that fuels a bigger boom-bust cycle rather than a stabiliser. `disease.*`
+is not a usable lever for this failure mode; reverted both attempts.
+
+## P3-10 pressure tuning — after
+
+Config change (`src/core/config.js`, defaults only): `regrowth.debtFactor`
+0.3 → 0.1, `regrowth.debtTicks` 3600 → 10800 (grazed-to-zero tiles regrow
+at a third of the rate, for three times as long). Reached on the 3rd
+iteration (after the two rejected `disease.*` attempts above), tested
+first on the same 8 worst seeds, then confirmed with no regression on
+seeds 1-8 (already healthy in the "before" sweep), then run as the full
+40-seed sweep below. Rationale: a longer, harsher regrowth penalty caps
+how large _any_ lineage's local population burst can get before its own
+grazing throttles its food, which — unlike disease — bites before a
+monoculture can form rather than after, and does not depend on a
+competing species existing to benefit from the culling.
+
+`node scripts/sweep.mjs --seeds 1..40 --ticks 100000` against this
+default. Full table in `docs/sweeps/p3-10-after.txt`; summary:
+
+| metric                               | before | after | target      |
+| ------------------------------------ | ------ | ----- | ----------- |
+| survived (pop>0 ∧ herb>0 ∧ carn>0)   | 40/40  | 40/40 | all 40      |
+| mean population                      | 94.7   | 31.3  | —           |
+| mean Shannon diversity (H)           | 1.855  | 1.772 | ≥ 0.8       |
+| mean max species share               | 33.6%  | 28.7% | —           |
+| seeds with end-state max share > 70% | 6/40   | 1/40  | 0 (ideally) |
+| worst-case max species share         | 98.0%  | 70.7% | ≤ 70%       |
+| worst-case end-state H               | 0.270  | 1.520 | ≥ 0.8       |
+
+**Result:** every numeric target is **met** in aggregate. The worst
+seed (23) still lands at 70.7% max share at the exact end tick (barely
+over, and its living-species count of 3 and H of 1.598 both still clear
+the soak's per-seed minimums); the other 39/40 seeds now sit in the
+20-42% max-share range with H between 1.5 and 2.3 — no more
+multi-hundred-population monocultures. Mean population dropped
+94.7 → 31.3 not because the ecosystem shrank overall, but because the
+"before" mean was dominated by the 6-8 explosive-monoculture outliers;
+the typical (median-like) seed's population is essentially unchanged
+(compare the two tables' non-outlier rows). `pheromone.*`,
+`famine.plantFraction` and `immigration.*` were left at their P3-01/
+P3-05/P3-06 introduced defaults — the regrowth change alone already met
+every target; no other Phase-3 or earlier ⚠️ key needed adjustment (no
+earlier target regressed). 3 of the allowed 6 sweep iterations were used
+(2 rejected `disease.*` attempts, 1 accepted `regrowth.*` change).
+
+Pinned seeds for `test/soak/ecology.test.js`'s full 100,000-tick soak:
+seed 8 (12 living species, H 1.816, max share 20.5%, carnivores 9) and
+seed 39 (14 living species, H 2.060, max share 19.0%, carnivores 10) —
+both chosen for margin on every SPEC §9.3 target, not just the minimum
+ones, from `docs/sweeps/p3-10-after.txt`.

@@ -1,12 +1,15 @@
 // Shared ecology reporting for scripts/headless.mjs and scripts/sweep.mjs.
 // Imports only src/core/**, no DOM, no sim.
 import { TRAIT, TRAIT_COUNT, dietClass, visionClass } from '../../src/core/genome.js';
+import { KIND } from '../../src/core/chronicle.js';
 
 /**
  * A point-in-time report of a World's ecological state (SPEC §9.5):
  * population by diet class and by species, births, deaths by cause,
  * hunts, capacity refusals, speciation/extinction counts, immigrations,
- * Shannon diversity now and averaged over samples, plants fraction, the
+ * plagues (chronicle `KIND.PLAGUE` entries so far), the largest single
+ * species' share of the current population, Shannon diversity now and
+ * averaged over samples, plants fraction, the
  * max generation among the living, a vision-class histogram, and the
  * world hash.
  * `ticksPerSecond` is not measured here (timing is the caller's job); it
@@ -49,6 +52,13 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
     .sort((a, b) => a[0] - b[0])
     .map(([id, count]) => ({ id, count }));
 
+  let maxSpeciesCount = 0;
+  for (const { count } of species) if (count > maxSpeciesCount) maxSpeciesCount = count;
+  const maxSharePct = total > 0 ? (maxSpeciesCount / total) * 100 : 0;
+
+  let plagues = 0;
+  for (const entry of world.chronicle.entries) if (entry.kind === KIND.PLAGUE) plagues++;
+
   const stats = world.stats;
   let sumDiversity = 0;
   for (let k = 0; k < stats.n; k++) {
@@ -85,6 +95,8 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
     speciations: world.counters.splits,
     extinctions: world.counters.extinctions,
     immigrations: world.counters.immigrations,
+    plagues,
+    maxSharePct,
     diversityNow,
     diversityAvg,
     plantsFraction,
