@@ -2363,7 +2363,7 @@ ongoing CPU contention, see P3-10 onward's log, not a regression);
 identical across two runs.
 Phone: n/a.
 
-### P5-03 — pending sha
+### P5-03 — 39f3452
 Goal: let organisms with a high swim gene cross water at a cost, and
 chronicle the first crossing (SPEC §4.2, §4.11). `act()` gates the
 P1-06 water block on `pheno.swim >= swim.threshold`; a swimmer standing
