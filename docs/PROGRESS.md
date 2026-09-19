@@ -1550,7 +1550,7 @@ and `genome.test.js` both assert every `DEFAULTS` leaf has a `DOCS`
 entry, including `.enabled` keys (`predation.enabled` etc. already do)
 — missed adding `pheromone.enabled`'s entry on the first pass; added it.
 
-### P3-02 — pending sha (see commit)
+### P3-02 — f0bd0e8
 Tests: `test/unit/lens-layer.test.js` (+4: strongest-enabled-channel-wins
 with alpha scaling, a fully-disabled tile stays transparent, alpha caps
 at 255, no `pher` data means every tile is transparent). `test/ui/
