@@ -248,14 +248,25 @@ describe('terrain inputs', () => {
     expect(inputs[INPUT.bias]).toBe(1);
   });
 
-  it('pheromone inputs are 0 (wired in P3-01)', () => {
+  it('pheromone input is positive when the channel is stronger ahead and scales with the sense gene', () => {
     const world = bareWorld();
-    const slot = makeOrganism(world, { x: 20, y: 20, traits: {} });
+    const slot = makeOrganism(world, { x: 20, y: 20, traits: { sense0: 1 } });
+    world.store.heading[slot] = 0; // facing +x: ahead is (22, 20), behind is (18, 20).
+    world.pher[0][20 * 40 + 22] = 0.1;
+    world.pher[0][20 * 40 + 18] = 0;
+
     const inputs = rebuildAndGather(world, slot);
-    expect(inputs[INPUT.pher0]).toBe(0);
-    expect(inputs[INPUT.pher1]).toBe(0);
-    expect(inputs[INPUT.pher2]).toBe(0);
-    expect(inputs[INPUT.pher3]).toBe(0);
+    const expectedFull = 1 * 0.1 * world.cfg.pheromone.senseGain;
+    expect(inputs[INPUT.pher0]).toBeGreaterThan(0);
+    expect(inputs[INPUT.pher0]).toBeCloseTo(expectedFull, 5);
+
+    // Half the sense gene halves the input (still well under the [-1,1] clamp).
+    const half = makeOrganism(world, { x: 20, y: 25, traits: { sense0: 0.5 } });
+    world.store.heading[half] = 0;
+    world.pher[0][25 * 40 + 22] = 0.1;
+    world.pher[0][25 * 40 + 18] = 0;
+    const inputsHalf = rebuildAndGather(world, half);
+    expect(inputsHalf[INPUT.pher0]).toBeCloseTo(expectedFull / 2, 5);
   });
 });
 

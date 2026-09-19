@@ -39,6 +39,7 @@ export const FLAG_TERRAIN = 1;
 export const FLAG_PHEROMONE = 2;
 export const FLAG_SELECTED = 4;
 export const FLAG_EVENTS = 8;
+export const FLAG_SPECIES = 16;
 
 /**
  * @typedef {Object} LoadPayload

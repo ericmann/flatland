@@ -36,6 +36,8 @@ export class SpeciesTable {
     this.dietClassAtBirth = new Uint8Array(capacity);
     /** @type {string[]} */
     this.names = [];
+    /** 1 = created/extinct/renamed since the sim last posted a phylogeny event (P2-06); the scheduler clears bits after posting. */
+    this.dirty = new Uint8Array(capacity);
   }
 
   /**
@@ -66,12 +68,14 @@ export class SpeciesTable {
     const cfg = world.cfg;
     const cls = dietClass(traitValue(cfg, genome[traitsOff + TRAIT.diet], TRAIT.diet));
     this.dietClassAtBirth[id] = DIET_CODE[cls];
+    this.hue[id] = traitValue(cfg, genome[traitsOff + TRAIT.hue], TRAIT.hue);
 
     const ix = Math.min(world.width - 1, Math.max(0, Math.floor(x)));
     const iy = Math.min(world.height - 1, Math.max(0, Math.floor(y)));
     const terrainType = world.terrain[iy * world.width + ix];
     this.names[id] = speciesName(this, cls, terrainType, id);
 
+    this.dirty[id] = 1;
     return id;
   }
 
@@ -145,6 +149,7 @@ export class SpeciesTable {
     if (this.count[id] > 0) return;
 
     this.died[id] = world.tick;
+    this.dirty[id] = 1;
     world.counters.extinctions++;
     const place = regionName(
       store.x[slot],

@@ -5,7 +5,12 @@ import {
   decodeSnapshot,
   SnapshotPool,
 } from '../../src/sim/snapshot.js';
-import { FLAG_TERRAIN, FLAG_PHEROMONE, FLAG_SELECTED } from '../../src/sim/protocol.js';
+import {
+  FLAG_TERRAIN,
+  FLAG_PHEROMONE,
+  FLAG_SELECTED,
+  FLAG_SPECIES,
+} from '../../src/sim/protocol.js';
 import { makeWorld, stepN } from '../helpers.js';
 
 function smallWorld(seed = 1) {
@@ -92,7 +97,7 @@ describe('snapshot', () => {
     expect(snap.selectedSlot).toBe(livingSlot);
     expect(snap.selected).toBeDefined();
     const gLen = store.genomeLength;
-    expect(snap.selected.length).toBe(gLen + 17 + 8 + 12);
+    expect(snap.selected.length).toBe(gLen + 17 + 8 + 12 + 5); // +5 family scalars (P2-06)
     expect(Array.from(snap.selected.subarray(0, gLen))).toEqual(
       Array.from(store.genome.subarray(livingSlot * gLen, livingSlot * gLen + gLen)),
     );
@@ -114,6 +119,85 @@ describe('snapshot', () => {
     stepN(world, 1);
     encodeSnapshot(world, buffer, { flags: 0 });
     expect(buffer).toBe(before);
+  });
+
+  it('FLAG_SPECIES includes one row per species', () => {
+    const world = smallWorld();
+    stepN(world, 50);
+    const buffer = new ArrayBuffer(snapshotByteLength(world.cfg));
+
+    encodeSnapshot(world, buffer, { flags: 0 });
+    expect(decodeSnapshot(buffer).species).toBeUndefined();
+
+    encodeSnapshot(world, buffer, { flags: FLAG_SPECIES });
+    const snap = decodeSnapshot(buffer);
+    expect(snap.species).toBeDefined();
+    expect(snap.species.n).toBe(world.species.n);
+    expect(world.species.n).toBeGreaterThan(0);
+    for (let id = 0; id < world.species.n; id++) {
+      expect(snap.species.ancestor[id]).toBe(world.species.ancestor[id]);
+      expect(snap.species.born[id]).toBe(world.species.born[id]);
+      expect(snap.species.died[id]).toBe(world.species.died[id]);
+      expect(snap.species.count[id]).toBe(world.species.count[id]);
+      expect(snap.species.hue[id]).toBeCloseTo(world.species.hue[id], 4);
+    }
+  });
+
+  it('the selected record carries family counts computed from the store', () => {
+    const world = makeWorld({ seed: 1, config: { breeding: { baseRate: 1 } } });
+    const store = world.store;
+    let bred = -1;
+    for (let t = 0; t < 3000 && bred === -1; t++) {
+      world.step();
+      for (let i = 0; i < store.highWater; i++) {
+        if (store.alive[i] && store.parent[i] !== 0) {
+          bred = i;
+          break;
+        }
+      }
+    }
+    expect(bred).toBeGreaterThanOrEqual(0); // a real birth happened within the budget
+
+    const bredId = store.id[bred];
+    const bredParentId = store.parent[bred];
+    let expectedSiblings = 0;
+    for (let i = 0; i < store.highWater; i++) {
+      if (store.alive[i] && store.id[i] !== bredId && store.parent[i] === bredParentId) {
+        expectedSiblings++;
+      }
+    }
+    const speciesId = store.species[bred];
+
+    const buffer = new ArrayBuffer(snapshotByteLength(world.cfg));
+    encodeSnapshot(world, buffer, { flags: FLAG_SELECTED, selectedId: bredId });
+    const snap = decodeSnapshot(buffer);
+    const gLen = store.genomeLength;
+    const familyStart = gLen + 17 + 8 + 12;
+
+    expect(snap.selected[familyStart]).toBe(store.offspring[bred]);
+    expect(snap.selected[familyStart + 1]).toBe(expectedSiblings);
+    expect(snap.selected[familyStart + 2]).toBe(world.species.count[speciesId]);
+    expect(snap.selected[familyStart + 3]).toBe(world.species.born[speciesId]);
+    expect(snap.selected[familyStart + 4]).toBe(world.species.ancestor[speciesId]);
+  });
+
+  it('social flag bit set when sociality > 0.6', () => {
+    const world = makeWorld({
+      width: 16,
+      height: 12,
+      seed: 1,
+      organisms: [
+        { x: 5, y: 5, traits: { sociality: 0.9 } },
+        { x: 6, y: 6, traits: { sociality: 0.3 } },
+      ],
+    });
+    const buffer = new ArrayBuffer(snapshotByteLength(world.cfg));
+    encodeSnapshot(world, buffer, { flags: 0 });
+    const snap = decodeSnapshot(buffer);
+
+    const SOCIAL_BIT = 1 << 5;
+    expect(snap.orgs.flagsByte[0] & SOCIAL_BIT).not.toBe(0);
+    expect(snap.orgs.flagsByte[1] & SOCIAL_BIT).toBe(0);
   });
 
   it('pool refuses a third acquire until a release', () => {

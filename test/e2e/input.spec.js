@@ -76,6 +76,8 @@ test('key 2 shows 4× active in the cluster', async ({ page }) => {
   await waitForApp(page);
 
   await page.keyboard.press('2');
-  await expect(page.locator('[data-sp="4"]')).toHaveClass(/\bon\b/);
+  // Scoped to the floating cluster (P2-08 gave the top bar its own
+  // `[data-sp]` speed group too, so the bare selector is now ambiguous).
+  await expect(page.locator('#hud [data-sp="4"]')).toHaveClass(/\bon\b/);
   expect(await page.evaluate(() => window.__flatland.speed)).toBe(4);
 });

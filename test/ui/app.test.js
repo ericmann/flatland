@@ -96,6 +96,19 @@ describe('createApp', () => {
     expect(window.__flatland.mode).toBe('idle');
   });
 
+  it('station mode adds the chrome and idle removes it', () => {
+    const { root, app } = setup();
+    expect(root.classList.contains('idle')).toBe(true);
+
+    app.setMode('station');
+    expect(root.classList.contains('station')).toBe(true);
+    expect(root.classList.contains('idle')).toBe(false);
+
+    app.setMode('idle');
+    expect(root.classList.contains('idle')).toBe(true);
+    expect(root.classList.contains('station')).toBe(false);
+  });
+
   it('hidden document pauses the sim and visible resumes it', () => {
     const { sim } = setup();
     Object.defineProperty(document, 'hidden', { value: true, configurable: true });

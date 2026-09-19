@@ -32,6 +32,11 @@ import { forward } from './brain.js';
 import { Chronicle } from './chronicle.js';
 import { Stats } from './stats.js';
 import { SpeciesTable } from './species.js';
+import {
+  decay as decayPheromone,
+  diffuse as diffusePheromone,
+  emit as emitPheromone,
+} from './pheromone.js';
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
@@ -225,13 +230,15 @@ export class World {
     this.plants = new Float32Array(total);
     this.carcass = new Float32Array(total);
     this.soil = new Float32Array(total);
-    /** Four pheromone channels (SPEC §4.8), zero until P3-01 wires emission/decay. */
+    /** Four pheromone channels (SPEC §4.8): decay/diffuse/emit in `pheromone.js`. */
     this.pher = [
       new Float32Array(total),
       new Float32Array(total),
       new Float32Array(total),
       new Float32Array(total),
     ];
+    /** Shared diffusion scratch (P3-01): `diffuse()` writes here, then copies back, per channel — never swaps buffers. */
+    this.pherScratch = new Float32Array(total);
 
     /** The energy conservation ledger (SPEC §4.4). */
     this.ledger = new Ledger();
@@ -312,6 +319,10 @@ export class World {
     applyDue(this);
     growPlants(this);
     decayCarcasses(this);
+    decayPheromone(this);
+    if (this.tick % this.cfg.pheromone.diffuseEvery === 0) {
+      diffusePheromone(this);
+    }
 
     this.grid.rebuild(this.store);
     for (let i = 0; i < this.store.highWater; i++) {
@@ -333,6 +344,7 @@ export class World {
       }
       reflexLayer(this, i);
       act(this, i);
+      emitPheromone(this, i);
       // Eating and predation-target-finding slot in here (SPEC §6.3,
       // "Eating and predation slot into act in P1-07"); implemented in
       // ecology.js (not reflex.js's act()) since only ecology.js is in

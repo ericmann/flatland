@@ -5,9 +5,10 @@ import { TRAIT, TRAIT_COUNT, dietClass, visionClass } from '../../src/core/genom
 /**
  * A point-in-time report of a World's ecological state (SPEC §9.5):
  * population by diet class and by species, births, deaths by cause,
- * hunts, capacity refusals, speciation/extinction counts (0 until P2-04),
- * immigrations, Shannon diversity now and averaged over samples, plants
- * fraction, a vision-class histogram of the living, and the world hash.
+ * hunts, capacity refusals, speciation/extinction counts, immigrations,
+ * Shannon diversity now and averaged over samples, plants fraction, the
+ * max generation among the living, a vision-class histogram, and the
+ * world hash.
  * `ticksPerSecond` is not measured here (timing is the caller's job); it
  * is threaded through as a parameter so this stays a pure function of
  * `world` plus whatever the caller already measured.
@@ -22,6 +23,7 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
   let herbivore = 0;
   let omnivore = 0;
   let carnivore = 0;
+  let maxGeneration = 0;
   const visionHistogram = { nocturnal: 0, crepuscular: 0, diurnal: 0 };
   /** @type {Map<number, number>} */
   const bySpecies = new Map();
@@ -37,6 +39,7 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
     else omnivore++;
 
     visionHistogram[visionClass(store.pheno[pOff + TRAIT.visionPeak])]++;
+    if (store.generation[i] > maxGeneration) maxGeneration = store.generation[i];
 
     const sp = store.species[i];
     bySpecies.set(sp, (bySpecies.get(sp) ?? 0) + 1);
@@ -85,6 +88,7 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
     diversityNow,
     diversityAvg,
     plantsFraction,
+    maxGeneration,
     visionHistogram,
     ticksPerSecond,
     hash: world.hash(),

@@ -18,7 +18,7 @@ import {
   dietClass,
   visionClass,
 } from '../core/genome.js';
-import { FLAG_TERRAIN, FLAG_PHEROMONE, FLAG_SELECTED } from './protocol.js';
+import { FLAG_TERRAIN, FLAG_PHEROMONE, FLAG_SELECTED, FLAG_SPECIES } from './protocol.js';
 
 const MAGIC = 0x464c4154; // 'FLAT'
 const VERSION = 1;
@@ -48,9 +48,11 @@ const H_BYTE_LENGTH = 17;
 const H_EVENTS_COUNT = 18;
 const H_ACHIEVED_TPS_X100 = 19;
 const H_SPEED_X1000 = 20;
-// 21-23 reserved (always zero).
+const H_OFF_SPECIES = 21;
+const H_SPECIES_COUNT = 22;
+// 23 reserved (always zero).
 
-/** `flagsByte` bit layout for one organism (SPEC §6.4): bit 0 sick, bits 1-2 dietClass, bits 3-4 visionClass. */
+/** `flagsByte` bit layout for one organism (SPEC §6.4): bit 0 sick, bits 1-2 dietClass, bits 3-4 visionClass, bit 5 social (sociality > 0.6). */
 const DIET_CODE = Object.freeze({ herbivore: 0, omnivore: 1, carnivore: 2 });
 const VISION_CODE = Object.freeze({ nocturnal: 0, crepuscular: 1, diurnal: 2 });
 
@@ -65,17 +67,24 @@ function align4(offset) {
   return (offset + 3) & ~3;
 }
 
+/** Number of family-record scalars appended after the original 12 trailing scalars (P2-06): offspring, livingSiblings, livingKin, speciesBorn, speciesAncestor. */
+const FAMILY_SCALARS = 5;
+
 /**
  * The selected-organism record's element count: genome, then the 17
  * brain inputs, then the 8 brain outputs, then 12 trailing scalars
  * (energy, energyMax, age, lifespanTicks, x, y, heading, species,
- * generation, parentId, sick, body).
+ * generation, parentId, sick, body), then 5 family-record scalars (P2-06:
+ * offspring, livingSiblings, livingKin, speciesBorn, speciesAncestor).
  * @param {typeof import('../core/config.js').DEFAULTS} cfg
  * @returns {number}
  */
 function selectedRecordLength(cfg) {
-  return genomeLength(cfg) + BRAIN_INPUTS + BRAIN_OUTPUTS + 12;
+  return genomeLength(cfg) + BRAIN_INPUTS + BRAIN_OUTPUTS + 12 + FAMILY_SCALARS;
 }
+
+/** Bytes per species-table row (P2-06): ancestor, born, died, count (Int32) then hue (Float32). */
+const SPECIES_ROW_BYTES = 20;
 
 /**
  * The worst-case byte length of a snapshot for `cfg`: full population, and
@@ -96,6 +105,7 @@ export function snapshotByteLength(cfg) {
   const pheromoneBytes = tiles * 4 * 4; // 4 channels, Float32
   const selectedBytes = selectedRecordLength(cfg) * 4; // Float32
   const eventsBytes = EVENTS_CAPACITY * 6 * 4; // Int32, 6 fields/event
+  const speciesBytes = cfg.world.maxSpecies * SPECIES_ROW_BYTES;
 
   let offset = HEADER_BYTES;
   offset = align4(offset + orgsBytes);
@@ -105,6 +115,7 @@ export function snapshotByteLength(cfg) {
   offset = align4(offset + pheromoneBytes);
   offset = align4(offset + selectedBytes);
   offset = align4(offset + eventsBytes);
+  offset = align4(offset + speciesBytes);
   return offset;
 }
 
@@ -187,7 +198,8 @@ export function encodeSnapshot(world, buffer, opts) {
     );
     const diet = DIET_CODE[dietClass(store.pheno[pOff + TRAIT.diet])];
     const vision = VISION_CODE[visionClass(store.pheno[pOff + TRAIT.visionPeak])];
-    orgFlagsByte[w] = (store.sick[i] > 0 ? 1 : 0) | (diet << 1) | (vision << 3);
+    const social = store.pheno[pOff + TRAIT.sociality] > 0.6 ? 1 : 0;
+    orgFlagsByte[w] = (store.sick[i] > 0 ? 1 : 0) | (diet << 1) | (vision << 3) | (social << 5);
     orgHeading[w] = Math.max(-127, Math.min(127, Math.round((store.heading[i] / Math.PI) * 127)));
     if (selectedId !== 0 && store.id[i] === selectedId) selectedSlot = i;
     w++;
@@ -244,7 +256,28 @@ export function encodeSnapshot(world, buffer, opts) {
     rec[k++] = store.generation[selectedSlot];
     rec[k++] = store.parent[selectedSlot];
     rec[k++] = store.sick[selectedSlot];
-    rec[k] = store.body[selectedSlot];
+    rec[k++] = store.body[selectedSlot];
+
+    // Family record (P2-06): offspring and speciesBorn/speciesAncestor
+    // are direct field reads; livingKin is the species table's own
+    // incrementally-maintained count. livingSiblings needs a dedicated
+    // pass over living slots (there is no sibling index), done here since
+    // it only matters when a selection exists.
+    const selectedParentId = store.parent[selectedSlot];
+    const selectedId2 = store.id[selectedSlot];
+    let livingSiblings = 0;
+    for (let i = 0; i < store.highWater; i++) {
+      if (!store.alive[i] || store.id[i] === selectedId2) continue;
+      if (store.parent[i] === selectedParentId) livingSiblings++;
+    }
+    const speciesId = store.species[selectedSlot];
+
+    rec[k++] = store.offspring[selectedSlot];
+    rec[k++] = livingSiblings;
+    rec[k++] = world.species.count[speciesId];
+    rec[k++] = world.species.born[speciesId];
+    rec[k] = world.species.ancestor[speciesId];
+
     offset += selectedRecordLength(cfg) * 4;
   }
 
@@ -266,6 +299,32 @@ export function encodeSnapshot(world, buffer, opts) {
     eventsView[base + 5] = ev.b[idx];
   }
   offset += eventsCount * 6 * 4;
+
+  // --- species table (only when FLAG_SPECIES): one row per species ever
+  // created (SPEC §4.9-4.10), oldest first, matching creation order ---
+  offset = align4(offset);
+  const speciesOffset = offset;
+  const speciesTable = world.species;
+  const speciesCount = flags & FLAG_SPECIES ? speciesTable.n : 0;
+  if (speciesCount > 0) {
+    const spAncestor = new Int32Array(buffer, offset, speciesCount);
+    offset += speciesCount * 4;
+    const spBorn = new Int32Array(buffer, offset, speciesCount);
+    offset += speciesCount * 4;
+    const spDied = new Int32Array(buffer, offset, speciesCount);
+    offset += speciesCount * 4;
+    const spCount = new Int32Array(buffer, offset, speciesCount);
+    offset += speciesCount * 4;
+    const spHue = new Float32Array(buffer, offset, speciesCount);
+    offset += speciesCount * 4;
+    for (let id = 0; id < speciesCount; id++) {
+      spAncestor[id] = speciesTable.ancestor[id];
+      spBorn[id] = speciesTable.born[id];
+      spDied[id] = speciesTable.died[id];
+      spCount[id] = speciesTable.count[id];
+      spHue[id] = speciesTable.hue[id];
+    }
+  }
 
   // --- header ---
   const lightBits = new Int32Array(new Float32Array([world.light]).buffer)[0];
@@ -290,8 +349,8 @@ export function encodeSnapshot(world, buffer, opts) {
   header[H_EVENTS_COUNT] = eventsCount;
   header[H_ACHIEVED_TPS_X100] = Math.round(tps * 100);
   header[H_SPEED_X1000] = Math.round(speed * 1000);
-  header[21] = 0;
-  header[22] = 0;
+  header[H_OFF_SPECIES] = speciesOffset;
+  header[H_SPECIES_COUNT] = speciesCount;
   header[23] = 0;
 
   return offset;
@@ -353,6 +412,20 @@ export function decodeSnapshot(buffer) {
   const eventsCount = header[H_EVENTS_COUNT];
   const events = new Int32Array(buffer, header[H_OFF_EVENTS], eventsCount * 6);
 
+  let species;
+  const speciesCount = header[H_SPECIES_COUNT];
+  if (flags & FLAG_SPECIES && speciesCount > 0) {
+    let spOff = header[H_OFF_SPECIES];
+    species = {
+      n: speciesCount,
+      ancestor: new Int32Array(buffer, spOff, speciesCount),
+      born: new Int32Array(buffer, (spOff += speciesCount * 4), speciesCount),
+      died: new Int32Array(buffer, (spOff += speciesCount * 4), speciesCount),
+      count: new Int32Array(buffer, (spOff += speciesCount * 4), speciesCount),
+      hue: new Float32Array(buffer, spOff + speciesCount * 4, speciesCount),
+    };
+  }
+
   const light = new Float32Array(new Int32Array([header[H_LIGHT_BITS]]).buffer)[0];
 
   return {
@@ -377,6 +450,7 @@ export function decodeSnapshot(buffer) {
     pher,
     selected,
     events,
+    species,
   };
 }
 

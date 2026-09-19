@@ -10,9 +10,497 @@ body {
   color: var(--text);
 }
 
+/* Full palette (SPEC §5.5, docs/mockup.html :root). */
+:root {
+  --ground: #0e1410;
+  --panel: #151d18;
+  --panel2: #1c2620;
+  --line: #2b3a30;
+  --line2: #3a4d40;
+  --text: #d9d4c0;
+  --muted: #8e9788;
+  --dim: #5f6a60;
+  --sun: #e3a83a;
+  --sun-soft: rgba(227, 168, 58, 0.18);
+  --crit: #d8573f;
+  --good: #7fbb6a;
+  --warn: #d9a441;
+  --pherA: #48c2d8;
+  --pherB: #d85cb5;
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --pixel: 'Silkscreen', 'IBM Plex Mono', monospace;
+}
+
+/* Station chrome grid (SPEC §5.1, §5.2, docs/mockup.html #app). `#app`'s
+   own `idle`/`station` mode class is set by `app.js`; collapsing to the
+   idle ant-farm view is purely this grid shrinking rail/insp/top/dock to
+   zero, per the mockup. */
 #app {
   height: 100%;
+  display: grid;
+  grid-template-columns: 200px 1fr 300px;
+  grid-template-rows: 44px 1fr 190px;
+  grid-template-areas: 'top top top' 'rail world insp' 'dock dock dock';
+  transition:
+    grid-template-rows 0.25s,
+    grid-template-columns 0.25s;
+}
+#app.idle {
+  grid-template-columns: 0 1fr 0;
+  grid-template-rows: 0 1fr 0;
+}
+#app.idle .chrome {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+.chrome {
+  background: var(--panel);
+  transition: opacity 0.2s;
   position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+#top {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  padding-top: env(safe-area-inset-top);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+}
+#top .brand {
+  font: 700 13px var(--pixel);
+  letter-spacing: 0.04em;
+  color: var(--sun);
+}
+#top .seed {
+  font: 12px var(--mono);
+  color: var(--muted);
+}
+.clock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 13px var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.clock .season {
+  color: var(--muted);
+}
+.clock svg {
+  width: 40px;
+  height: 22px;
+  display: block;
+}
+.pop {
+  display: flex;
+  gap: 12px;
+  font: 12px var(--mono);
+  color: var(--muted);
+  margin-left: auto;
+}
+.pop b {
+  color: var(--text);
+  font-weight: 500;
+}
+.speed {
+  display: flex;
+  border: 1px solid var(--line2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.speed button {
+  padding: 4px 9px;
+  font: 12px var(--mono);
+  color: var(--muted);
+}
+.speed button.on {
+  background: var(--panel2);
+  color: var(--text);
+}
+.tbtn {
+  padding: 5px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 4px;
+  font: 12px var(--mono);
+  color: var(--muted);
+}
+.tbtn:hover,
+.tbtn.on {
+  color: var(--text);
+  border-color: var(--sun);
+  background: var(--sun-soft);
+}
+
+#rail {
+  grid-area: rail;
+  border-right: 1px solid var(--line);
+  padding: 12px 12px;
+  overflow: auto;
+}
+
+#world {
+  grid-area: world;
+  position: relative;
+  background: #050806;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+#insp {
+  grid-area: insp;
+  border-left: 1px solid var(--line);
+  overflow: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Lens rail sections (P2-09) and the inspector's own sections (P2-10)
+   share this heading style. */
+.sec h3 {
+  margin: 0 0 8px;
+  font: 11px var(--pixel);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.chips {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font: 12px var(--mono);
+  color: var(--muted);
+  text-align: left;
+  width: 100%;
+}
+.chip:hover,
+.chip.on {
+  background: var(--panel2);
+  color: var(--text);
+}
+.chip .sw {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--line2);
+  flex: none;
+}
+.chip.on .sw {
+  box-shadow: 0 0 0 1px var(--text) inset;
+}
+.chip .k {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 10px;
+}
+.legend {
+  font: 11px var(--mono);
+  color: var(--dim);
+  line-height: 1.6;
+}
+.legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+
+#insp .empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+#insp .empty h3 {
+  margin: 0 0 6px;
+  font: 11px var(--pixel);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.portrait {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.portrait canvas {
+  width: 72px;
+  height: 72px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  image-rendering: pixelated;
+  flex: none;
+}
+.who .name {
+  font: 700 13px var(--pixel);
+  letter-spacing: 0.02em;
+}
+.who .name input {
+  background: none;
+  border: 0;
+  border-bottom: 1px dashed var(--line2);
+  color: var(--text);
+  font: inherit;
+  width: 150px;
+  padding: 0;
+}
+.who .sub {
+  font: 11px var(--mono);
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+.who .diet {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--line2);
+}
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  font: 12px var(--mono);
+  align-items: center;
+}
+.kv span {
+  color: var(--muted);
+}
+.bar {
+  height: 6px;
+  background: var(--panel2);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.bar i {
+  position: absolute;
+  inset: 0;
+  right: auto;
+  background: var(--good);
+}
+.bar i.e {
+  background: var(--sun);
+}
+.bar i.a {
+  background: var(--muted);
+}
+.brain {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  font: 11px var(--mono);
+  align-items: center;
+}
+.brain span {
+  color: var(--muted);
+}
+.brain .bar {
+  height: 5px;
+}
+.brain .bar i {
+  background: var(--pherA);
+}
+.glyph {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.glyph canvas {
+  width: 110px;
+  height: 110px;
+  flex: none;
+}
+.glyph ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 10px var(--mono);
+  color: var(--dim);
+  line-height: 1.6;
+}
+.tree {
+  font: 11px var(--mono);
+  color: var(--muted);
+  line-height: 1.6;
+  white-space: pre-line;
+}
+.tree b {
+  color: var(--text);
+  font-weight: 500;
+}
+.row {
+  display: flex;
+  gap: 8px;
+}
+.row .tbtn {
+  flex: 1;
+  text-align: center;
+}
+
+#dock {
+  grid-area: dock;
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+  display: grid;
+  grid-template-rows: 32px 1fr;
+  min-height: 0;
+}
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  padding: 0 8px;
+  gap: 2px;
+  align-items: stretch;
+}
+.tabs button {
+  padding: 0 12px;
+  font: 11px var(--pixel);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+.tabs button.on {
+  color: var(--text);
+  border-color: var(--sun);
+}
+.tabs .sp {
+  flex: 1;
+}
+.pane {
+  overflow: auto;
+  min-height: 0;
+}
+#dock > .pane:not(.on) {
+  display: none;
+}
+#chron {
+  font: 12px var(--mono);
+  padding: 8px 14px;
+}
+#chron div {
+  display: flex;
+  gap: 12px;
+  padding: 2px 0;
+  border-bottom: 1px dashed var(--line);
+}
+#chron .t {
+  color: var(--dim);
+  flex: none;
+  width: 118px;
+  font-variant-numeric: tabular-nums;
+}
+#chron .god {
+  color: var(--sun);
+}
+#chron .ext {
+  color: var(--crit);
+}
+#chron .spl {
+  color: var(--good);
+}
+#phylo {
+  padding: 6px 10px;
+  height: 100%;
+}
+#phylo svg {
+  width: 100%;
+  height: 100%;
+  font: 10px var(--mono);
+}
+#phylo line.branch {
+  stroke: var(--good);
+  cursor: pointer;
+}
+#phylo line.branch.hi {
+  stroke: var(--sun);
+}
+#phylo line.link {
+  stroke: var(--dim);
+}
+#phylo text {
+  fill: var(--muted);
+}
+#charts,
+#god {
+  padding: 10px 14px;
+  color: var(--muted);
+  font: 12px var(--mono);
+}
+
+@media (max-width: 900px) {
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 44px auto 1fr 170px;
+    grid-template-areas: 'top' 'rail' 'world' 'dock';
+  }
+  #app.idle {
+    grid-template-columns: 1fr;
+    grid-template-rows: 0 0 1fr 0;
+  }
+  #rail {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    flex-direction: row;
+    padding: 8px 12px;
+    gap: 18px;
+    overflow-x: auto;
+  }
+  .pop,
+  .seed,
+  .clock .season {
+    display: none;
+  }
+  #top {
+    gap: 10px;
+    padding: 0 10px;
+  }
+  #toIdle {
+    margin-left: auto;
+  }
+  /* Bottom-sheet inspector (P2-10 fills its contents; the sheet mechanics
+     — hidden until `.open`, per the mockup — belong to this task's grid). */
+  #insp {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 60%;
+    border-left: 0;
+    border-top: 1px solid var(--sun);
+    z-index: 4;
+    display: none;
+    background: var(--panel);
+  }
+  #insp.open {
+    display: flex;
+  }
+  /* The sheet must not cover the floating cluster (PLAN.md P2-10):
+     `#app.insp-open`, toggled by inspector.js alongside `#insp.open`,
+     raises `#hud` (a descendant of the `#world` sibling, so it can't be
+     reached by an `#insp` sibling selector) above the sheet's height. */
+  #app.insp-open #hud {
+    bottom: calc(60% + 10px + env(safe-area-inset-bottom));
+  }
 }
 
 canvas {
@@ -23,22 +511,6 @@ canvas {
 #view {
   width: 100%;
   height: 100%;
-}
-
-/* Floating zoom/speed cluster (SPEC §5.4, §10). Full chrome (rail, dock,
-   inspector) arrives in P2-08; for now idle vs. station only changes the
-   cluster's own opacity, matching docs/mockup.html's #hud rules. */
-:root {
-  --line: #2b3a30;
-  --line2: #3a4d40;
-  --muted: #8e9788;
-  --text: #d9d4c0;
-  --sun: #e3a83a;
-  --sun-soft: rgba(227, 168, 58, 0.18);
-  --dim: #5f6a60;
-  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --pixel: 'Silkscreen', 'IBM Plex Mono', monospace;
 }
 
 #hud {
