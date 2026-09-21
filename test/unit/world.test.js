@@ -24,7 +24,13 @@ describe('genesis', () => {
     }
   });
 
-  it('genesis counts match config (3 x 50 herbivores + 1 x 24 carnivores)', () => {
+  // P6-05 acceptance test ("genesis places herbivoreLineages *
+  // herbivoresPerLineage + carnivoreLineages * carnivoresPerLineage
+  // founders"): already covered generically here since P1-09 — this
+  // test reads the counts live from config rather than hard-coding them,
+  // so P6-05's genesis default changes needed no new test, only this
+  // title update (was "3 x 50 herbivores + 1 x 24 carnivores").
+  it('genesis counts match config (herbivoreLineages x herbivoresPerLineage + carnivoreLineages x carnivoresPerLineage)', () => {
     const world = makeWorld({ seed: 5 });
     const g = world.cfg.genesis;
     const expected =
@@ -174,5 +180,42 @@ describe('brain vs. reflex policy wiring (P2-03)', () => {
     world.step();
 
     expect(world.outputs[OUTPUT.eat]).toBe(1);
+  });
+});
+
+describe('death counters (P6-01)', () => {
+  it('every death increments deaths and adds its age as a percentage of lifespan to deathAgePct', () => {
+    // isolate('aging', 'metabolism'): only those two mechanics run, so the
+    // only two ways to die are old age (organism 0) and starvation
+    // (organism 1) — no movement, predation or breeding to interfere.
+    // A shared phenotype.lifespan range of exactly 2 days at 1 tick/day
+    // (both ⚠️ config, overridden here, not the real defaults) makes
+    // lifespanTicks exactly 2 for every organism regardless of its
+    // lifespan gene, so the expected death-age percentages are exact
+    // integers rather than depending on a formula this test would have
+    // to reimplement.
+    const world = makeWorld({
+      width: 10,
+      height: 10,
+      seed: 1,
+      terrain: TERRAIN.GRASS,
+      config: {
+        ...isolate('aging', 'metabolism'),
+        time: { ticksPerDay: 1 },
+        phenotype: { lifespan: [2, 2] },
+        metabolism: { base: 10 }, // huge relative to any organism's energy below
+      },
+      organisms: [
+        { x: 1, y: 1, energy: 1000 }, // dies of old age on the 3rd tick (age 3 > lifespanTicks 2)
+        { x: 2, y: 2, energy: 1 }, // dies of starvation on the 1st tick (cost >> energy)
+      ],
+    });
+
+    world.step(); // organism 1 starves here: age 1, deathAgePct += round(100*1/2) = 50
+    world.step();
+    world.step(); // organism 0 dies of old age here: age 3, deathAgePct += round(100*3/2) = 150
+
+    expect(world.counters.deaths).toBe(2);
+    expect(world.counters.deathAgePct).toBe(200); // 50 + 150
   });
 });

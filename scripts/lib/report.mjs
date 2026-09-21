@@ -21,14 +21,34 @@ import { FIRST_SWIM } from '../../src/core/world.js';
  * split by their fixed text prefix, since `world.moisture`/`fogTicks`
  * only hold the *current* pulse, not a cumulative total), and the world
  * hash.
+ *
+ * P6-01 (ecology health metrics — see docs/PLAN.md "Phase 6"):
+ * `bornPerImmig` — `born / max(1, immigrations)`, the ratio the health
+ * soak asserts on; a treadmill world (population sustained by
+ * immigration rather than births) has this near or below 1.
+ * `deathAgeMeanPct` — mean, over every death so far, of that death's age
+ * as a percentage of its lifespan (`world.counters.deathAgePct /
+ * world.counters.deaths`, 0 if there have been no deaths yet); a world
+ * where everything dies of old age near day 14 despite a multi-year
+ * lifespan has this far under 100.
+ * `edgePct` — percentage of currently-living organisms whose `x` or `y`
+ * is within `opts.edgeMargin` tiles (default 20; a report option, not a
+ * core config key, since "how close counts as the edge" is a reporting
+ * choice, not a simulation rule) of any map edge.
+ * `plantsAvgPct` — mean, over the samples currently held in
+ * `world.stats`'s ring buffer (`world.stats.n` of them, at most
+ * `stats.historyLength * stats.sampleEvery` ticks of history), of
+ * `stats.plantsFraction`, as a percentage; unlike `plantsFraction`
+ * above (an instantaneous snapshot) this is what "grazed down" over the
+ * recent run actually looks like.
  * `ticksPerSecond` is not measured here (timing is the caller's job); it
  * is threaded through as a parameter so this stays a pure function of
  * `world` plus whatever the caller already measured.
  * @param {import('../../src/core/world.js').World} world
- * @param {{ ticksPerSecond?: number }} [opts]
+ * @param {{ ticksPerSecond?: number, edgeMargin?: number }} [opts]
  * @returns {*}
  */
-export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
+export function ecologyReport(world, { ticksPerSecond = 0, edgeMargin = 20 } = {}) {
   const store = world.store;
 
   let total = 0;
@@ -37,6 +57,7 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
   let carnivore = 0;
   let maxGeneration = 0;
   let swimmers = 0;
+  let edgeCount = 0;
   const swimThreshold = world.cfg.swim.threshold;
   const visionHistogram = { nocturnal: 0, crepuscular: 0, diurnal: 0 };
   /** @type {Map<number, number>} */
@@ -56,9 +77,21 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
     if (store.generation[i] > maxGeneration) maxGeneration = store.generation[i];
     if (store.pheno[pOff + TRAIT.swim] >= swimThreshold) swimmers++;
 
+    const x = store.x[i];
+    const y = store.y[i];
+    if (
+      x < edgeMargin ||
+      y < edgeMargin ||
+      x >= world.width - edgeMargin ||
+      y >= world.height - edgeMargin
+    ) {
+      edgeCount++;
+    }
+
     const sp = store.species[i];
     bySpecies.set(sp, (bySpecies.get(sp) ?? 0) + 1);
   }
+  const edgePct = total > 0 ? (edgeCount / total) * 100 : 0;
 
   const species = Array.from(bySpecies.entries())
     .sort((a, b) => a[0] - b[0])
@@ -82,12 +115,15 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
 
   const stats = world.stats;
   let sumDiversity = 0;
+  let sumPlantsFraction = 0;
   for (let k = 0; k < stats.n; k++) {
     sumDiversity += stats.diversity[k];
+    sumPlantsFraction += stats.plantsFraction[k];
   }
   const diversityAvg = stats.n > 0 ? sumDiversity / stats.n : 0;
   const diversityNow =
     stats.n > 0 ? stats.diversity[(stats.head - 1 + stats.capacity) % stats.capacity] : 0;
+  const plantsAvgPct = stats.n > 0 ? (sumPlantsFraction / stats.n) * 100 : 0;
 
   let capSum = 0;
   let plantSum = 0;
@@ -127,7 +163,40 @@ export function ecologyReport(world, { ticksPerSecond = 0 } = {}) {
     crossings,
     rain,
     fog,
+    bornPerImmig: world.counters.born / Math.max(1, world.counters.immigrations),
+    deathAgeMeanPct:
+      world.counters.deaths > 0 ? world.counters.deathAgePct / world.counters.deaths : 0,
+    edgePct,
+    plantsAvgPct,
     ticksPerSecond,
     hash: world.hash(),
   };
+}
+
+/**
+ * Update a running minimum-population sample used to catch a boom-bust
+ * crash that a run's own final population would not show (P6-01, SPEC
+ * §9.3's health invariants). Samples only every `everyTicks` ticks from
+ * `startTick` onward (default: the start of a world's second year, at
+ * the default `time.ticksPerDay` × `time.daysPerYear` = 1800 × 24 =
+ * 43200); off that cadence, or before `startTick`, the running minimum
+ * is returned unchanged. A pure function of its arguments (no `World`)
+ * so it is trivial to unit-test and so `scripts/sweep.mjs` can call it
+ * once per tick inside its own stepping loop without importing anything
+ * from `src/core`.
+ * @param {number|null} minSoFar the running minimum so far, or `null` if
+ *   no qualifying tick has been sampled yet
+ * @param {number} tick the current world tick
+ * @param {number} population the current population (`world.store.count`)
+ * @param {{ startTick?: number, everyTicks?: number }} [opts]
+ * @returns {number|null}
+ */
+export function sampleMinPopY2(
+  minSoFar,
+  tick,
+  population,
+  { startTick = 43200, everyTicks = 600 } = {},
+) {
+  if (tick < startTick || tick % everyTicks !== 0) return minSoFar;
+  return minSoFar === null ? population : Math.min(minSoFar, population);
 }

@@ -144,7 +144,14 @@ describe('snapshot', () => {
   });
 
   it('the selected record carries family counts computed from the store', () => {
-    const world = makeWorld({ seed: 1, config: { breeding: { baseRate: 1 } } });
+    // phenotype.maturity overridden: at its P6-03 default (a fraction of
+    // a 36-96 day lifespan), a founder's maturityTicks can exceed this
+    // test's 3,000-tick budget entirely — the test needs *a* birth
+    // quickly, not P6-03's actual maturity timing.
+    const world = makeWorld({
+      seed: 1,
+      config: { breeding: { baseRate: 1 }, phenotype: { maturity: [0.01, 0.01] } },
+    });
     const store = world.store;
     let bred = -1;
     for (let t = 0; t < 3000 && bred === -1; t++) {

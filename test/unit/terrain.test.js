@@ -73,4 +73,20 @@ describe('generateTerrain', () => {
     // grass band is empty, so the grass guarantee can never be met.
     expect(() => generateTerrain(1, impossible)).toThrow(/terrain: no valid map after/);
   });
+
+  it('terrain.edgeWetness: 0 removes the east-west gradient; the 0.05 default reproduces an explicit 0.05 byte for byte (P6-05)', () => {
+    // The default (0.05) matching the pre-P6-05 hard-coded literal is
+    // additionally confirmed at world scale in the P6-05 log entry via
+    // an unchanged `npm run headless -- --ticks 5000` hash.
+    const explicitCfg = makeConfig({
+      world: { width: 64, height: 40 },
+      terrain: { edgeWetness: 0.05 },
+    });
+    const zeroCfg = makeConfig({ world: { width: 64, height: 40 }, terrain: { edgeWetness: 0 } });
+    const atDefault = generateTerrain(42, testCfg);
+    const atExplicit = generateTerrain(42, explicitCfg);
+    const atZero = generateTerrain(42, zeroCfg);
+    expect(atDefault.terrain).toEqual(atExplicit.terrain);
+    expect(atDefault.terrain).not.toEqual(atZero.terrain);
+  });
 });

@@ -99,4 +99,46 @@ describe('paintTerrain', () => {
       expect(c.length).toBe(3);
     }
   });
+
+  it('tint is by fraction of the tile cap, so a full scrub tile at cap 24 is tinted as fully as a full grass tile at cap 40 (P6-02)', () => {
+    const w = 2;
+    const h = 1;
+    const img = makeImageData(w, h);
+    paintTerrain(img, {
+      terrain: new Uint8Array([TERRAIN.GRASS, TERRAIN.SCRUB]),
+      plants: new Float32Array([40, 24]), // each tile fully stocked at its own (raised) cap
+      carcass: new Float32Array(w * h),
+      width: w,
+      height: h,
+      plantCap: [0, 0, 14, 40, 24, 0],
+    });
+    // Grass fully lush: r=62+(92-62)*1, g=78+(150-78)*1, b=42+(62-42)*1 (same endpoint as the
+    // ≤1-scale test above, reached here via 40/40 instead of a raw 1).
+    expect(img.data[0]).toBe(92);
+    expect(img.data[1]).toBe(150);
+    expect(img.data[2]).toBe(62);
+    // Scrub fully lush: r=88+(107-88)*1, g=92+(122-92)*1, b=52+(58-52)*1, via 24/24.
+    expect(img.data[4]).toBe(107);
+    expect(img.data[5]).toBe(122);
+    expect(img.data[6]).toBe(58);
+  });
+
+  it('a cap-0 terrain is never tinted by its plant value (P6-02)', () => {
+    const w = 1;
+    const h = 1;
+    const img = makeImageData(w, h);
+    paintTerrain(img, {
+      terrain: new Uint8Array([TERRAIN.WATER]),
+      plants: new Float32Array([5]), // a stray nonzero value on a terrain that never holds plants
+      carcass: new Float32Array([0]),
+      width: w,
+      height: h,
+      plantCap: [0, 0, 14, 40, 24, 0], // WATER's cap is 0
+    });
+    const [r, g, b] = TCOL[TERRAIN.WATER];
+    expect(img.data[0]).toBe(r);
+    expect(img.data[1]).toBe(g);
+    expect(img.data[2]).toBe(b);
+    expect(img.data[3]).toBe(255);
+  });
 });

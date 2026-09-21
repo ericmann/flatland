@@ -135,7 +135,11 @@ function generateOnce(seed, cfg) {
       let v = fbm(layers, x, y);
       // Wetter edges: a gentle sinusoidal bias across the width, as in the
       // reference mockup, so shorelines tend to form near the map edges.
-      v += 0.05 * sin((x / w) * PI);
+      // P6-05: was a hard-coded 0.05 (CLAUDE.md rule 7 — every tunable is
+      // a config key); now cfg.terrain.edgeWetness, default unchanged so
+      // this is a pure refactor at the default (verified byte-for-byte
+      // via a headless hash, see the P6-05 log entry).
+      v += cfg.terrain.edgeWetness * sin((x / w) * PI);
       terrain[y * w + x] = classify(v, thresholds);
     }
   }

@@ -25,7 +25,18 @@ describe('throughput invariant', () => {
       seed: 1,
       config: {
         genesis: {
+          // P6-06: all four counts pinned explicitly, not just the
+          // per-lineage ones — this scenario's "200" is fixed by SPEC §8
+          // regardless of what a later task tunes the live DEFAULTS
+          // lineage counts to (P6-05 found this out the hard way: it
+          // changed herbivoreLineages/carnivoreLineages, and since only
+          // the per-lineage counts were overridden here, this test
+          // silently started genesis-ing 288 organisms instead of 200,
+          // masked because npm test's `&&` chain skips this file
+          // whenever an earlier suite fails).
+          herbivoreLineages: 3,
           herbivoresPerLineage: 56, // 3 lineages * 56 = 168
+          carnivoreLineages: 1,
           carnivoresPerLineage: 32, // 1 lineage * 32 = 32 -> 200 total
         },
       },

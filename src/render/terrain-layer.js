@@ -22,17 +22,22 @@ export const TCOL = Object.freeze([
 /**
  * Paint each tile of `snapshot` into `imageData`, full opacity.
  * @param {{ data: Uint8ClampedArray }} imageData
- * @param {{ terrain: Uint8Array, plants: Float32Array, carcass: Float32Array, width: number, height: number }} snapshot
+ * @param {{ terrain: Uint8Array, plants: Float32Array, carcass: Float32Array, width: number, height: number, plantCap?: number[] }} snapshot
+ *   `plantCap` (P6-02) is the per-TERRAIN-type cap (SPEC §4.4's `cap(terrain)`) that `plants[i]` is a
+ *   raw energy-unit stock against; tinting is by `plants[i] / plantCap[terrain[i]]` (a 0..1 fraction),
+ *   not by the raw value, since a full tile is no longer assumed to hold exactly `1`. Defaults to
+ *   all-1s (a no-op division) so a caller that already hands in a 0..1 fraction is unaffected.
  * @returns {void}
  */
 export function paintTerrain(imageData, snapshot) {
-  const { terrain, plants, carcass, width, height } = snapshot;
+  const { terrain, plants, carcass, width, height, plantCap = [1, 1, 1, 1, 1, 1] } = snapshot;
   const data = imageData.data;
   const total = width * height;
   for (let i = 0; i < total; i++) {
     const t = terrain[i];
     let [r, g, b] = TCOL[t];
-    const p = plants[i];
+    const cap = plantCap[t];
+    const p = cap > 0 ? plants[i] / cap : 0;
     if (t === TERRAIN.GRASS) {
       r = 62 + (92 - 62) * p;
       g = 78 + (150 - 78) * p;

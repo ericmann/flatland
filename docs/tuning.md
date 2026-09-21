@@ -488,3 +488,273 @@ Pinned seeds for `test/soak/ecology.test.js` are **unchanged** (8 and
 test with Phase 5 mechanics live (this task's `npm run test:soak`) —
 both still pass every SPEC §9.3 assertion, so there was no reason to
 re-pin.
+
+## P6-03 rebalance — before
+
+`node scripts/sweep.mjs --seeds 1..40 --ticks 100000` against the P5-05
+defaults (`terrain.plantCap` `[0,0,0.35,1,0.6,0]`, `plants.growth` 0.6,
+`organisms.biteSize` 0.1, `metabolism.base` 0.015, `phenotype.lifespan`
+`[3.0,9.0]` days, `phenotype.maturity` `[0.15,0.45]`, `regrowth.zeroThreshold`
+0.01, `interventions.meadow.plants` 0.5). Run via 40 parallel single-seed
+`scripts/headless.mjs` invocations rather than the sweep script's own
+sequential loop (identical `World`/config/report code path — `ecologyReport`
+is the same function either way — chosen only to use all 8 cores instead of
+1, since this table's larger populations make the sequential sweep taking
+over an hour a real cost). Full table in `docs/sweeps/p6-03-before.txt`
+(includes the P6-01 health columns this sweep predates the introduction
+of by name only — they were computed by the same `ecologyReport` P6-01
+added); summary:
+
+| metric (P6-01 health columns)      | value | target (P6-03) |
+| ---------------------------------- | ----- | -------------- |
+| survived (pop>0 ∧ herb>0 ∧ carn>0) | 40/40 | ≥ 30/40        |
+| mean population                    | 31.1  | ≥ 100          |
+| mean born/immig                    | 1.33  | ≥ 10           |
+| mean plants avg%                   | 99.7  | ≤ 90           |
+| mean immigrations                  | 59.1  | ≤ 30           |
+| mean edge%                         | 97.4  | ≤ 60           |
+| seeds with 0 capacity refusals     | 40/40 | ≥ 30/40        |
+
+This is the immigration treadmill found on browser review (2026-09-20,
+docs/PLAN.md "Phase 6" preamble) confirmed at 40-seed scale: population
+never reaches even a fifth of the ⚠️ SPEC §4.1 target (300–600), plants sit
+at ~100% of cap on every seed (never grazed down because
+`plants.growth` refills a tile in ~2 ticks even though `terrain.plantCap`
+caps it at ≤1 while `organisms.energyMaxBase` is 150), immigration (mean
+59.1 events per 100,000 ticks) outnumbers births (mean 1.33:1 ratio,
+i.e. births barely keep pace with, and on many seeds fall behind,
+immigration), and 97.4% of the living population sits within 20 tiles of
+a map edge — immigrants arrive at edges and rarely survive long enough to
+travel inward. `survived` (40/40) is misleading in isolation: the
+population never goes to zero only because immigration keeps refilling
+it, which is exactly the failure mode the P6-01 health columns exist to
+catch and the old `test/soak/ecology.test.js`/`survival.test.js`
+assertions (population > 0, herbivores/carnivores present) could not.
+
+## P6-03 rebalance — after
+
+Config changes (`src/core/config.js`, defaults only, each with a P6-03
+comment naming the reason): `terrain.plantCap` `[0,0,0.35,1,0.6,0]` →
+`[0,0,14,40,24,0]`; `plants.growth` 0.6 → 0.015; `organisms.biteSize` 0.1
+→ 0.3; `metabolism.base` 0.015 → 0.008; `phenotype.lifespan` `[3.0,9.0]`
+→ `[36.0,96.0]` days (1.5–4 years at `time.daysPerYear` 24); `phenotype.
+maturity` `[0.15,0.45]` → `[0.04,0.15]` of lifespan; `regrowth.
+zeroThreshold` 0.01 → 0.4 (kept at the same 1% of `terrain.
+plantCap[GRASS]`); `interventions.meadow.plants` 0.5 → 20 (kept at the
+same half of `terrain.plantCap[GRASS]`). Reached in 1 confirmed
+iteration from the starting point derived from manual probes on seeds 1
+and 8 during diagnosis (docs/PLAN.md P6-03 task text carries those probe
+numbers); a rejected earlier variant (`organisms.biteSize` 0.5,
+`metabolism.base` 0.01 — raising both together rather than leaving
+`metabolism.base` low) peaked seed 1 at population 395 and then crashed
+it to 73 with plants at 16%, so `metabolism.base` was left low rather
+than raised to match the bigger bite.
+
+`node scripts/sweep.mjs --seeds 1..40 --ticks 100000` (again as 40
+parallel single-seed runs) against these defaults. Full table in
+`docs/sweeps/p6-03-after.txt`; summary:
+
+| metric                             | before | after | target  |
+| ---------------------------------- | ------ | ----- | ------- |
+| survived (pop>0 ∧ herb>0 ∧ carn>0) | 40/40  | 40/40 | ≥ 30/40 |
+| mean population                    | 31.1   | 356.6 | ≥ 100   |
+| mean born/immig                    | 1.33   | 160.5 | ≥ 10    |
+| mean plants avg%                   | 99.7   | 63.8  | ≤ 90    |
+| mean immigrations                  | 59.1   | 14.4  | ≤ 30    |
+| mean edge%                         | 97.4   | 40.5  | ≤ 60    |
+| seeds with 0 capacity refusals     | 40/40  | 38/40 | ≥ 30/40 |
+| mean Shannon diversity             | 1.668  | 1.649 | —       |
+
+**Result: every target met, with margin.** 25 of the 40 seeds clear
+every one of `test/soak/health.test.js`'s six per-seed assertions
+individually, not just the sweep's aggregate means. The two seeds with
+nonzero capacity refusals (20: 3,789 refusals, population 522 at the
+end; 39: 78 refusals, population 154 at the end) both hit
+`world.maxOrganisms` (2000, a memory ceiling per its own DOCS entry, not
+an ecological cap) as a population spike rather than crashing to zero —
+a boom-bust pattern P6-04 is explicitly scoped to damp, not a P6-03
+regression, and still comfortably inside the "≥ 30/40 with 0 refusals"
+target. Mean diversity (1.649) is within 1.1% of the before value
+(1.668, itself computed under the treadmill's tiny populations) —
+population size grew more than 11x with no diversity collapse.
+
+Pinned seeds for `test/soak/health.test.js`: **26 and 32** (see the
+test file's own comment for the full reasoning — chosen from the 25
+clean seeds for high diversity and low dominance, the same style as
+`ecology.test.js`'s P3-10 seed choice). `test/soak/ecology.test.js`
+(seeds 8, 39) and `test/soak/survival.test.js` (seed 29) were re-run
+against these new defaults rather than re-pinned; see this task's log
+entry in `docs/PROGRESS.md` for the result.
+
+Interpretation: the sweep table was generated via 40 parallel
+single-seed `scripts/headless.mjs` invocations, collected and formatted
+into the same column layout `scripts/sweep.mjs` prints (a
+`docs/sweeps`-only difference — both call the identical `ecologyReport`
+function on an identically-constructed `World`), because the sequential
+40-seed sweep takes over an hour once populations reach the hundreds,
+and this task iterated multiple times. `scripts/sweep.mjs` itself is
+unchanged and remains the tool later tasks should reach for at smaller
+scale or when only one iteration is needed.
+
+## P6-04 damping and hunters — attempted, blocked
+
+**Not applied to `src/core/config.js`** — every value below was tested via
+config overrides (`node scripts/sweep-one.mjs <seed> <ticks> --config
+k=v`, a throwaway per-seed variant of `scripts/sweep.mjs`'s row logic
+used for this task's faster iteration; not added to the repo) against
+the committed P6-03 defaults, never by editing the committed file, so
+this section documents four rejected attempts rather than a before/after
+pair.
+
+Against the P6-03 defaults, `test/soak/health.test.js`'s pinned seeds
+(26, 32) confirmed the four new targets fail as expected: carnivores end
+at 7 and 4 (need ≥ 15), immigrations at 12 and 13 (need ≤ 5, though this
+one already passed on many P6-03-after seeds), and the year-2+
+minimum-to-maximum population ratio sits well under 25% on most of the
+40 P6-03-after seeds (boom-then-partial-bust, most visibly on seeds 20
+and 39, both of which hit `world.maxOrganisms` mid-run).
+
+Four attempts, each tested on 5-15 seeds at the full 100,000 ticks
+(never the reduced-tick fast-iteration shortcut other tuning tasks
+used, since this task's own targets — `minPopY2`, a year-2+ measure —
+need the full run to mean anything):
+
+1. **Breeding damping** (`breeding.localK` 50→30, `breeding.baseRate`
+   0.04→0.03) alongside predator income and lower immigration floors, on
+   6 seeds at 50,000 ticks (a fast first look). Over-corrected badly:
+   population collapsed to 4-147 on every seed tested, plants back up to
+   ~98% (grazing pressure gone), one seed's carnivores hit 0. Rejected;
+   breeding damping was not tried again — the herbivore "overshoot" P6-03
+   left behind turned out not to need directly suppressing.
+2. **Predator income + lower immigration floors**
+   (`predation.killChance` 0.5→0.65, `energy.etaCarn` 0.8→0.9,
+   `organisms.bodyMassPerSize` 40→50, `immigration.floorHerbivores`
+   20→8, `immigration.floorCarnivores` 4→2, `immigration.cooldownTicks`
+   1800→9000), 5 seeds at 100,000 ticks. Two of five seeds (1, 32)
+   crashed relative to their P6-03-after populations (693→92, 700→26)
+   with plants back up near 97%; carnivores stayed at 2-8. Rejected —
+   the combined predation+floor change was too much at once to tell
+   which lever caused the crash.
+3. **Predator income alone, immigration cooldown alone**
+   (`predation.killChance` 0.5→0.55, `organisms.bodyMassPerSize` 40→45,
+   `immigration.cooldownTicks` 1800→3600 — floors left at their P6-03
+   values), 20 seeds total (5 at first, 15 more after) at 100,000 ticks.
+   The best single result of any attempt: seed 20 reached carnivores 16,
+   immigrations 4, 0 refusals, ratio 21% (all but the ratio target, and
+   that one close). But across all 20 seeds, carnivores only reached
+   ≥ 15 on 2 of 20 (seed 20 at 16, seed 21 at a 125 outlier — species
+   composition, not a general effect), the minPopY2/maxPop ratio stayed
+   under 25% on 17 of 20 (mean ≈ 15%), and no single seed cleared all
+   four targets at once. Full per-seed data: seeds 1, 20, 26, 32, 39 →
+   (carn, immig, minPopY2/maxPop, refused) = (11,17,58/602,0),
+   (16,4,312/1467,0), (6,14,68/677,0), (10,15,40/174,0), (5,9,142/582,0);
+   seeds 4,5,7,8,10,11,12,13,14,16,17,18,19,21,22 → (9,26,18/174,0),
+   (6,22,34/416,0), (5,18,52/328,0), (8,11,237/1488,0), (6,18,32/342,0),
+   (7,17,21/174,0), (6,14,51/417,0), (10,6,157/1419,0), (7,9,52/834,0),
+   (8,15,27/174,0), (4,12,31/181,0), (6,22,25/173,0), (5,12,43/325,0),
+   (125,10,40/217,0), (7,4,221/942,0).
+4. **Wider predator income** (`energy.etaCarn` 0.8→0.95,
+   `organisms.bodyMassPerSize` 40→60, `predation.reach` 1.0→1.3,
+   `predation.maxPreySizeRatio` 1.5→2.0, `immigration.cooldownTicks`
+   1800→5400), 6 seeds. No improvement over attempt 3: carnivores 3-8,
+   one seed (20) still spiked to `maxOrganisms` (2000) with 16,385
+   capacity refusals despite the cooldown increase.
+
+**Finding for the reviewer:** carnivore end-population responds weakly
+and inconsistently to every predator-income lever in this task's scope
+(kill chance, assimilation efficiency, body mass, reach, max prey size
+ratio) — one seed (21) reached 125 carnivores under the same config
+that left nineteen others under 10, suggesting the outcome is dominated
+by something other than these levers (species composition / which
+lineage happens to specialize into the carnivore niche early, itself
+downstream of `genesis.js`'s independently-random lineage placement,
+the same mechanism P1-11's log already flagged for carnivore viability
+generally). `genesis.carnivoreLineages`/`carnivoresPerLineage` are
+explicitly out of this task's scope but are the more likely lever —
+P6-05 raises both; if that alone moves carnivore counts up, it is worth
+someone re-attempting P6-04's targets after P6-05 lands, using this
+task's config values as a starting point (attempt 3's config came
+closest: `predation.killChance` 0.55, `organisms.bodyMassPerSize` 45,
+`immigration.cooldownTicks` 3600).
+
+`test/soak/health.test.js`'s four P6-04 assertions were written, run
+against all four attempts above, and then reverted (not committed) per
+`/implement`'s rule for a blocked task; the file still carries the
+`minPopY2`/`maxPop` tracking from P6-03 for a future attempt to reuse.
+
+## P6-05 genesis size, diversity and edge bias — before/after
+
+**Before** reuses `docs/sweeps/p6-03-after.txt` (P6-04 changed no
+committed defaults, so P6-03's after-table is still the live baseline):
+mean population 356.6, mean living species (not tabulated separately in
+that sweep, but individual rows show species counts commonly in the
+6-15 range), mean edge% 40.5, mean H 1.649.
+
+Config changes (`src/core/config.js`, defaults only): `terrain.
+edgeWetness` introduced (0.05, replacing a hard-coded literal in
+`terrain.js` — CLAUDE.md rule 7; verified byte-identical via `npm run
+headless -- --ticks 5000`, hash `2caa1686` both before and after the
+code change). `genesis.herbivoreLineages` 3→4, `genesis.
+herbivoresPerLineage` 50→70, `genesis.carnivoreLineages` 1→2, `genesis.
+carnivoresPerLineage` 24→28 (founders 174→336). `edgeWetness` was left
+at its byte-identical default rather than tuned down in this task —
+see "Not done" below.
+
+`node scripts/sweep-one.mjs` (this session's parallel single-seed tool,
+see "P6-03 rebalance" above) across all 40 seeds, 100,000 ticks. Full
+table in `docs/sweeps/p6-05-after.txt`; summary:
+
+| metric                             | before                     | after | target       |
+| ---------------------------------- | -------------------------- | ----- | ------------ |
+| survived (pop>0 ∧ herb>0 ∧ carn>0) | 40/40                      | 40/40 | ≥ 30/40      |
+| mean population                    | 356.6                      | 335.8 | —            |
+| mean living species                | —                          | 12.3  | ≥ 6          |
+| mean Shannon diversity (H)         | 1.649                      | 1.561 | ≥ 1.5        |
+| mean edge%                         | 40.5                       | 41.1  | ≤ 45         |
+| mean born/immig                    | 160.5                      | 223.1 | ≥ 10 (P6-03) |
+| mean immigrations                  | 14.4                       | 11.7  | ≤ 30 (P6-03) |
+| mean plants avg%                   | 63.8                       | 61.5  | ≤ 90 (P6-03) |
+| seeds with 0 capacity refusals     | 38/40                      | 40/40 | ≥ 30/40      |
+| mean carnivores at end             | — (not tabulated in P6-03) | 14.15 | —            |
+
+**Result: every P6-05 and P6-03 target met**, mostly with margin (mean
+H clears its 1.5 floor by 4%, closer than the others — the doubled
+genesis population diluted per-lineage diversity slightly even as it
+roughly doubled total population, but not below target).
+
+**Both pinned soak files needed re-pinning again**, for the same reason
+P6-03 already hit once: a bigger genesis population makes some seeds'
+steady-state population (and, for `health.test.js`'s seed 8 attempt,
+birth/death _churn_ even at a modest population) big enough to time out
+each file's 1,200,000ms hook under vitest's per-tick overhead.
+`test/soak/health.test.js`'s original P6-03 seeds (26, 32) both still
+passed every assertion at the new scale (seed 26: pop 1,052, born/immig
+843; seed 32: pop 566, born/immig 149) but seed 26's size alone timed
+out the hook, so both were replaced with seeds 18 and 33 from the P6-05
+after-sweep (small population _and_ low churn — see the test file's own
+comment). `test/soak/ecology.test.js` was re-pinned from seeds 23/25 to
+10/28 for the same reason (seed 23 alone grew from a final population
+of 30 to 530). `test/soak/survival.test.js` (seed 29) needed no change
+— passes as-is (confirmed by running it in total isolation after a
+combined run showed a transient failure that did not reproduce
+standalone; see this task's PROGRESS.md log entry).
+
+**Notable finding, not acted on in this task:** mean carnivores-at-end
+jumped from thin single digits under P6-03/attempted-P6-04 (see that
+section's per-seed data) to a mean of 14.15 across all 40 seeds under
+P6-05's doubled carnivore-lineage count alone — 6 of 40 seeds already
+clear P6-04's dropped `carn ≥ 15` target with no predation-side tuning
+at all. This supports P6-04's log finding that carnivore viability was
+dominated by founder count/lineage count, not predation-income levers.
+Worth a fresh, short P6-04 attempt on top of these P6-05 defaults if a
+future task has budget for it — attempt 3's config from the P6-04
+section is the suggested starting point.
+
+**Not done:** `terrain.edgeWetness` was kept at its byte-identical
+default (0.05) rather than tuned down, despite the task text suggesting
+a smaller value "flattens the centre-is-driest gradient." The mean
+edge% target (≤ 45%) was already met (41.1%) from the genesis and P6-03
+scale changes alone, with no terrain change needed, so no iteration was
+spent on it; a future task revisiting map-centre habitability
+specifically (not just overall edge-hugging, which this task's edge%
+metric already captures) could still lower this value.

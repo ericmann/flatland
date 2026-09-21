@@ -153,7 +153,7 @@ function redraw() {
 }
 
 client.on('loaded', (msg) => {
-  renderer = new Renderer({ width: msg.width, height: msg.height, view });
+  renderer = new Renderer({ width: msg.width, height: msg.height, view, plantCap: msg.plantCap });
   const worldW = msg.width * renderer.px;
   const worldH = msg.height * renderer.px;
   renderer.resize();

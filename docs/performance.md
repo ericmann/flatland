@@ -125,3 +125,43 @@ frame time at 1×/16×, the 480 ticks/s worker throughput budget under real
 mobile CPU throttling, total process memory ≤ 150 MB, cold load on real
 4G, and actual battery draw. Phase 5's closing task (P5-08) is where the
 PLAN schedules this phone pass.
+
+## Phase 6 re-check (P6-06)
+
+`node scripts/perf.mjs --ticks 20000`, same machine as above:
+
+- Default world (256×160): genesis now starts 336 organisms (P6-05, up
+  from 174) rather than 200; **532–559 ticks/s** over 20,000 measured
+  ticks. Population is still ramping up at 20,000 ticks under the new
+  Phase 6 scale (the sweeps in `docs/tuning.md` show populations
+  reaching the hundreds only by ~50,000+ ticks), so this is an early
+  reading, not the eventual steady-state cost — a fair like-for-like
+  comparison to a prior default-world number does not exist (none was
+  recorded in the P5-06 table above; that table's numbers are all the
+  fixed 200-organism gate scenario or the browser-measured figures).
+- CI gate scenario (64×40, 200 organisms): **1,421 ticks/s**, budget
+  1,200 — comfortably passes, in line with the P5-06 baseline
+  (1,510–1,680 raw Node / 287 on GitHub Actions under vitest's
+  overhead, per the "Update" note above); the ~5-10% difference from
+  the top of that range is ordinary run-to-run noise on a shared
+  desktop, not a regression.
+
+**Bug found and fixed here:** `scripts/perf.mjs` and `test/invariants/
+throughput.test.js` built the "200 organisms" gate scenario by
+overriding only `genesis.herbivoresPerLineage`/`carnivoresPerLineage`,
+never `genesis.herbivoreLineages`/`carnivoreLineages` — those silently
+fell through to the live `DEFAULTS`. P6-05 changed those defaults (3→4,
+1→2), which changed the gate scenario's genesis count to 288 without
+either file's own comment (which still said "3 lineages" / "1 lineage")
+noticing. This was not caught by `npm test` because that script's `&&`
+chain (`vitest run … --exclude throughput.test.js && vitest run
+throughput.test.js`) skips the second command whenever the first exits
+non-zero — which it did throughout Phase 6, for the unrelated
+`bounds.test.js` contention flake documented in `docs/tuning.md`'s
+P6-03/P6-05 entries. Fixed by pinning all four genesis counts explicitly
+in both files; `test/invariants/throughput.test.js`'s own "genesis
+produces exactly 200 organisms" assertion now catches this class of
+drift again on its own, independent of `npm test`'s exclude/chain
+ordering. Worth a follow-up: `npm test`'s script could run both halves
+unconditionally (e.g. with `;` or a reporter that always executes both)
+so one suite's failure never silently skips another's.

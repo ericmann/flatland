@@ -44,12 +44,17 @@ export function pick(snap, wx, wy, r) {
 
 export class Renderer {
   /**
-   * @param {{ width: number, height: number, view: HTMLCanvasElement, px?: number }} opts
+   * @param {{ width: number, height: number, view: HTMLCanvasElement, px?: number, plantCap?: number[] }} opts
+   *   `plantCap` (P6-02, from the `loaded` event's `world.cfg.terrain.plantCap`) turns a tile's raw
+   *   plant-stock value (energy units, SPEC §4.4) into the 0..1 fraction `terrain-layer.js` tints by;
+   *   defaults to all-1s (a no-op division) so a caller that predates P6-02 — a test, say — keeps
+   *   treating snapshot plant values as already-fractions.
    */
-  constructor({ width, height, view, px = 4 }) {
+  constructor({ width, height, view, px = 4, plantCap = [1, 1, 1, 1, 1, 1] }) {
     this.width = width;
     this.height = height;
     this.px = px;
+    this.plantCap = plantCap;
     this.view = view;
     this.ctx = /** @type {CanvasRenderingContext2D} */ (view.getContext('2d'));
     this.dpr = 1;
@@ -181,6 +186,7 @@ export class Renderer {
         carcass: snapshot.carcass,
         width: this.width,
         height: this.height,
+        plantCap: this.plantCap,
       });
       this.terrainCtx.putImageData(this.terrainImage, 0, 0);
     }

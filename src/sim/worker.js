@@ -9,6 +9,7 @@ import { MSG } from './protocol.js';
 const scheduler = new Scheduler({
   now: () => performance.now(),
   post: (msg, transfer) => self.postMessage(msg, { transfer: transfer ?? [] }),
+  warn: (...args) => console.warn(...args),
 });
 
 const channel = new MessageChannel();

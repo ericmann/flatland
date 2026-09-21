@@ -76,13 +76,19 @@ if (!gateOnly) {
 }
 
 // --- Scenario 2: the CI throughput gate's exact scenario. ---
+// P6-06: all four genesis counts pinned explicitly (not just the
+// per-lineage ones) so this stays exactly 200 regardless of the live
+// DEFAULTS lineage counts — see test/invariants/throughput.test.js's
+// matching comment for why.
 const gateWorld = makeWorld({
   width: 64,
   height: 40,
   seed: 1,
   config: {
     genesis: {
+      herbivoreLineages: 3,
       herbivoresPerLineage: 56, // 3 lineages * 56 = 168
+      carnivoreLineages: 1,
       carnivoresPerLineage: 32, // 1 lineage * 32 = 32 -> 200 total
     },
   },

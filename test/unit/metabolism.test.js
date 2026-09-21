@@ -81,7 +81,16 @@ describe('metabolise', () => {
   });
 
   it('the cost rises with the gap between preferred and ambient temperature', () => {
-    const world = bareWorld({ config: { temperature: { enabled: true } } });
+    // metabolism.base overridden well above its P6-03 default: this test
+    // compares a ratio of two float32-quantized costs, and at a small
+    // enough base the two costs (subtracted from a much larger energyMax)
+    // lose enough float32 precision in that subtraction to swamp the
+    // ratio's own difference from 1 — a precision-margin issue, not a
+    // formula bug (the realised-vs-intended ledger accounting is exact
+    // either way).
+    const world = bareWorld({
+      config: { temperature: { enabled: true }, metabolism: { base: 3 } },
+    });
     world.ambient = 0.5;
     // Same size/metab/speed (both default to the trait midpoint) so the
     // only difference between these two is the prefTemp-to-ambient gap.

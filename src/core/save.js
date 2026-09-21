@@ -29,7 +29,15 @@ import { diffConfig, applyDiff } from './config.js';
 import { applyPhenotype } from './genome.js';
 
 const MAGIC = 0x464c5354; // 'FLST'
-const VERSION = 1;
+// P6-06: bumped 1 -> 2. Not a layout change (the section format is
+// unchanged) but a meaning change: this phase's config-default rescale
+// (plant energy scale, lifespan, genesis population) makes a version-1
+// state buffer replay into a materially different world under the new
+// defaults, which restoreState's own version check already refuses
+// loudly (SPEC §5.6) rather than silently. src/sim/scheduler.js's
+// _load() catches that refusal on resume and starts fresh instead of
+// crashing.
+const VERSION = 2;
 /** Header layout: `Int32Array(8)`, SPEC §5.6's design constraint. */
 const HEADER_INTS = 8;
 const HEADER_BYTES = HEADER_INTS * 4;

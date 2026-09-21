@@ -3,6 +3,7 @@ import { TERRAIN } from '../../src/core/terrain.js';
 import { eatMeal } from '../../src/core/ecology.js';
 import { BRAIN_OUTPUTS } from '../../src/core/genome.js';
 import { KIND } from '../../src/core/chronicle.js';
+import { relativeError, initGenesisLedger } from '../../src/core/ledger.js';
 import { makeWorld, makeOrganism, isolate } from '../helpers.js';
 
 const OUTPUT_EAT = 2; // reflex.js OUTPUT.eat
@@ -461,5 +462,75 @@ describe('immigration', () => {
     for (let t = 0; t < world.cfg.immigration.checkEvery * 5; t++) world.step();
     expect(world.counters.immigrations).toBe(0);
     expect(world.store.count).toBe(0);
+  });
+});
+
+describe('plant stock at a raised scale (P6-02)', () => {
+  // A P6-02-scale grass cap (40 energy units/tile, vs. the ≤1 defaults),
+  // confirming the growth formula, biteSize and the energy ledger all
+  // still behave correctly once "a full tile" is no longer 1.
+  const PLANT_CAP = Object.freeze([0, 0, 14, 40, 24, 0]);
+
+  it('a grass tile grows toward its (raised) cap and never exceeds it', () => {
+    const world = makeWorld({
+      width: 3,
+      height: 3,
+      terrain: TERRAIN.GRASS,
+      organisms: [],
+      // growth raised well above any real default just for this test, so
+      // it reaches most of the way to cap in a bounded number of ticks
+      // regardless of whatever P6-03 tunes the real default to.
+      config: { ...isolate('plants'), terrain: { plantCap: PLANT_CAP }, plants: { growth: 2 } },
+    });
+    const cap = PLANT_CAP[TERRAIN.GRASS];
+    world.plants.fill(0);
+    for (let t = 0; t < 2000; t++) {
+      world.step();
+      expect(world.plants[0]).toBeLessThanOrEqual(cap);
+    }
+    expect(world.plants[0]).toBeGreaterThan(cap * 0.5);
+  });
+
+  it('a bite removes exactly biteSize energy units regardless of the cap scale', () => {
+    const world = makeWorld({
+      width: 3,
+      height: 3,
+      terrain: TERRAIN.GRASS,
+      organisms: [],
+      config: {
+        terrain: { plantCap: PLANT_CAP },
+        organisms: { biteSize: 0.3 },
+      },
+    });
+    const slot = makeOrganism(world, { x: 1, y: 1, energy: 10, traits: { diet: 0 } });
+    world.plants[1 * world.width + 1] = PLANT_CAP[TERRAIN.GRASS]; // tile is full (40, not 1)
+    world.outputs[slot * BRAIN_OUTPUTS + OUTPUT_EAT] = 1;
+    const beforeP = world.plants[1 * world.width + 1];
+
+    eatMeal(world, slot);
+
+    const eaten = beforeP - world.plants[1 * world.width + 1];
+    expect(eaten).toBeCloseTo(0.3, 5); // plenty of room to eat a full bite, plenty of plants left
+  });
+
+  it('the energy ledger closes to 1e-6 relative with growth, grazing and metabolism at the raised scale', () => {
+    const world = makeWorld({
+      width: 10,
+      height: 10,
+      terrain: TERRAIN.GRASS,
+      organisms: [],
+      config: {
+        ...isolate('plants', 'metabolism'),
+        terrain: { plantCap: PLANT_CAP },
+        organisms: { biteSize: 0.3 },
+        plants: { growth: 0.02 },
+      },
+    });
+    makeOrganism(world, { x: 5, y: 5, energy: 20, traits: { diet: 0 } }); // hungry: reflexLayer forces eat on food
+    initGenesisLedger(world);
+
+    for (let t = 0; t < 2000; t++) world.step();
+
+    expect(relativeError(world)).toBeLessThan(1e-6);
   });
 });

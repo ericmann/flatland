@@ -52,49 +52,60 @@ trips it exactly. The project's own test suite pushes this further: a
 under 200 bytes (`test/unit/share.test.js`), because a share link never
 carries state, only the seed and the handful of things that happened.
 
-## What actually evolved on seeds 8 and 39
+## What actually evolved on seeds 10 and 28
+
+_(Numbers below were regenerated for Phase 6's ecology rebalance —
+docs/development.md's "Ecology rebalance (Phase 6)" section — which
+retuned plant, lifespan and genesis defaults enough that the two seeds
+originally pinned here, 8 and 39, no longer finish inside the soak
+suite's own timeout at the new, much larger population scale. Seeds 10
+and 28 are the current pins.)_
 
 Two seeds are pinned in the soak-test suite (`test/soak/ecology.test.js`) as
 long-run regression fixtures. I ran both fresh, at full length: `npm run
-headless -- --seed 8 --ticks 100000` and `npm run headless -- --seed 39
---ticks 100000`, on the current tuned Phase 5 config (256×160 world,
+headless -- --seed 10 --ticks 100000` and `npm run headless -- --seed 28
+--ticks 100000`, on the current tuned Phase 6 config (256×160 world,
 crossover and swimming enabled). Every number below is straight from those
 two runs' console output, plus a short follow-up script that scanned each
 run's full chronicle for `first`- and `split`-kind entries (the standard
 headless report only prints the last 10 chronicle lines).
 
-**Seed 8** ended at tick 100,000 with 24 organisms alive: 12 herbivores, 1
-omnivore, 11 carnivores, spread across 6 living species. Over the run: 101
-births, 183 successful hunts, 63 speciation events, 130 extinctions, 69
-immigrants arriving from off-map. Shannon diversity sat at 1.388 at the end
-(1.519 averaged over the run). The first lineage to specialize as hunters
-was **Meadow Hunters III**, splitting off the herbivorous Meadow Rovers at
-tick 24,339 — the chronicle's actual sentence: "The Meadow Hunters III are
-the first hunters to rise from the Meadow Rovers." Night hunting showed up
-much earlier, at tick 7,200 ("The Meadow Browsers have taken to the
-night."), and the first crossing of open water came at tick 12,607 ("The
-Shore Grazers are the first to cross water."). The run's hash was `40ecfa4e`
-— and I got the identical hash a second time from a completely separate,
-independently written script that replayed the same seed and config to the
-same tick, which is exactly the byte-identical guarantee the determinism
-rule is supposed to buy.
+**Seed 10** ended at tick 100,000 with 40 organisms alive: 23 herbivores, 11
+omnivores, 6 carnivores, spread across 9 living species. Over the run: 67
+births, 55 successful hunts, 31 speciation events, 49 extinctions, 21
+immigrants arriving from off-map. Shannon diversity sat at 1.896 at the end
+(2.157 averaged over the run). Genesis seeds two carnivore lineages
+directly (Phase 6's larger founding population), and by tick 21,603 one
+of them had already split again into a third, **Meadow Hunters**, off
+Marsh Ambushers — the chronicle's actual sentence: "A new lineage, Meadow
+Hunters, splits from Marsh Ambushers in the northern eastern meadow." Night
+hunting showed up immediately, at tick 0 ("The Meadow Browsers have taken
+to the night."), and the first crossing of open water came at tick 16 ("The
+Meadow Drifters are the first to cross water."). The run's hash was
+`395ede2b` — and I got the identical hash a second time from a completely
+separate, independently written script that replayed the same seed and
+config to the same tick, which is exactly the byte-identical guarantee the
+determinism rule is supposed to buy.
 
-**Seed 39** ended with 20 organisms: 10 herbivores, 3 omnivores, 7
-carnivores, across 7 living species. 79 births, 171 hunts, 54 speciations,
-106 extinctions, 55 immigrations, diversity 1.564 (avg 1.648). This seed's
-niches opened almost immediately: the first night-active lineage and the
-first water crossing both trace to the founding population itself (tick 0
-and tick 23 respectively — "The Meadow Grazers have taken to the night" and
-"The Meadow Grazers are the first to cross water"), while true predation
-took much longer to emerge: **Meadow Hunters II** split from the herbivorous
-Shore Rovers at tick 29,050. Hash: `0381c1e6`, likewise reproduced
+**Seed 28** ended with 80 organisms: 71 herbivores, 2 omnivores, 7
+carnivores, across 19 living species. 229 births, 82 hunts, 55 speciations,
+54 extinctions, 12 immigrations, diversity 2.312 (avg 2.303). This seed's
+niches opened almost immediately too: the first night-active lineage and
+the first water crossing both trace to the founding population itself
+(tick 0 and tick 28 respectively — "The Meadow Nibblers have taken to the
+night" and "The Shore Drifters are the first to cross water"), and one of
+its two founding carnivore lineages had already split into a third,
+**Meadow Lurkers**, off Meadow Stalkers by tick 7,342 (the chronicle text:
+"A new lineage, Meadow Lurkers, splits from Meadow Stalkers in the
+northern western meadow."). Hash: `e40b1d5a`, likewise reproduced
 identically on a second, independent run.
 
-Two seeds, same config, same tick count — one evolves hunting at roughly a
-quarter of the run and takes 7,200 ticks to find the night; the other finds
-night and water on day one and doesn't produce a hunter lineage until nearly
-30,000 ticks in. That's the kind of divergence a deterministic seed is
-supposed to preserve exactly, not smooth over.
+Two seeds, same config, same tick count, both starting with the same two
+founding carnivore lineages — one waits until nearly a fifth of the run
+before either lineage splits again; the other's carnivores diversify
+within the first 3,000 ticks. Both find night and water on day one. That's
+the kind of divergence a deterministic seed is supposed to preserve
+exactly, not smooth over.
 
 ## Determinism, and why `fmath.js` exists
 
@@ -120,28 +131,32 @@ There's no build to install yet — this is a dev-branch draft, not a
 deploy — but if you're following along in the repo:
 
 ```
-npm run headless -- --seed 8 --ticks 100000
-npm run headless -- --seed 39 --ticks 100000
+npm run headless -- --seed 10 --ticks 100000
+npm run headless -- --seed 28 --ticks 100000
 ```
 
 prints the full ecology report and last 10 chronicle lines for either
 pinned seed on your own machine, hash included, so you can check it
 against the numbers above. Pick your own seed and watch a different
-history unfold — nothing about seed 8 or 39 is special except that
-they're the ones the regression suite already watches closely.
+history unfold — nothing about seed 10 or 28 is special except that
+they're the ones the regression suite currently watches closely (Phase
+6 re-pinned this suite twice as the rebalance changed how big a
+population these seeds grow; see docs/tuning.md if the pins move again).
 
 ---
 
 **Numbers in this post:** population, species, births, hunts, deaths,
 speciations, extinctions, immigrations, diversity, vision histogram, and
-hash for both seeds came from `npm run headless -- --seed 8 --ticks 100000`
-and `npm run headless -- --seed 39 --ticks 100000`, run to completion on
-this machine. The "first hunters"/"first to the night"/"first to cross
-water" sentences and tick numbers came from a small Node script (the same
-`World`/`runGenesis` calls `scripts/headless.mjs` makes) that scanned each
-run's full chronicle for `KIND.FIRST` entries, since the shipped report
-only prints the last 10 lines; both scans independently reproduced the same
-hashes (`40ecfa4e`, `0381c1e6`) as the headless runs above. The share-link
+hash for both seeds came from `npm run headless -- --seed 10 --ticks 100000`
+and `npm run headless -- --seed 28 --ticks 100000`, run to completion on
+this machine. The "first predator lineage"/"first to the night"/"first to
+cross water" sentences and tick numbers, and each split's diet class at
+birth, came from a small Node script (the same `World`/`runGenesis` calls
+`scripts/headless.mjs` makes) that scanned each run's full chronicle for
+`KIND.FIRST` and `KIND.SPLIT` entries and cross-referenced
+`world.species.dietClassAtBirth`, since the shipped report only prints the
+last 10 lines; both scans independently reproduced the same hashes
+(`395ede2b`, `e40b1d5a`) as the headless runs above. The share-link
 string and byte length came from calling `encodeShare()` on a real `World`
 after real `queueIntervention()` calls, round-tripped through
 `decodeShare()`.
