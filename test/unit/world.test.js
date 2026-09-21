@@ -24,7 +24,13 @@ describe('genesis', () => {
     }
   });
 
-  it('genesis counts match config (3 x 50 herbivores + 1 x 24 carnivores)', () => {
+  // P6-05 acceptance test ("genesis places herbivoreLineages *
+  // herbivoresPerLineage + carnivoreLineages * carnivoresPerLineage
+  // founders"): already covered generically here since P1-09 — this
+  // test reads the counts live from config rather than hard-coding them,
+  // so P6-05's genesis default changes needed no new test, only this
+  // title update (was "3 x 50 herbivores + 1 x 24 carnivores").
+  it('genesis counts match config (herbivoreLineages x herbivoresPerLineage + carnivoreLineages x carnivoresPerLineage)', () => {
     const world = makeWorld({ seed: 5 });
     const g = world.cfg.genesis;
     const expected =

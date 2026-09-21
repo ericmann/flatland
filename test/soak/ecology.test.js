@@ -37,14 +37,23 @@ const TICKS = 100000;
 // docs/HANDOFF.md, multiplies that into the hook timeout). Re-pinned
 // to two small-final-population seeds from the same P6-03 after-sweep
 // that still clear every assertion below with margin, so the file keeps
-// running in a reasonable wall-clock time:
-//   seed 23: pop 30, herb 21, carn 8, 10 living species, H 1.654,
-//            max species share 23.3%, 32 splits, 44 extinctions,
-//            vision classes 4/16/10 (all three represented).
-//   seed 25: pop 33, herb 25, carn 7, 9 living species, H 1.975,
-//            max species share 24.2%, 22 splits, 46 extinctions,
-//            vision classes 11/13/9 (all three represented).
-const PINNED_SEEDS = [23, 25];
+// running in a reasonable wall-clock time: seeds 23 and 25.
+//
+// Re-pinned again in P6-05 (docs/tuning.md "P6-05"): P6-05's larger
+// genesis (4x70 herbivores + 2x28 carnivores, up from 3x50+1x24) grew
+// seed 23's population from 30 to 530 by 100,000 ticks — the same
+// hook-timeout risk P6-03 hit, on a different pair of seeds, from the
+// same root cause (bigger founding population -> bigger steady-state
+// population -> slower per-tick cost under vitest's overhead). Re-pinned
+// to two seeds from the P6-05 after-sweep (docs/sweeps/p6-05-after.txt)
+// that stay small:
+//   seed 10: pop 40, herb 23, carn 6, 9 living species, H 2.157,
+//            max species share 25.0%, 31 splits, 49 extinctions,
+//            vision classes 10/7/23 (all three represented).
+//   seed 28: pop 80, herb 71, carn 7, 19 living species, H 2.303,
+//            max species share 26.2%, 55 splits, 54 extinctions,
+//            vision classes 51/2/27 (all three represented).
+const PINNED_SEEDS = [10, 28];
 
 describe.each(PINNED_SEEDS)('full soak: seed %d, 100,000 ticks (SPEC §9.3)', (seed) => {
   const world = makeWorld({ width: 256, height: 160, seed });

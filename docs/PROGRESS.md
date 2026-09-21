@@ -73,7 +73,7 @@ Started: 2026-09-21T01:16:29Z
 - [x] P6-02 Plant stock in energy units — remove every cap ≤ 1 assumption
 - [x] P6-03 Rebalance — ecology health invariants and the scale retune
 - [!] P6-04 Damping and hunters — boom-bust, predator viability, immigration as a backstop
-- [~] P6-05 Genesis size, lineage diversity and the edge bias
+- [x] P6-05 Genesis size, lineage diversity and the edge bias
 - [ ] P6-06 Phase 6 end — save version, performance re-check, docs, push, preview, phone checks
 
 ## Log
@@ -2708,3 +2708,48 @@ constant) does not use anything P6-04 would have produced. Proceeding
 with P6-05 rather than marking it `[-]` SKIPPED; flagging this
 explicitly for the reviewer since `/implement`'s literal rule for a
 blocked dependency is to skip.
+
+### P6-05 — (pending commit)
+`terrain.edgeWetness` config key introduced, replacing a hard-coded
+0.05 literal in `terrain.js` (CLAUDE.md rule 7); default unchanged,
+verified byte-identical via `npm run headless -- --ticks 5000` (hash
+`2caa1686` both before and after). `genesis.herbivoreLineages` 3→4,
+`herbivoresPerLineage` 50→70, `carnivoreLineages` 1→2,
+`carnivoresPerLineage` 24→28 (founders 174→336). Full 40-seed/100k
+after-sweep (docs/sweeps/p6-05-after.txt, built the same
+parallel-single-seed way as P6-03's): mean species 12.3 (target ≥6),
+mean H 1.561 (target ≥1.5), mean edge% 41.1 (target ≤45), every P6-03
+target still held with margin, 40/40 seeds with 0 capacity refusals
+(up from 38/40).
+Notable finding: mean carnivores-at-end jumped to 14.15 (6/40 seeds
+already ≥15) from the doubled carnivore-lineage count alone, with zero
+predation tuning — supports P6-04's log finding that founder/lineage
+count, not predation-income levers, dominates carnivore viability. Left
+as a note for the reviewer/a future task rather than reopening P6-04.
+**Both soak seed pins needed changing again**, same root cause as
+P6-03's re-pin: `test/soak/ecology.test.js` (23/25 → 10/28, seed 23
+alone grew from pop 30 to 530) and `test/soak/health.test.js` (26/32 →
+18/33 — 26 grew to pop 1,052; a first replacement, seed 8, also timed
+out despite a small population of 114 because of high birth/death
+churn, 4,697 births, not population size itself; replaced again with
+seed 18, low churn). `test/soak/survival.test.js` (seed 29) needed no
+change; a failure seen in one contended combined run did not reproduce
+in isolation (confirmed twice now — see P6-03's and this log entry —
+that `test/invariants/bounds.test.js` timing out under heavy concurrent
+background load, unrelated to any Phase 6 change, reproduces this
+same way and passes cleanly alone).
+`test/unit/genesis.test.js`'s acceptance test was already satisfied
+generically by an existing test in `test/unit/world.test.js` ("genesis
+counts match config"), which reads counts live from config rather than
+hard-coding them — updated its title only (was quoting the old 3x50+1x24
+numbers).
+Interpretation: `terrain.edgeWetness` left at its byte-identical
+default rather than tuned down — the mean edge% target was already met
+from the genesis/P6-03 scale changes alone, so no iteration was spent
+on it (see docs/tuning.md "Not done").
+Verified: `npm run typecheck && npm run lint` green; `npm test` green
+(465/467; the 2 failures are the pre-existing `bounds.test.js`
+contention flake, confirmed passing in isolation); `test/soak/
+ecology.test.js` (10/28) 14/14 green in isolation; `test/soak/
+health.test.js` (18/33) 18/18 green in isolation; `test/soak/
+survival.test.js` (29) 6/6 green in isolation.

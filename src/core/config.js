@@ -53,6 +53,12 @@ export const DEFAULTS = Object.freeze({
     minGrassFraction: 0.08,
     minWaterFraction: 0.02,
     maxRerolls: 16,
+    // P6-05: was a hard-coded 0.05 literal added directly to the fbm
+    // value in terrain.js (CLAUDE.md rule 7 — every tunable is a config
+    // key). Default kept at that same value so every existing seed's
+    // terrain is unchanged (verified: npm run headless -- --ticks 5000
+    // produces the same hash before and after the code change).
+    edgeWetness: 0.05,
     // Indexed by TERRAIN (water, sand, mud, grass, scrub, rock).
     moveCost: Object.freeze([3, 1, 1.6, 1, 1.3, 1.5]),
     visibility: Object.freeze([1, 1.3, 1, 1, 0.45, 1]),
@@ -193,10 +199,18 @@ export const DEFAULTS = Object.freeze({
     sense3: Object.freeze([0, 1]),
   }),
   genesis: Object.freeze({
-    herbivoreLineages: 3,
-    herbivoresPerLineage: 50,
-    carnivoreLineages: 1,
-    carnivoresPerLineage: 24,
+    // Tuned in P6-05 (docs/tuning.md), up from 3/50/1/24: a browser
+    // review found species diversity thinning by year 4 with only 4
+    // founding lineages total, one of them the sole carnivore lineage —
+    // P6-04's log also flagged that a single carnivore lineage's
+    // long-run viability seemed to depend heavily on chance (one seed's
+    // carnivore population reached 125, most stayed under 10, under the
+    // same config), so a second independent carnivore lineage gives a
+    // second chance at one taking hold.
+    herbivoreLineages: 4,
+    herbivoresPerLineage: 70,
+    carnivoreLineages: 2,
+    carnivoresPerLineage: 28,
     // Tuned in P1-11 (docs/tuning.md): 0.05 packed each lineage's founders
     // into a near-uniform cluster (local density well above
     // breeding.localK), which suppressed density-dependent breeding almost
@@ -497,6 +511,14 @@ export const DOCS = new Map([
       units: 'count',
       assumption: false,
       doc: 'Maximum terrain re-rolls (seed+1, seed+2, …) before generation throws (SPEC §4.2).',
+    },
+  ],
+  [
+    'terrain.edgeWetness',
+    {
+      units: 'noise value [0,1], added scaled by sin(pi*x/width)',
+      assumption: true,
+      doc: 'East-west wetness gradient added to the fbm value before thresholding, so shorelines tend to form near the map edges (SPEC §4.2, P6-05).',
     },
   ],
   [

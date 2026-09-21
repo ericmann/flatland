@@ -681,3 +681,80 @@ closest: `predation.killChance` 0.55, `organisms.bodyMassPerSize` 45,
 against all four attempts above, and then reverted (not committed) per
 `/implement`'s rule for a blocked task; the file still carries the
 `minPopY2`/`maxPop` tracking from P6-03 for a future attempt to reuse.
+
+## P6-05 genesis size, diversity and edge bias — before/after
+
+**Before** reuses `docs/sweeps/p6-03-after.txt` (P6-04 changed no
+committed defaults, so P6-03's after-table is still the live baseline):
+mean population 356.6, mean living species (not tabulated separately in
+that sweep, but individual rows show species counts commonly in the
+6-15 range), mean edge% 40.5, mean H 1.649.
+
+Config changes (`src/core/config.js`, defaults only): `terrain.
+edgeWetness` introduced (0.05, replacing a hard-coded literal in
+`terrain.js` — CLAUDE.md rule 7; verified byte-identical via `npm run
+headless -- --ticks 5000`, hash `2caa1686` both before and after the
+code change). `genesis.herbivoreLineages` 3→4, `genesis.
+herbivoresPerLineage` 50→70, `genesis.carnivoreLineages` 1→2, `genesis.
+carnivoresPerLineage` 24→28 (founders 174→336). `edgeWetness` was left
+at its byte-identical default rather than tuned down in this task —
+see "Not done" below.
+
+`node scripts/sweep-one.mjs` (this session's parallel single-seed tool,
+see "P6-03 rebalance" above) across all 40 seeds, 100,000 ticks. Full
+table in `docs/sweeps/p6-05-after.txt`; summary:
+
+| metric                             | before                     | after | target       |
+| ---------------------------------- | -------------------------- | ----- | ------------ |
+| survived (pop>0 ∧ herb>0 ∧ carn>0) | 40/40                      | 40/40 | ≥ 30/40      |
+| mean population                    | 356.6                      | 335.8 | —            |
+| mean living species                | —                          | 12.3  | ≥ 6          |
+| mean Shannon diversity (H)         | 1.649                      | 1.561 | ≥ 1.5        |
+| mean edge%                         | 40.5                       | 41.1  | ≤ 45         |
+| mean born/immig                    | 160.5                      | 223.1 | ≥ 10 (P6-03) |
+| mean immigrations                  | 14.4                       | 11.7  | ≤ 30 (P6-03) |
+| mean plants avg%                   | 63.8                       | 61.5  | ≤ 90 (P6-03) |
+| seeds with 0 capacity refusals     | 38/40                      | 40/40 | ≥ 30/40      |
+| mean carnivores at end             | — (not tabulated in P6-03) | 14.15 | —            |
+
+**Result: every P6-05 and P6-03 target met**, mostly with margin (mean
+H clears its 1.5 floor by 4%, closer than the others — the doubled
+genesis population diluted per-lineage diversity slightly even as it
+roughly doubled total population, but not below target).
+
+**Both pinned soak files needed re-pinning again**, for the same reason
+P6-03 already hit once: a bigger genesis population makes some seeds'
+steady-state population (and, for `health.test.js`'s seed 8 attempt,
+birth/death _churn_ even at a modest population) big enough to time out
+each file's 1,200,000ms hook under vitest's per-tick overhead.
+`test/soak/health.test.js`'s original P6-03 seeds (26, 32) both still
+passed every assertion at the new scale (seed 26: pop 1,052, born/immig
+843; seed 32: pop 566, born/immig 149) but seed 26's size alone timed
+out the hook, so both were replaced with seeds 18 and 33 from the P6-05
+after-sweep (small population _and_ low churn — see the test file's own
+comment). `test/soak/ecology.test.js` was re-pinned from seeds 23/25 to
+10/28 for the same reason (seed 23 alone grew from a final population
+of 30 to 530). `test/soak/survival.test.js` (seed 29) needed no change
+— passes as-is (confirmed by running it in total isolation after a
+combined run showed a transient failure that did not reproduce
+standalone; see this task's PROGRESS.md log entry).
+
+**Notable finding, not acted on in this task:** mean carnivores-at-end
+jumped from thin single digits under P6-03/attempted-P6-04 (see that
+section's per-seed data) to a mean of 14.15 across all 40 seeds under
+P6-05's doubled carnivore-lineage count alone — 6 of 40 seeds already
+clear P6-04's dropped `carn ≥ 15` target with no predation-side tuning
+at all. This supports P6-04's log finding that carnivore viability was
+dominated by founder count/lineage count, not predation-income levers.
+Worth a fresh, short P6-04 attempt on top of these P6-05 defaults if a
+future task has budget for it — attempt 3's config from the P6-04
+section is the suggested starting point.
+
+**Not done:** `terrain.edgeWetness` was kept at its byte-identical
+default (0.05) rather than tuned down, despite the task text suggesting
+a smaller value "flattens the centre-is-driest gradient." The mean
+edge% target (≤ 45%) was already met (41.1%) from the genesis and P6-03
+scale changes alone, with no terrain change needed, so no iteration was
+spent on it; a future task revisiting map-centre habitability
+specifically (not just overall edge-hugging, which this task's edge%
+metric already captures) could still lower this value.

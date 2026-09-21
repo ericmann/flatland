@@ -11,20 +11,28 @@ import { ecologyReport, sampleMinPopY2 } from '../../scripts/lib/report.mjs';
 // tiles of an edge from day 6 onward (docs/tuning.md "P6-03").
 const TICKS = 100000;
 
-// Pinned seeds (P6-03 sweep, docs/sweeps/p6-03-after.txt; see
-// docs/tuning.md "P6-03 rebalance" for the full before/after tables).
-// 25 of the 40 swept seeds clear every assertion below with margin;
-// chosen over the other 24 (as ecology.test.js's P3-10 seeds were) for
-// the combination of high diversity and low dominance, not just the
-// minimum targets:
-//   seed 26: pop 501, herb 478, carn 7, H 2.935, 27 living species, max
-//            species share 26.6%, born 912 vs immig 12 (76:1), plants
-//            avg 70.5%, edge 30.9%, 0 capacity refusals.
-//   seed 32: pop 700, herb 691, carn 4 (thin — a P6-04 target, not a
-//            P6-03 one), H 3.280, 50 living species, max species share
-//            23.9%, born 1311 vs immig 13 (101:1), plants avg 62.4%,
-//            edge 28.4%, 0 capacity refusals.
-const PINNED_SEEDS = [26, 32];
+// Pinned seeds, originally from the P6-03 sweep (docs/sweeps/
+// p6-03-after.txt): seeds 26 and 32, chosen for high diversity and low
+// dominance. Both still passed every assertion below after P6-05 (see
+// docs/tuning.md "P6-05"), but P6-05's bigger genesis grew seed 26 to a
+// population of 1,052 by 100,000 ticks, which times out this file's own
+// 1,200,000ms hook (the same risk test/soak/ecology.test.js hit twice —
+// see its own comment). Re-pinned to two smaller-population seeds from
+// the P6-05 after-sweep (docs/sweeps/p6-05-after.txt) that clear every
+// assertion below with margin. Seed 8 was tried first (small final
+// population, 114) and also timed out this file's hook despite that —
+// its 4,697 births over the run mean far more birth/death churn per
+// tick than its standing population suggests, and that churn (species
+// assignment, ledger settlement, store alloc/free), not population
+// size alone, drives per-tick cost under vitest's overhead. Replaced
+// with seed 18, both a small population and low churn:
+//   seed 18: pop 150, herb 139, carn 6, 18 living species, H 2.432,
+//            born 389 vs immig 12 (32:1), plants avg 87.3%, edge
+//            42.0%, 0 capacity refusals.
+//   seed 33: pop 135, herb 81, carn 4, 18 living species, H 2.172,
+//            born 596 vs immig 9 (66:1), plants avg 82.4%, edge 37.8%,
+//            0 capacity refusals.
+const PINNED_SEEDS = [18, 33];
 
 describe.each(PINNED_SEEDS)(
   'ecology health: seed %d, 100,000 ticks (SPEC §9.3, Phase 6)',
@@ -73,6 +81,17 @@ describe.each(PINNED_SEEDS)(
 
     it('the energy ledger closes to 1e-3 relative', () => {
       expect(relativeError(world)).toBeLessThan(1e-3);
+    });
+
+    // P6-05 (docs/PLAN.md "Phase 6"): species diversity through year 4.
+    it('at least 6 living species at the end', () => {
+      const report = ecologyReport(world);
+      expect(report.species.length).toBeGreaterThanOrEqual(6);
+    });
+
+    it('mean Shannon diversity over the run is at least 1.2', () => {
+      const report = ecologyReport(world);
+      expect(report.diversityAvg).toBeGreaterThanOrEqual(1.2);
     });
 
     // P6-04's four damping/hunter-viability assertions were attempted here
