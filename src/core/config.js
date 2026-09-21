@@ -57,7 +57,16 @@ export const DEFAULTS = Object.freeze({
     moveCost: Object.freeze([3, 1, 1.6, 1, 1.3, 1.5]),
     visibility: Object.freeze([1, 1.3, 1, 1, 0.45, 1]),
     // Plant carrying capacity by TERRAIN enum order (SPEC §4.2).
-    plantCap: Object.freeze([0, 0, 0.35, 1, 0.6, 0]),
+    // Tuned in P6-03 (docs/tuning.md), up from [0, 0, 0.35, 1, 0.6, 0]: the
+    // Phase 1-5 defaults capped a full tile at ~1 energy unit while an
+    // organism holds up to organisms.energyMaxBase (150), which forced
+    // plants.growth to a "refills in ~2 ticks" value just to keep anyone
+    // fed — the world was found to be an immigration treadmill on review
+    // (docs/PLAN.md "Phase 6" preamble: plants pinned at ~100% of cap,
+    // population sustained by immigration, not births). Raised so a full
+    // grass tile (40) is a meaningful fraction of an organism's energy
+    // budget and grazing it down actually matters.
+    plantCap: Object.freeze([0, 0, 14, 40, 24, 0]),
   }),
   plants: Object.freeze({
     enabled: true,
@@ -65,7 +74,13 @@ export const DEFAULTS = Object.freeze({
     // lightly grazed population (regrowth was ~8x under total metabolic
     // demand at the default genesis population), so every seed starved out
     // by ~5,000 ticks regardless of any other knob.
-    growth: 0.6,
+    // Re-tuned in P6-03, down from 0.6 (energy units/tick at L=1, same
+    // scale as the raised terrain.plantCap above): 0.6 refilled a tile in
+    // ~2 ticks even at the new, much larger cap, which is why plants sat
+    // at ~100% of cap and grazers never needed to move on. 0.015 takes an
+    // empty grass tile roughly 2,700 lit ticks (~3 in-world days) to
+    // refill, so grazed ground stays grazed.
+    growth: 0.015,
     soilBoost: 2.0,
     initialFill: 0.6,
   }),
@@ -95,14 +110,19 @@ export const DEFAULTS = Object.freeze({
     }),
     meadow: Object.freeze({
       radius: 2.5,
-      plants: 0.5,
+      // Tuned in P6-03, up from 0.5 (same energy-unit scale as the raised
+      // terrain.plantCap): half of plantCap[GRASS] (40), as before.
+      plants: 20,
     }),
   }),
   organisms: Object.freeze({
     energyMaxBase: 150,
     bodyMassPerSize: 40,
     turnRate: 0.5,
-    biteSize: 0.1,
+    // Tuned in P6-03, up from 0.1 (same energy-unit scale as the raised
+    // terrain.plantCap): a bite this small barely dented a 40-unit tile,
+    // so grazing pressure was negligible at the new scale.
+    biteSize: 0.3,
   }),
   energy: Object.freeze({
     etaHerb: 0.7,
@@ -142,8 +162,20 @@ export const DEFAULTS = Object.freeze({
     // each other for most of the genesis cohort, so nearly nobody lived
     // long enough past maturity to breed before the whole cohort died of
     // old age in one synchronized wave.
-    lifespan: Object.freeze([3.0, 9.0]),
-    maturity: Object.freeze([0.15, 0.45]),
+    // Re-tuned in P6-03, up from [3.0, 9.0] days: at 24 days/year
+    // (time.daysPerYear) that was a lifespan of 3-9 in-world days, so
+    // organisms were dying of old age within the first two weeks despite
+    // a year taking 24 days — a review finding (docs/PLAN.md "Phase 6"
+    // preamble). [36, 96] days is 1.5-4 years.
+    lifespan: Object.freeze([36.0, 96.0]),
+    // Re-tuned in P6-03, down from [0.15, 0.45] of lifespan: unchanged,
+    // that fraction of the new, much longer lifespan (36-96 days) would
+    // leave founders not maturing for 5-43 days, most of it before any
+    // predation/starvation pressure has even had a chance to work — the
+    // whole point of density-dependent breeding needs founders maturing
+    // and breeding within their first couple of weeks. [0.04, 0.15]
+    // gives 1.4-14 days.
+    maturity: Object.freeze([0.04, 0.15]),
     breedThreshold: Object.freeze([0.5, 0.9]),
     boldness: Object.freeze([0, 1]),
     sociality: Object.freeze([0, 1]),
@@ -201,7 +233,14 @@ export const DEFAULTS = Object.freeze({
     // Tuned in P1-11 (docs/tuning.md), down from 0.02: eased the resting
     // metabolic floor a little to widen the margin between grazing income
     // and upkeep, alongside the plants.growth increase.
-    base: 0.015,
+    // Re-tuned in P6-03, down from 0.015: widens the margin further at
+    // the new plant-energy scale (terrain.plantCap, organisms.biteSize),
+    // alongside the year-scale phenotype.lifespan — the P6-03 probes
+    // found bumping metabolism.base back up alongside biteSize (rather
+    // than leaving it low) pushed several seeds into a boom past 1,000
+    // population and then a crash to under 100 by day 48, so it was left
+    // at roughly its pre-P6-03 value rather than raised to match bite.
+    base: 0.008,
     moveCost: 3.0,
   }),
   aging: Object.freeze({
@@ -257,7 +296,12 @@ export const DEFAULTS = Object.freeze({
   }),
   regrowth: Object.freeze({
     enabled: true,
-    zeroThreshold: 0.01,
+    // Tuned in P6-03, up from 0.01 (an absolute energy-unit threshold —
+    // see its DOCS entry — never a fraction, despite the old default
+    // coincidentally reading like one at the old cap of ~1): kept at the
+    // same 1% of terrain.plantCap[GRASS] (40) as before, so "grazed to
+    // zero" still means the same thing relative to the tile's own cap.
+    zeroThreshold: 0.4,
     debtTicks: 10800,
     debtFactor: 0.1,
   }),

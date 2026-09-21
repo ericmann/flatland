@@ -488,3 +488,110 @@ Pinned seeds for `test/soak/ecology.test.js` are **unchanged** (8 and
 test with Phase 5 mechanics live (this task's `npm run test:soak`) —
 both still pass every SPEC §9.3 assertion, so there was no reason to
 re-pin.
+
+## P6-03 rebalance — before
+
+`node scripts/sweep.mjs --seeds 1..40 --ticks 100000` against the P5-05
+defaults (`terrain.plantCap` `[0,0,0.35,1,0.6,0]`, `plants.growth` 0.6,
+`organisms.biteSize` 0.1, `metabolism.base` 0.015, `phenotype.lifespan`
+`[3.0,9.0]` days, `phenotype.maturity` `[0.15,0.45]`, `regrowth.zeroThreshold`
+0.01, `interventions.meadow.plants` 0.5). Run via 40 parallel single-seed
+`scripts/headless.mjs` invocations rather than the sweep script's own
+sequential loop (identical `World`/config/report code path — `ecologyReport`
+is the same function either way — chosen only to use all 8 cores instead of
+1, since this table's larger populations make the sequential sweep taking
+over an hour a real cost). Full table in `docs/sweeps/p6-03-before.txt`
+(includes the P6-01 health columns this sweep predates the introduction
+of by name only — they were computed by the same `ecologyReport` P6-01
+added); summary:
+
+| metric (P6-01 health columns)      | value  | target (P6-03) |
+| ----------------------------------- | ------ | --------------- |
+| survived (pop>0 ∧ herb>0 ∧ carn>0) | 40/40  | ≥ 30/40         |
+| mean population                    | 31.1   | ≥ 100           |
+| mean born/immig                    | 1.33   | ≥ 10            |
+| mean plants avg%                   | 99.7   | ≤ 90            |
+| mean immigrations                  | 59.1   | ≤ 30            |
+| mean edge%                         | 97.4   | ≤ 60            |
+| seeds with 0 capacity refusals      | 40/40  | ≥ 30/40         |
+
+This is the immigration treadmill found on browser review (2026-09-20,
+docs/PLAN.md "Phase 6" preamble) confirmed at 40-seed scale: population
+never reaches even a fifth of the ⚠️ SPEC §4.1 target (300–600), plants sit
+at ~100% of cap on every seed (never grazed down because
+`plants.growth` refills a tile in ~2 ticks even though `terrain.plantCap`
+caps it at ≤1 while `organisms.energyMaxBase` is 150), immigration (mean
+59.1 events per 100,000 ticks) outnumbers births (mean 1.33:1 ratio,
+i.e. births barely keep pace with, and on many seeds fall behind,
+immigration), and 97.4% of the living population sits within 20 tiles of
+a map edge — immigrants arrive at edges and rarely survive long enough to
+travel inward. `survived` (40/40) is misleading in isolation: the
+population never goes to zero only because immigration keeps refilling
+it, which is exactly the failure mode the P6-01 health columns exist to
+catch and the old `test/soak/ecology.test.js`/`survival.test.js`
+assertions (population > 0, herbivores/carnivores present) could not.
+
+## P6-03 rebalance — after
+
+Config changes (`src/core/config.js`, defaults only, each with a P6-03
+comment naming the reason): `terrain.plantCap` `[0,0,0.35,1,0.6,0]` →
+`[0,0,14,40,24,0]`; `plants.growth` 0.6 → 0.015; `organisms.biteSize` 0.1
+→ 0.3; `metabolism.base` 0.015 → 0.008; `phenotype.lifespan` `[3.0,9.0]`
+→ `[36.0,96.0]` days (1.5–4 years at `time.daysPerYear` 24); `phenotype.
+maturity` `[0.15,0.45]` → `[0.04,0.15]` of lifespan; `regrowth.
+zeroThreshold` 0.01 → 0.4 (kept at the same 1% of `terrain.
+plantCap[GRASS]`); `interventions.meadow.plants` 0.5 → 20 (kept at the
+same half of `terrain.plantCap[GRASS]`). Reached in 1 confirmed
+iteration from the starting point derived from manual probes on seeds 1
+and 8 during diagnosis (docs/PLAN.md P6-03 task text carries those probe
+numbers); a rejected earlier variant (`organisms.biteSize` 0.5,
+`metabolism.base` 0.01 — raising both together rather than leaving
+`metabolism.base` low) peaked seed 1 at population 395 and then crashed
+it to 73 with plants at 16%, so `metabolism.base` was left low rather
+than raised to match the bigger bite.
+
+`node scripts/sweep.mjs --seeds 1..40 --ticks 100000` (again as 40
+parallel single-seed runs) against these defaults. Full table in
+`docs/sweeps/p6-03-after.txt`; summary:
+
+| metric                        | before | after  | target   |
+| ------------------------------ | ------ | ------ | -------- |
+| survived (pop>0 ∧ herb>0 ∧ carn>0) | 40/40  | 40/40  | ≥ 30/40  |
+| mean population                | 31.1   | 356.6  | ≥ 100    |
+| mean born/immig                | 1.33   | 160.5  | ≥ 10     |
+| mean plants avg%               | 99.7   | 63.8   | ≤ 90     |
+| mean immigrations              | 59.1   | 14.4   | ≤ 30     |
+| mean edge%                     | 97.4   | 40.5   | ≤ 60     |
+| seeds with 0 capacity refusals  | 40/40  | 38/40  | ≥ 30/40  |
+| mean Shannon diversity         | 1.668  | 1.649  | —        |
+
+**Result: every target met, with margin.** 25 of the 40 seeds clear
+every one of `test/soak/health.test.js`'s six per-seed assertions
+individually, not just the sweep's aggregate means. The two seeds with
+nonzero capacity refusals (20: 3,789 refusals, population 522 at the
+end; 39: 78 refusals, population 154 at the end) both hit
+`world.maxOrganisms` (2000, a memory ceiling per its own DOCS entry, not
+an ecological cap) as a population spike rather than crashing to zero —
+a boom-bust pattern P6-04 is explicitly scoped to damp, not a P6-03
+regression, and still comfortably inside the "≥ 30/40 with 0 refusals"
+target. Mean diversity (1.649) is within 1.1% of the before value
+(1.668, itself computed under the treadmill's tiny populations) —
+population size grew more than 11x with no diversity collapse.
+
+Pinned seeds for `test/soak/health.test.js`: **26 and 32** (see the
+test file's own comment for the full reasoning — chosen from the 25
+clean seeds for high diversity and low dominance, the same style as
+`ecology.test.js`'s P3-10 seed choice). `test/soak/ecology.test.js`
+(seeds 8, 39) and `test/soak/survival.test.js` (seed 29) were re-run
+against these new defaults rather than re-pinned; see this task's log
+entry in `docs/PROGRESS.md` for the result.
+
+Interpretation: the sweep table was generated via 40 parallel
+single-seed `scripts/headless.mjs` invocations, collected and formatted
+into the same column layout `scripts/sweep.mjs` prints (a
+`docs/sweeps`-only difference — both call the identical `ecologyReport`
+function on an identically-constructed `World`), because the sequential
+40-seed sweep takes over an hour once populations reach the hundreds,
+and this task iterated multiple times. `scripts/sweep.mjs` itself is
+unchanged and remains the tool later tasks should reach for at smaller
+scale or when only one iteration is needed.

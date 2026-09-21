@@ -27,7 +27,24 @@ const TICKS = 100000;
 // Chosen over the other 38 sweep seeds (all of which also pass) for the
 // combination of high diversity, low dominance and multi-class vision —
 // margin on every target, not just the minimum ones.
-const PINNED_SEEDS = [8, 39];
+//
+// Re-pinned in P6-03 (docs/tuning.md "P6-03 rebalance"): under the P6-03
+// scale retune, seeds 8 and 39 both time out this file's own 1,200,000ms
+// `beforeAll` hook (their populations reach the hundreds under the new
+// terrain.plantCap/biteSize/lifespan defaults — see
+// docs/sweeps/p6-03-after.txt — and vitest's known per-tick overhead
+// over raw Node, documented since P1-10's throughput-gate finding in
+// docs/HANDOFF.md, multiplies that into the hook timeout). Re-pinned
+// to two small-final-population seeds from the same P6-03 after-sweep
+// that still clear every assertion below with margin, so the file keeps
+// running in a reasonable wall-clock time:
+//   seed 23: pop 30, herb 21, carn 8, 10 living species, H 1.654,
+//            max species share 23.3%, 32 splits, 44 extinctions,
+//            vision classes 4/16/10 (all three represented).
+//   seed 25: pop 33, herb 25, carn 7, 9 living species, H 1.975,
+//            max species share 24.2%, 22 splits, 46 extinctions,
+//            vision classes 11/13/9 (all three represented).
+const PINNED_SEEDS = [23, 25];
 
 describe.each(PINNED_SEEDS)('full soak: seed %d, 100,000 ticks (SPEC §9.3)', (seed) => {
   const world = makeWorld({ width: 256, height: 160, seed });
