@@ -72,8 +72,8 @@ Started: 2026-09-21T01:16:29Z
 - [x] P6-01 Ecology health metrics — death-age counters and the sweep columns that expose a treadmill
 - [x] P6-02 Plant stock in energy units — remove every cap ≤ 1 assumption
 - [x] P6-03 Rebalance — ecology health invariants and the scale retune
-- [ ] P6-04 Damping and hunters — boom-bust, predator viability, immigration as a backstop
-- [ ] P6-05 Genesis size, lineage diversity and the edge bias
+- [!] P6-04 Damping and hunters — boom-bust, predator viability, immigration as a backstop
+- [~] P6-05 Genesis size, lineage diversity and the edge bias
 - [ ] P6-06 Phase 6 end — save version, performance re-check, docs, push, preview, phone checks
 
 ## Log
@@ -2676,3 +2676,35 @@ test/soak/survival.test.js` 6/6 green on seed 29 under new defaults;
 `npx vitest run test/soak/ecology.test.js` re-verified green on the new
 seeds 23/25 (see next commit if this needed a fix-up). Full `npm test`
 and `npm run test:soak` to be run once more before the phase-end task.
+
+### P6-04 — BLOCKED (no commit — config.js and health.test.js reverted to their P6-03 state)
+BLOCKED: attempted 4 config-override trials (never committed to
+config.js) across up to 20 seeds at the full 100,000 ticks each,
+covering every lever the task suggested in order (breeding damping;
+predator income; predator income + lower immigration floors; wider
+predator income + longer immigration cooldown). None of the ~20 seeds
+tested under the single most promising config (attempt 3:
+`predation.killChance` 0.55, `organisms.bodyMassPerSize` 45,
+`immigration.cooldownTicks` 3600) cleared all four new health
+assertions (carnivores ≥ 15 at the end; immigration ≤ 5 events;
+year-2+ min population ≥ 25% of the run's max; 0 capacity refusals)
+simultaneously. Full trial data, per-seed numbers and a finding for
+the reviewer (carnivore count appears dominated by which lineage
+happens to specialize into the niche early — a `genesis.js` placement
+effect already flagged in P1-11's log — rather than by any
+predator-income lever in this task's scope) are in `docs/tuning.md`
+"P6-04 damping and hunters — attempted, blocked". Per `/implement`'s
+rule for a blocked task, `test/soak/health.test.js`'s four P6-04
+assertions were written, tested, and then reverted rather than
+committed (the file still carries P6-03's `minPopY2`/`maxPop` tracking
+for a future attempt to reuse); `src/core/config.js` was never edited
+for this task (every trial used `--config` overrides, never the
+committed defaults).
+Interpretation: P6-05's stated "Depends on: P6-04" reads as this
+phase's linear task ordering (as every task in every phase here depends
+on the one before it), not a technical dependency — P6-05's actual
+scope (genesis lineage/founder counts, the terrain edge-wetness
+constant) does not use anything P6-04 would have produced. Proceeding
+with P6-05 rather than marking it `[-]` SKIPPED; flagging this
+explicitly for the reviewer since `/implement`'s literal rule for a
+blocked dependency is to skip.

@@ -595,3 +595,89 @@ function on an identically-constructed `World`), because the sequential
 and this task iterated multiple times. `scripts/sweep.mjs` itself is
 unchanged and remains the tool later tasks should reach for at smaller
 scale or when only one iteration is needed.
+
+## P6-04 damping and hunters — attempted, blocked
+
+**Not applied to `src/core/config.js`** — every value below was tested via
+config overrides (`node scripts/sweep-one.mjs <seed> <ticks> --config
+k=v`, a throwaway per-seed variant of `scripts/sweep.mjs`'s row logic
+used for this task's faster iteration; not added to the repo) against
+the committed P6-03 defaults, never by editing the committed file, so
+this section documents four rejected attempts rather than a before/after
+pair.
+
+Against the P6-03 defaults, `test/soak/health.test.js`'s pinned seeds
+(26, 32) confirmed the four new targets fail as expected: carnivores end
+at 7 and 4 (need ≥ 15), immigrations at 12 and 13 (need ≤ 5, though this
+one already passed on many P6-03-after seeds), and the year-2+
+minimum-to-maximum population ratio sits well under 25% on most of the
+40 P6-03-after seeds (boom-then-partial-bust, most visibly on seeds 20
+and 39, both of which hit `world.maxOrganisms` mid-run).
+
+Four attempts, each tested on 5-15 seeds at the full 100,000 ticks
+(never the reduced-tick fast-iteration shortcut other tuning tasks
+used, since this task's own targets — `minPopY2`, a year-2+ measure —
+need the full run to mean anything):
+
+1. **Breeding damping** (`breeding.localK` 50→30, `breeding.baseRate`
+   0.04→0.03) alongside predator income and lower immigration floors, on
+   6 seeds at 50,000 ticks (a fast first look). Over-corrected badly:
+   population collapsed to 4-147 on every seed tested, plants back up to
+   ~98% (grazing pressure gone), one seed's carnivores hit 0. Rejected;
+   breeding damping was not tried again — the herbivore "overshoot" P6-03
+   left behind turned out not to need directly suppressing.
+2. **Predator income + lower immigration floors**
+   (`predation.killChance` 0.5→0.65, `energy.etaCarn` 0.8→0.9,
+   `organisms.bodyMassPerSize` 40→50, `immigration.floorHerbivores`
+   20→8, `immigration.floorCarnivores` 4→2, `immigration.cooldownTicks`
+   1800→9000), 5 seeds at 100,000 ticks. Two of five seeds (1, 32)
+   crashed relative to their P6-03-after populations (693→92, 700→26)
+   with plants back up near 97%; carnivores stayed at 2-8. Rejected —
+   the combined predation+floor change was too much at once to tell
+   which lever caused the crash.
+3. **Predator income alone, immigration cooldown alone**
+   (`predation.killChance` 0.5→0.55, `organisms.bodyMassPerSize` 40→45,
+   `immigration.cooldownTicks` 1800→3600 — floors left at their P6-03
+   values), 20 seeds total (5 at first, 15 more after) at 100,000 ticks.
+   The best single result of any attempt: seed 20 reached carnivores 16,
+   immigrations 4, 0 refusals, ratio 21% (all but the ratio target, and
+   that one close). But across all 20 seeds, carnivores only reached
+   ≥ 15 on 2 of 20 (seed 20 at 16, seed 21 at a 125 outlier — species
+   composition, not a general effect), the minPopY2/maxPop ratio stayed
+   under 25% on 17 of 20 (mean ≈ 15%), and no single seed cleared all
+   four targets at once. Full per-seed data: seeds 1, 20, 26, 32, 39 →
+   (carn, immig, minPopY2/maxPop, refused) = (11,17,58/602,0),
+   (16,4,312/1467,0), (6,14,68/677,0), (10,15,40/174,0), (5,9,142/582,0);
+   seeds 4,5,7,8,10,11,12,13,14,16,17,18,19,21,22 → (9,26,18/174,0),
+   (6,22,34/416,0), (5,18,52/328,0), (8,11,237/1488,0), (6,18,32/342,0),
+   (7,17,21/174,0), (6,14,51/417,0), (10,6,157/1419,0), (7,9,52/834,0),
+   (8,15,27/174,0), (4,12,31/181,0), (6,22,25/173,0), (5,12,43/325,0),
+   (125,10,40/217,0), (7,4,221/942,0).
+4. **Wider predator income** (`energy.etaCarn` 0.8→0.95,
+   `organisms.bodyMassPerSize` 40→60, `predation.reach` 1.0→1.3,
+   `predation.maxPreySizeRatio` 1.5→2.0, `immigration.cooldownTicks`
+   1800→5400), 6 seeds. No improvement over attempt 3: carnivores 3-8,
+   one seed (20) still spiked to `maxOrganisms` (2000) with 16,385
+   capacity refusals despite the cooldown increase.
+
+**Finding for the reviewer:** carnivore end-population responds weakly
+and inconsistently to every predator-income lever in this task's scope
+(kill chance, assimilation efficiency, body mass, reach, max prey size
+ratio) — one seed (21) reached 125 carnivores under the same config
+that left nineteen others under 10, suggesting the outcome is dominated
+by something other than these levers (species composition / which
+lineage happens to specialize into the carnivore niche early, itself
+downstream of `genesis.js`'s independently-random lineage placement,
+the same mechanism P1-11's log already flagged for carnivore viability
+generally). `genesis.carnivoreLineages`/`carnivoresPerLineage` are
+explicitly out of this task's scope but are the more likely lever —
+P6-05 raises both; if that alone moves carnivore counts up, it is worth
+someone re-attempting P6-04's targets after P6-05 lands, using this
+task's config values as a starting point (attempt 3's config came
+closest: `predation.killChance` 0.55, `organisms.bodyMassPerSize` 45,
+`immigration.cooldownTicks` 3600).
+
+`test/soak/health.test.js`'s four P6-04 assertions were written, run
+against all four attempts above, and then reverted (not committed) per
+`/implement`'s rule for a blocked task; the file still carries the
+`minPopY2`/`maxPop` tracking from P6-03 for a future attempt to reuse.

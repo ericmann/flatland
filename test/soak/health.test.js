@@ -75,10 +75,12 @@ describe.each(PINNED_SEEDS)(
       expect(relativeError(world)).toBeLessThan(1e-3);
     });
 
-    // Tracked here (loop shape shared with P6-04's extension of this file)
-    // but not yet asserted on — P6-04 adds the boom-bust/damping targets
-    // that need it.
-    it('minPopY2 and maxPop were sampled (sanity check for P6-04)', () => {
+    // P6-04's four damping/hunter-viability assertions were attempted here
+    // and reverted — see docs/PROGRESS.md's P6-04 BLOCKED log entry and
+    // docs/tuning.md "P6-04" for the full trial data. Not committed
+    // because none of ~20 swept seeds cleared all four simultaneously
+    // under any single config tried.
+    it('minPopY2 and maxPop were sampled (sanity check, kept for a future attempt at P6-04)', () => {
       expect(maxPop).toBeGreaterThan(0);
       expect(minPopY2).not.toBeNull();
     });
