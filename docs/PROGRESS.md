@@ -1,6 +1,6 @@
 # Flatland build progress
-Branch: build/2026-09-18
-Started: 2026-09-18T15:20:35Z
+Branch: (set by /implement)
+Started: (set by /implement)
 
 ## Tasks
 - [x] P0-01 Repository scaffold and toolchain
@@ -69,6 +69,12 @@ Started: 2026-09-18T15:20:35Z
 - [x] P5-06 Performance pass and `docs/performance.md`
 - [x] P5-07 Blog post draft
 - [x] P5-08 Phase 5 end — push, preview, phone checks
+- [ ] P6-01 Ecology health metrics — death-age counters and the sweep columns that expose a treadmill
+- [ ] P6-02 Plant stock in energy units — remove every cap ≤ 1 assumption
+- [ ] P6-03 Rebalance — ecology health invariants and the scale retune
+- [ ] P6-04 Damping and hunters — boom-bust, predator viability, immigration as a backstop
+- [ ] P6-05 Genesis size, lineage diversity and the edge bias
+- [ ] P6-06 Phase 6 end — save version, performance re-check, docs, push, preview, phone checks
 
 ## Log
 (one entry per task, appended by /implement)
