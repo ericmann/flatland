@@ -10,14 +10,18 @@ function makeScheduler(budgetMs) {
   let now = 0;
   /** @type {{ msg: *, transfer: Transferable[] }[]} */
   const posts = [];
+  /** @type {*[][]} */
+  const warnings = [];
   const scheduler = new Scheduler({
     now: () => now,
     post: (msg, transfer = []) => posts.push({ msg, transfer }),
     budgetMs,
+    warn: (...args) => warnings.push(args),
   });
   return {
     scheduler,
     posts,
+    warnings,
     advance: (ms) => {
       now += ms;
     },
@@ -233,6 +237,33 @@ describe('Scheduler', () => {
     });
     expect(resumed.scheduler.world.hash()).toBe(source.scheduler.world.hash());
     expect(resumed.scheduler.world.tick).toBe(source.scheduler.world.tick);
+  });
+
+  it('resume discards a refused (version-mismatched) record and starts fresh from the seed (P6-06)', () => {
+    const source = makeScheduler();
+    load(source.scheduler, 3);
+    for (let i = 0; i < 10; i++) {
+      source.advance(200);
+      source.scheduler.pump();
+    }
+    source.scheduler.handle({ type: MSG.SNAPSHOT_STATE });
+    const post = source.posts.find((p) => p.msg.type === MSG.STATE_SNAPSHOT);
+    // Corrupt the saved state to an old (pre-P6-06) version, as save.js's
+    // own VERSION bump makes restoreState refuse — see src/core/save.js.
+    new DataView(post.msg.state).setInt32(4, 1, true);
+
+    const resumed = makeScheduler();
+    resumed.scheduler.handle({
+      type: MSG.LOAD,
+      seed: 3,
+      config: { world: { width: 16, height: 12 } },
+      state: post.msg.state,
+    });
+    // Started fresh from genesis at the same seed, not resumed from the
+    // (discarded, tick-10-pumps-in) source state.
+    expect(resumed.scheduler.world.tick).toBe(0);
+    expect(resumed.scheduler.world.store.count).toBeGreaterThan(0);
+    expect(resumed.warnings.length).toBe(1);
   });
 
   it('load(state) queues only interventions after the restored tick', () => {

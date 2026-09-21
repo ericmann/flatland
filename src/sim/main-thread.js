@@ -21,6 +21,7 @@ export function createMainThreadSim() {
       if (onmessage) onmessage({ data: msg });
     },
     budgetMs: DEFAULTS.sim.fallbackBudgetMs,
+    warn: (...args) => console.warn(...args),
   });
 
   /** @type {ReturnType<typeof setTimeout> | null} */

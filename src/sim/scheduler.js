@@ -22,16 +22,23 @@ import { snapshotByteLength, encodeSnapshot, SnapshotPool } from './snapshot.js'
 
 export class Scheduler {
   /**
-   * @param {{ now: () => number, post: (msg: *, transfer?: Transferable[]) => void, budgetMs?: number }} deps
+   * @param {{ now: () => number, post: (msg: *, transfer?: Transferable[]) => void, budgetMs?: number, warn?: (...args: *[]) => void }} deps
    *   `now()` returns milliseconds (monotonic, injected). `post` sends one
    *   `{ type, ...payload }` message, with any transferables in `transfer`.
    *   `budgetMs`, when given, overrides `cfg.sim.batchBudgetMs` for every
    *   pump (the main-thread fallback passes `cfg.sim.fallbackBudgetMs`).
    */
-  constructor({ now, post, budgetMs }) {
+  constructor({ now, post, budgetMs, warn }) {
     this._now = now;
     this._post = post;
     this._budgetMsOverride = budgetMs;
+    // P6-06: injected like `now`/`post` rather than calling `console.warn`
+    // directly — scheduler.js gets no ambient globals (CLAUDE.md's Sim/UI
+    // boundaries: only worker.js/main-thread.js may touch the platform
+    // directly), and it keeps this class fully testable in plain Node.
+    // Defaults to a no-op so existing callers/tests that don't pass one
+    // are unaffected.
+    this._warn = warn ?? (() => {});
 
     /** @type {World|null} */
     this.world = null;
@@ -152,7 +159,21 @@ export class Scheduler {
     const cfg = makeConfig(msg.config ?? {});
     let world;
     if (msg.state) {
-      world = World.fromState(cfg, msg.seed, msg.state);
+      // P6-06: a saved record's state buffer carries save.js's own
+      // VERSION (bumped whenever the state layout or its meaning
+      // changes, e.g. this phase's config-default rescale making an old
+      // save replay into a very different world under the new
+      // defaults). restoreState already throws loudly on a mismatch
+      // (SPEC §5.6); resuming must not let that crash the load — discard
+      // the stale record and start fresh from the same seed instead, the
+      // same as a first visit with no saved state at all.
+      try {
+        world = World.fromState(cfg, msg.seed, msg.state);
+      } catch (err) {
+        this._warn('flatland: discarding an incompatible saved state, starting fresh', err);
+        world = new World(cfg, msg.seed);
+        runGenesis(world);
+      }
     } else {
       world = new World(cfg, msg.seed);
       runGenesis(world);

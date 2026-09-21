@@ -189,6 +189,37 @@ parents rather than a mutated copy of one, and the inspector's family line
 shows `parents #a × #b` when a child has two. Part of the phone checklist
 (`docs/PROGRESS.md`'s Phase 5 end log entry).
 
+## Ecology rebalance (Phase 6)
+
+A browser review after Phase 5 found the shipped ecology was an
+immigration treadmill: plants pinned near 100% of cap, organisms dying
+of old age within two weeks despite a year taking 24 days, population
+hugging the map edges, and total population sustained by the
+immigration mechanic rather than by births. Root cause was scale, not a
+bug — `terrain.plantCap` capped a full tile at about 1 energy unit
+while an organism holds up to `organisms.energyMaxBase` (150), which
+forced `plants.growth` to a "refills in ~2 ticks" value just to keep
+anyone fed, and `phenotype.lifespan` was read in days (3–9) against a
+24-day year rather than years. Phase 6 rescaled the plant stock to tens
+of energy units per tile, slowed regrowth and grazing bite size to
+match, moved lifespan to a 1.5–4 year range, and roughly doubled
+genesis (more lineages and founders, including a second carnivore
+lineage). The full before/after sweep tables and every config default
+changed are in `docs/tuning.md`'s P6-01 through P6-05 sections; new
+`test/soak/health.test.js` asserts the specific failure modes found
+(births vs. immigrations, plant fill staying in a grazed-but-not-empty
+band, edge share, species count and diversity) so a future retune can't
+silently reintroduce the treadmill. One task, P6-04 (damping the
+resulting boom-bust cycle and giving carnivores a durable population),
+was attempted and left blocked after four tuning trials found no single
+config clearing every target — see its `docs/tuning.md` entry for the
+full trial data and a finding for whoever picks it up next. Saved
+records carry `save.js`'s `VERSION`, bumped for this rescale: an old
+autosave is discarded (with a console warning) rather than replayed
+into a materially different world, and share links (which carry no
+version) now replay under the new defaults if reopened — a known,
+accepted consequence of retuning, not a bug.
+
 ## Module layout
 
 See CLAUDE.md → Module map. `docs/PLAN.md` is the task-by-task build plan;

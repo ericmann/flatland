@@ -74,7 +74,7 @@ Started: 2026-09-21T01:16:29Z
 - [x] P6-03 Rebalance — ecology health invariants and the scale retune
 - [!] P6-04 Damping and hunters — boom-bust, predator viability, immigration as a backstop
 - [x] P6-05 Genesis size, lineage diversity and the edge bias
-- [ ] P6-06 Phase 6 end — save version, performance re-check, docs, push, preview, phone checks
+- [x] P6-06 Phase 6 end — save version, performance re-check, docs, push, preview, phone checks
 
 ## Log
 (one entry per task, appended by /implement)
@@ -2753,3 +2753,53 @@ contention flake, confirmed passing in isolation); `test/soak/
 ecology.test.js` (10/28) 14/14 green in isolation; `test/soak/
 health.test.js` (18/33) 18/18 green in isolation; `test/soak/
 survival.test.js` (29) 6/6 green in isolation.
+
+### P6-06 — (pending commit)
+`save.js` VERSION 1→2 (a meaning change, not a layout change: this
+phase's config rescale makes an old state buffer replay into a
+materially different world). `scheduler.js`'s `_load()` now catches
+`World.fromState`'s version-mismatch throw, discards the record, and
+starts fresh from the same seed via a single injected `warn` call
+(scheduler.js gets no ambient globals per CLAUDE.md's Sim/UI
+boundaries, so `console.warn` is injected like `now`/`post` and wired
+up in `worker.js`/`main-thread.js`, not called directly).
+**Bug found and fixed**: `scripts/perf.mjs` and `test/invariants/
+throughput.test.js` built their "200 organisms" gate scenario by
+overriding only `genesis.herbivoresPerLineage`/`carnivoresPerLineage`,
+never the lineage *counts* — P6-05 changing those defaults (3→4, 1→2)
+silently grew the gate scenario to 288 organisms, dropping measured
+throughput on GitHub's runner from a passing number to 1,066 ticks/s
+against the 1,200 budget (confirmed via this branch's own CI run before
+the fix landed). Not caught by `npm test` locally because that script's
+`&&` chain skips the separate throughput run whenever the main suite
+fails — which it did throughout Phase 6 on this machine, for the
+`bounds.test.js` contention flake documented in earlier log entries
+(re-confirmed here: 2/2 failures, same signature, same file, passes
+clean in isolation and on GitHub's actual CI runner both before and,
+expected, after this push). Fixed by pinning all four genesis counts
+explicitly in both files. Full findings in `docs/performance.md`'s new
+"Phase 6 re-check" section, including the fixed gate re-measured at
+1,421 ticks/s.
+Docs refreshed: `docs/development.md` ("Ecology rebalance (Phase 6)"
+section), `docs/blog-post.md` (re-pinned seeds 8/39 → 10/28 throughout,
+every number and chronicle quote regenerated from fresh headless runs
+against the current defaults — two claims caught and corrected during
+review: the "first predator lineage" language was wrong on both seeds
+because genesis now seeds two carnivore lineages directly, not one).
+No share-link string needed regenerating (its example has an empty
+config diff, unaffected by any Phase 6 default).
+Interpretation: `test/unit/save.test.js` gained the version-1-refusal
+case; the "resume discards and starts fresh" acceptance test went into
+`test/unit/scheduler.test.js` (where `_load` actually lives and is
+already tested this way), not `autosave.test.js`/`db.test.js` as the
+task's own phrasing suggested as alternatives.
+Verified: `npm run typecheck && npm run lint` green; `npm run build`
+green; `node scripts/perf.mjs` (numbers in performance.md);
+`test/unit/scheduler.test.js`, `test/unit/save.test.js`,
+`test/invariants/throughput.test.js` 25/25 green together; `npm test`
+467/469 (2 known-flaky `bounds.test.js` failures, confirmed
+contention-only); `npm run test:ui` (Playwright) 34/34 (2 pre-existing
+skips, unrelated to Phase 6). `npm run test:soak` was run earlier in
+this phase per-file, isolated, rather than re-run as one combined pass
+in this final task, given its wall-clock cost; see each task's own log
+entry (P6-03/P6-04/P6-05) for its soak verification.

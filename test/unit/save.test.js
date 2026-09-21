@@ -81,4 +81,14 @@ describe('restoreState', () => {
     new DataView(badVersion).setInt32(4, 99, true);
     expect(() => restoreState(new World(world.cfg, world.seed), badVersion)).toThrow(/version/);
   });
+
+  it('a version-1 record (P6-06: pre-rescale saves) is refused by restoreState', () => {
+    const world = makeWorld({ seed: 3 });
+    const buffer = encodeState(world);
+    const v1 = buffer.slice(0);
+    new DataView(v1).setInt32(4, 1, true);
+    expect(() => restoreState(new World(world.cfg, world.seed), v1)).toThrow(
+      /unsupported version 1/,
+    );
+  });
 });
