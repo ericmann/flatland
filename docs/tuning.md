@@ -505,15 +505,15 @@ over an hour a real cost). Full table in `docs/sweeps/p6-03-before.txt`
 of by name only — they were computed by the same `ecologyReport` P6-01
 added); summary:
 
-| metric (P6-01 health columns)      | value  | target (P6-03) |
-| ----------------------------------- | ------ | --------------- |
-| survived (pop>0 ∧ herb>0 ∧ carn>0) | 40/40  | ≥ 30/40         |
-| mean population                    | 31.1   | ≥ 100           |
-| mean born/immig                    | 1.33   | ≥ 10            |
-| mean plants avg%                   | 99.7   | ≤ 90            |
-| mean immigrations                  | 59.1   | ≤ 30            |
-| mean edge%                         | 97.4   | ≤ 60            |
-| seeds with 0 capacity refusals      | 40/40  | ≥ 30/40         |
+| metric (P6-01 health columns)      | value | target (P6-03) |
+| ---------------------------------- | ----- | -------------- |
+| survived (pop>0 ∧ herb>0 ∧ carn>0) | 40/40 | ≥ 30/40        |
+| mean population                    | 31.1  | ≥ 100          |
+| mean born/immig                    | 1.33  | ≥ 10           |
+| mean plants avg%                   | 99.7  | ≤ 90           |
+| mean immigrations                  | 59.1  | ≤ 30           |
+| mean edge%                         | 97.4  | ≤ 60           |
+| seeds with 0 capacity refusals     | 40/40 | ≥ 30/40        |
 
 This is the immigration treadmill found on browser review (2026-09-20,
 docs/PLAN.md "Phase 6" preamble) confirmed at 40-seed scale: population
@@ -554,16 +554,16 @@ than raised to match the bigger bite.
 parallel single-seed runs) against these defaults. Full table in
 `docs/sweeps/p6-03-after.txt`; summary:
 
-| metric                        | before | after  | target   |
-| ------------------------------ | ------ | ------ | -------- |
-| survived (pop>0 ∧ herb>0 ∧ carn>0) | 40/40  | 40/40  | ≥ 30/40  |
-| mean population                | 31.1   | 356.6  | ≥ 100    |
-| mean born/immig                | 1.33   | 160.5  | ≥ 10     |
-| mean plants avg%               | 99.7   | 63.8   | ≤ 90     |
-| mean immigrations              | 59.1   | 14.4   | ≤ 30     |
-| mean edge%                     | 97.4   | 40.5   | ≤ 60     |
-| seeds with 0 capacity refusals  | 40/40  | 38/40  | ≥ 30/40  |
-| mean Shannon diversity         | 1.668  | 1.649  | —        |
+| metric                             | before | after | target  |
+| ---------------------------------- | ------ | ----- | ------- |
+| survived (pop>0 ∧ herb>0 ∧ carn>0) | 40/40  | 40/40 | ≥ 30/40 |
+| mean population                    | 31.1   | 356.6 | ≥ 100   |
+| mean born/immig                    | 1.33   | 160.5 | ≥ 10    |
+| mean plants avg%                   | 99.7   | 63.8  | ≤ 90    |
+| mean immigrations                  | 59.1   | 14.4  | ≤ 30    |
+| mean edge%                         | 97.4   | 40.5  | ≤ 60    |
+| seeds with 0 capacity refusals     | 40/40  | 38/40 | ≥ 30/40 |
+| mean Shannon diversity             | 1.668  | 1.649 | —       |
 
 **Result: every target met, with margin.** 25 of the 40 seeds clear
 every one of `test/soak/health.test.js`'s six per-seed assertions
