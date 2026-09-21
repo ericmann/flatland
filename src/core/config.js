@@ -474,7 +474,12 @@ export const DOCS = new Map([
   [
     'terrain.plantCap',
     {
-      units: 'plant units [0,1], by TERRAIN enum order',
+      // P6-02: was documented as "[0,1]" from Phase 1 through Phase 5,
+      // matching every default of the time; the plant stock (SPEC §4.4's
+      // `p ∈ [0, cap(terrain)]`) was never actually scale-limited to 1,
+      // only ever tuned that way. P6-03 raises these defaults to tens of
+      // energy units per tile.
+      units: 'energy units per tile, by TERRAIN enum order',
       assumption: true,
       doc: 'Plant carrying capacity by terrain type (SPEC §4.2).',
     },
@@ -490,7 +495,8 @@ export const DOCS = new Map([
   [
     'plants.growth',
     {
-      units: 'plant units/tick at L=1, soil=0',
+      units:
+        'energy units/tick at L=1, soil=0 (P6-02: same energy scale as terrain.plantCap and organisms.energyMaxBase, not a [0,1] fraction)',
       assumption: true,
       doc: 'Base plant growth rate g in g*L*(1 - p/cap) (SPEC §4.4).',
     },
@@ -594,7 +600,8 @@ export const DOCS = new Map([
   [
     'interventions.meadow.plants',
     {
-      units: 'plant units [0,1]',
+      units:
+        'energy units, absolute (P6-02: clamped to terrain.plantCap[GRASS], not a [0,1] fraction of it)',
       assumption: false,
       doc: 'Minimum plant level set on each tile the meadow intervention touches; the created mass is counted as ledger.hand (SPEC §5.3).',
     },
@@ -786,7 +793,7 @@ export const DOCS = new Map([
   [
     'organisms.biteSize',
     {
-      units: 'plant/carcass units per tick',
+      units: 'energy units per tick, absolute (same scale as terrain.plantCap; P6-02)',
       assumption: true,
       doc: 'Maximum amount an organism can eat from a tile in one tick (SPEC §4.4).',
     },
@@ -1034,7 +1041,15 @@ export const DOCS = new Map([
   [
     'regrowth.zeroThreshold',
     {
-      units: 'plant fraction of cap',
+      // P6-02: corrected from "plant fraction of cap" — ecology.js
+      // compares this directly against the tile's raw plant value
+      // (`world.plants[tile] < zeroThreshold`), never against
+      // `plants[tile] / plantCap[terrain]`, so it has always been an
+      // absolute energy-unit threshold, not a fraction. That was
+      // invisible while every cap default was ≤ 1; P6-03 must retune
+      // this alongside terrain.plantCap, not leave it at 0.01.
+      units:
+        'energy units, absolute (compared directly to the raw per-tile plant stock, not a fraction of cap)',
       assumption: true,
       doc: 'Grazing a tile below this sets its regrowth debt (SPEC §4.9).',
     },

@@ -16,6 +16,7 @@ import { zoomAt, fit, clamp } from '../render/camera.js';
 import { createHud, setActiveSpeed, setZoomLabel } from '../render/hud.js';
 import { pick } from '../render/renderer.js';
 import { createTooltip, tileTooltipText, organismTooltipText } from './station/tooltip.js';
+import { plantsFractionOfCap } from './format.js';
 import * as defaultPlatform from '../platform/web.js';
 
 const ZOOM_KEY_FACTOR = 1.4;
@@ -27,7 +28,7 @@ const PICK_RADIUS_TILES = 2.5;
  *   root: HTMLElement,
  *   world?: HTMLElement,
  *   sim: { send: (type: string, payload?: *) => void, on: (type: string, cb: (msg: *) => void) => (() => void) },
- *   renderer: { view: HTMLCanvasElement, width: number, height: number, px: number },
+ *   renderer: { view: HTMLCanvasElement, width: number, height: number, px: number, plantCap?: number[] },
  *   camera: import('../render/camera.js').Camera,
  *   doc?: Document,
  *   win?: Window & typeof globalThis,
@@ -353,8 +354,18 @@ export function createApp({
       const tx = Math.max(0, Math.min(renderer.width - 1, Math.floor(tileX)));
       const ty = Math.max(0, Math.min(renderer.height - 1, Math.floor(tileY)));
       const terrainType = cachedTerrain[ty * renderer.width + tx];
-      const plantsFraction = snap.plants ? snap.plants[ty * renderer.width + tx] : 0;
       const tileIdx = ty * renderer.width + tx;
+      // P6-02: snap.plants is a raw energy-unit stock (SPEC §4.4), not
+      // already a 0..1 fraction — plantsFractionOfCap divides by this
+      // world's own terrain.plantCap (carried on the renderer since the
+      // `loaded` event, not assumed to be the ≤1 defaults).
+      const plantsFraction = snap.plants
+        ? plantsFractionOfCap(
+            snap.plants[tileIdx],
+            terrainType,
+            renderer.plantCap ?? [1, 1, 1, 1, 1, 1],
+          )
+        : 0;
       const scentFractions = snap.pher
         ? snap.pher.map(/** @param {Float32Array} p */ (p) => p[tileIdx])
         : undefined;

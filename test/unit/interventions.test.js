@@ -138,6 +138,30 @@ describe('meadow', () => {
     const line = world.chronicle.entries.find((e) => e.kind === KIND.INTERVENTION);
     expect(line.text).toMatch(/^⚡ Meadow laid down in .*\.$/);
   });
+
+  it('raises tiles to meadow.plants energy units clamped at the grass cap (P6-02)', () => {
+    // A P6-02-scale grass cap (40 energy units/tile) and meadow.plants
+    // (20, half the cap) rather than the ≤ 1 defaults, so this exercises
+    // the "clamped to cap" branch at a scale where meadow.plants is well
+    // below cap, not coincidentally equal to it.
+    const world = flatWorld({
+      terrain: TERRAIN.SCRUB,
+      config: {
+        ...isolate(),
+        terrain: { plantCap: [0, 0, 14, 40, 24, 0] },
+        interventions: { meadow: { plants: 20 } },
+      },
+    });
+    world.plants.fill(5);
+    initGenesisLedger(world);
+
+    queueIntervention(world, { tick: 1, kind: 'meadow', x: 10, y: 10 });
+    world.step();
+
+    const idx = 10 * world.width + 10;
+    expect(world.terrain[idx]).toBe(TERRAIN.GRASS);
+    expect(world.plants[idx]).toBe(20); // raised to meadow.plants, well under the 40 cap
+  });
 });
 
 describe('rename', () => {

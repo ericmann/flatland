@@ -206,6 +206,12 @@ export class Scheduler {
       tick: world.tick,
       width: world.width,
       height: world.height,
+      // P6-02: the renderer/tooltip need this to turn a raw plant-stock
+      // value (energy units per tile, SPEC §4.4) into a 0..1 fraction for
+      // tinting/display — `terrain.plantCap` can differ from `DEFAULTS`
+      // under a config diff, so it travels with the world rather than
+      // being assumed on the UI side.
+      plantCap: world.cfg.terrain.plantCap,
       hash: world.hash(),
     });
     this._sendPhylogeny(true); // the full table (force: always post right after load).

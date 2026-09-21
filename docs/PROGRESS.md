@@ -70,7 +70,7 @@ Started: 2026-09-21T01:16:29Z
 - [x] P5-07 Blog post draft
 - [x] P5-08 Phase 5 end — push, preview, phone checks
 - [x] P6-01 Ecology health metrics — death-age counters and the sweep columns that expose a treadmill
-- [ ] P6-02 Plant stock in energy units — remove every cap ≤ 1 assumption
+- [x] P6-02 Plant stock in energy units — remove every cap ≤ 1 assumption
 - [ ] P6-03 Rebalance — ecology health invariants and the scale retune
 - [ ] P6-04 Damping and hunters — boom-bust, predator viability, immigration as a backstop
 - [ ] P6-05 Genesis size, lineage diversity and the edge bias
@@ -2608,3 +2608,37 @@ Verified: `npm run headless -- --ticks 5000` hash unchanged
 (`ee89a932`, before/after via `git stash`) — counters aren't hashed
 (pre-existing comment on `COUNTER_KEYS`), and no other file changed.
 `npm run typecheck && npm run lint` green.
+
+### P6-02 — (pending commit)
+Plant stock is a raw energy-unit stock per SPEC §4.4 all along; only the
+two consumers that assumed a full tile was exactly `1` needed fixing:
+`terrain-layer.js`'s `paintTerrain` now tints by `plants[i] /
+plantCap[terrain[i]]` (cap-0 terrains never tint; guarded), and the tile
+tooltip's fraction is computed by a new pure helper,
+`plantsFractionOfCap(raw, terrainType, plantCap)` in `src/ui/format.js`
+(app.js calls it instead of passing the raw value straight to
+`tileTooltipText`). `interventions.js`'s meadow was already
+absolute-value-based (SPEC-correct); added a cap-40 test rather than
+changing code.
+Plumbing (Interpretation): `plantCap` now travels on the `loaded` event
+(`scheduler.js`) and is stored on `Renderer` (`renderer.plantCap`,
+defaulting to `[1,1,1,1,1,1]` — a no-op division — for any caller,
+e.g. existing tests, that doesn't pass one); `main.js` passes it through
+at construction. This extends Files touched beyond the task's literal
+list (`src/sim/scheduler.js`, `src/main.js`) to the two places the task
+text's own "extend the loaded event" interpretation implied.
+Also created `test/unit/format.test.js` coverage for the tooltip
+fraction instead of a separate `tooltip.test.js`/`smoke.test.js`
+change, since `tileTooltipText` itself needed no change — the bug was
+in `app.js`'s conversion, now isolated in a pure, DOM-free helper.
+Corrected `regrowth.zeroThreshold`'s DOCS `units` (was "fraction of
+cap"; the code has always compared it directly against the raw
+per-tile value) — flagged for P6-03/P6-04, which must retune it
+alongside `terrain.plantCap`, not leave it at 0.01.
+Tests: 2 new `terrain-layer.test.js` cases, 2 new `format.test.js`
+cases, 1 new `interventions.test.js` case, 3 new `ecology.test.js`
+cases (grows toward raised cap; bite removes biteSize at scale; ledger
+closes to 1e-6 at scale).
+Verified: `npm run headless -- --ticks 5000` hash unchanged (`ee89a932`)
+across both P6-01 and P6-02 together (git-stash A/B). `npm run
+typecheck && npm run lint` green.

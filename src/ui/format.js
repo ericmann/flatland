@@ -40,3 +40,20 @@ export function clockParts(tick, cfg) {
     season: season(tick, cfg),
   };
 }
+
+/**
+ * A tile's raw plant-stock value (SPEC §4.4: energy units, `p ∈ [0,
+ * cap(terrain)]`) as a 0..1 fraction of its terrain type's cap, for the
+ * tile tooltip (P6-02: a full tile is no longer assumed to hold exactly
+ * `1`). A cap-0 terrain (water, sand, rock) never holds plants, so it is
+ * always 0 rather than a division by zero.
+ * @param {number} raw the tile's raw plant value
+ * @param {number} terrainType a `TERRAIN` enum value, indexing `plantCap`
+ * @param {number[]} plantCap per-TERRAIN-type cap, e.g. from the `loaded`
+ *   event's `world.cfg.terrain.plantCap`
+ * @returns {number}
+ */
+export function plantsFractionOfCap(raw, terrainType, plantCap) {
+  const cap = plantCap[terrainType];
+  return cap > 0 ? raw / cap : 0;
+}
