@@ -18,7 +18,7 @@ import { generateTerrain } from '../src/core/terrain.js';
 import { World } from '../src/core/world.js';
 import { runGenesis } from '../src/core/genesis.js';
 import { flag, flagAll, parseSeeds, parseSize, parseConfigOverrides } from './lib/args.mjs';
-import { ecologyReport } from './lib/report.mjs';
+import { ecologyReport, sampleMinPopY2 } from './lib/report.mjs';
 
 const argv = process.argv.slice(2);
 
@@ -33,6 +33,11 @@ const baseOverrides = size
   ? { world: { width: size.width, height: size.height }, ...configOverrides }
   : configOverrides;
 const cfg = makeConfig(baseOverrides);
+// P6-01: minPopY2 samples from the start of a world's second year, so a
+// boom-bust crash shows up even when the run ends on a peak. Derived
+// from this sweep's own config rather than hardcoded, so a --config
+// override to time.ticksPerDay/daysPerYear doesn't silently mismatch it.
+const YEAR2_START_TICK = cfg.time.ticksPerDay * cfg.time.daysPerYear;
 
 /**
  * Fraction of tiles of each TERRAIN type, in enum order
@@ -78,11 +83,15 @@ function ecologyRow(seed) {
   runGenesis(world);
 
   let extinctAt = 0;
+  let minPopY2 = null;
   const start = process.hrtime.bigint();
   let ticksRun = 0;
   for (let i = 0; i < TICKS; i++) {
     world.step();
     ticksRun++;
+    minPopY2 = sampleMinPopY2(minPopY2, world.tick, world.store.count, {
+      startTick: YEAR2_START_TICK,
+    });
     if (world.store.count === 0) {
       extinctAt = world.tick;
       break;
@@ -120,6 +129,12 @@ function ecologyRow(seed) {
     fog: report.fog,
     extinctAt,
     tps,
+    bornPerImmig: report.bornPerImmig,
+    deathAgePct: report.deathAgeMeanPct,
+    edgePct: report.edgePct,
+    plantsAvgPct: report.plantsAvgPct,
+    minPopY2: minPopY2 ?? 0,
+    refused: report.capacityRefused,
   };
 }
 
@@ -164,7 +179,7 @@ if (JSON_OUT) {
   if (ecologyRows) {
     console.log();
     console.log(
-      '     pop     herb     omni     carn  species        H  plants%     born  starved   hunted      old   splits  extinct      gen  extinctAt      tps    immig  plagues maxShare%  noct/crep/diur     avgH  swimmers crossings     rain      fog',
+      '     pop     herb     omni     carn  species        H  plants%     born  starved   hunted      old   splits  extinct      gen  extinctAt      tps    immig  plagues maxShare%  noct/crep/diur     avgH  swimmers crossings     rain      fog  born/immig  deathAge%    edge%  plantsAvg%  minPopY2  refused',
     );
     ecologyRows.forEach((e) => {
       console.log(
@@ -173,14 +188,16 @@ if (JSON_OUT) {
           `${pad(e.hunted, 8)} ${pad(e.old, 8)} ${pad(e.splits, 8)} ${pad(e.extinct, 8)} ${pad(e.gen, 8)} ` +
           `${pad(e.extinctAt, 10)} ${pad(e.tps.toFixed(0), 8)} ${pad(e.immig, 8)} ${pad(e.plagues, 8)} ` +
           `${pad(e.maxSharePct.toFixed(1), 9)}  ${pad(`${e.noct}/${e.crep}/${e.diur}`, 14)} ${pad(e.avgH.toFixed(3), 8)} ` +
-          `${pad(e.swimmers, 9)} ${pad(e.crossings, 9)} ${pad(e.rain, 8)} ${pad(e.fog, 8)}`,
+          `${pad(e.swimmers, 9)} ${pad(e.crossings, 9)} ${pad(e.rain, 8)} ${pad(e.fog, 8)} ` +
+          `${pad(e.bornPerImmig.toFixed(1), 10)} ${pad(e.deathAgePct.toFixed(1), 10)} ${pad(e.edgePct.toFixed(1), 8)} ` +
+          `${pad(e.plantsAvgPct.toFixed(1), 10)} ${pad(e.minPopY2, 9)} ${pad(e.refused, 8)}`,
       );
     });
     const survived = ecologyRows.filter((e) => e.pop > 0 && e.herb > 0 && e.carn > 0).length;
     const withSplits = ecologyRows.filter((e) => e.splits >= 1).length;
     const withCrossing = ecologyRows.filter((e) => e.crossings >= 1).length;
     const emean = (
-      /** @type {'pop'|'H'|'plantsPct'|'tps'|'splits'|'gen'|'immig'|'plagues'|'maxSharePct'|'avgH'|'swimmers'|'rain'|'fog'} */ key,
+      /** @type {'pop'|'H'|'plantsPct'|'tps'|'splits'|'gen'|'immig'|'plagues'|'maxSharePct'|'avgH'|'swimmers'|'rain'|'fog'|'bornPerImmig'|'deathAgePct'|'edgePct'|'plantsAvgPct'|'minPopY2'|'refused'} */ key,
     ) => ecologyRows.reduce((a, e) => a + e[key], 0) / ecologyRows.length;
     console.log('---');
     console.log(
@@ -196,6 +213,12 @@ if (JSON_OUT) {
     console.log(
       `mean swimmers ${emean('swimmers').toFixed(1)}  seeds with a swim crossing: ${withCrossing}/${ecologyRows.length}  ` +
         `mean rain events ${emean('rain').toFixed(1)}  mean fog events ${emean('fog').toFixed(1)}`,
+    );
+    console.log(
+      `mean born/immig ${emean('bornPerImmig').toFixed(2)}  mean deathAge% ${emean('deathAgePct').toFixed(1)}  ` +
+        `mean edge% ${emean('edgePct').toFixed(1)}  mean plantsAvg% ${emean('plantsAvgPct').toFixed(1)}  ` +
+        `mean minPopY2 ${emean('minPopY2').toFixed(1)}  mean refused ${emean('refused').toFixed(1)}  ` +
+        `seeds with 0 refused: ${ecologyRows.filter((e) => e.refused === 0).length}/${ecologyRows.length}`,
     );
   }
 }

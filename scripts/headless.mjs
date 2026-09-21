@@ -71,6 +71,10 @@ if (jsonOut) {
       `diurnal ${report.visionHistogram.diurnal}`,
   );
   console.log(`ticks/s: ${report.ticksPerSecond.toFixed(0)}`);
+  console.log(
+    `health (P6-01): born/immig ${report.bornPerImmig.toFixed(2)}  deathAge% ${report.deathAgeMeanPct.toFixed(1)}  ` +
+      `edge% ${report.edgePct.toFixed(1)}  plantsAvg% ${report.plantsAvgPct.toFixed(1)}`,
+  );
   console.log(`hash: ${report.hash}`);
   console.log('---');
   console.log(`chronicle (last ${chronicleLines.length}):`);

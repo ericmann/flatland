@@ -112,6 +112,15 @@ const COUNTER_KEYS = Object.freeze([
   'extinctions',
   'immigrations',
   'speciesRefused',
+  // P6-01: ecology health metrics, exposed via scripts/lib/report.mjs and
+  // scripts/sweep.mjs so a treadmill (population sustained by immigration
+  // rather than births) is measurable rather than only visible in the
+  // browser. Both are plain sums, updated once per death in `resolve()`
+  // below; they are not hashed (like every other counter — see the
+  // comment above) and travel in `save.js`'s counters section
+  // automatically via `Object.keys(world.counters)`.
+  'deaths',
+  'deathAgePct',
 ]);
 
 /** Death cause codes, written into `world.dying` and resolved into `counters` (SPEC §4.5). */
@@ -342,6 +351,19 @@ function resolve(world) {
 
     const key = DEATH_COUNTER_KEY[cause];
     if (key) world.counters[key]++;
+
+    // P6-01: every death, any cause, counts toward the health-metrics
+    // ratio `born / max(1, immigrations)` context and toward the mean
+    // age at death (as a percentage of lifespan) that
+    // `scripts/lib/report.mjs`'s `deathAgeMeanPct` derives. Clamped to
+    // [0, 200] (an organism cannot be more than double its lifespan old
+    // — the aging check fires the tick it crosses 100%, and most causes
+    // fire well under 100%) so a stray lifespanTicks of 0 in a test
+    // config cannot poison the running sum with Infinity or NaN.
+    world.counters.deaths++;
+    const lifespanTicks = store.lifespanTicks[i];
+    const pct = lifespanTicks > 0 ? Math.round((100 * store.age[i]) / lifespanTicks) : 0;
+    world.counters.deathAgePct += Math.min(200, Math.max(0, pct));
 
     // Predation deaths already recorded EV_HUNT in resolvePredationKills
     // (ecology.js); only record EV_DEATH for the other causes.

@@ -69,7 +69,7 @@ Started: 2026-09-21T01:16:29Z
 - [x] P5-06 Performance pass and `docs/performance.md`
 - [x] P5-07 Blog post draft
 - [x] P5-08 Phase 5 end — push, preview, phone checks
-- [ ] P6-01 Ecology health metrics — death-age counters and the sweep columns that expose a treadmill
+- [x] P6-01 Ecology health metrics — death-age counters and the sweep columns that expose a treadmill
 - [ ] P6-02 Plant stock in energy units — remove every cap ≤ 1 assumption
 - [ ] P6-03 Rebalance — ecology health invariants and the scale retune
 - [ ] P6-04 Damping and hunters — boom-bust, predator viability, immigration as a backstop
@@ -2584,3 +2584,27 @@ station; (2) install and airplane-mode launch still work; (3) a rain or
 fog line appears within an hour of watching; (4) with the OS
 reduce-motion setting on, the idle camera cuts instead of gliding; (5)
 the temperature figure changes between day and night.
+
+### P6-01 — (pending commit)
+Added `world.counters.deaths`/`deathAgePct` (every death, any cause,
+incremented in `resolve()` before the slot frees; clamped to [0,200]
+per-death). Added to `scripts/lib/report.mjs`'s `ecologyReport()`:
+`bornPerImmig`, `deathAgeMeanPct`, `edgePct` (opts.edgeMargin, default
+20 — a report option, not core config), `plantsAvgPct` (mean of
+`stats.plantsFraction` over the stats ring, not an instantaneous
+snapshot like `plantsFraction`). Added the pure, unit-tested
+`sampleMinPopY2(minSoFar, tick, population, opts)` helper (also in
+report.mjs) and wired it into `scripts/sweep.mjs`'s `ecologyRow` loop
+(sampled every 600 ticks from `time.ticksPerDay * time.daysPerYear`).
+Sweep table gained `bornPerImmig deathAge% edge% plantsAvg% minPopY2
+refused` columns + means; `scripts/headless.mjs` prints one new line.
+Tests: `test/unit/world.test.js` "every death increments deaths and
+adds its age as a percentage of lifespan to deathAgePct"; five new
+`test/unit/report.test.js` tests (report fields + 3 `sampleMinPopY2`
+cases).
+Interpretation: none — task text's formulas and defaults (edgeMargin
+20, startTick = ticksPerDay*daysPerYear) followed literally.
+Verified: `npm run headless -- --ticks 5000` hash unchanged
+(`ee89a932`, before/after via `git stash`) — counters aren't hashed
+(pre-existing comment on `COUNTER_KEYS`), and no other file changed.
+`npm run typecheck && npm run lint` green.
